@@ -1,0 +1,2943 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperos — ACA Cipolletti</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window['pdfjs-dist/build/pdf'])window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<style>
+:root{
+  --pd:#241338;--p:#4B2563;--pl:#7A4B9E;
+  --y:#FFC72C;--yl:#FFF8E1;--y2:#FFE57F;
+  --bg:#F4F1F8;--card:#fff;--text:#241338;
+  --m:#807791;--m2:#8a8198;--b:#E2DCEC;
+  --g:#1B6B35;--gb:#E8F5E9;--gbr:#81C784;
+  --r:#B71C1C;--rb:#FFEBEE;--rbr:#EF9A9A;
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+#app{max-width:100%;margin:0;padding-bottom:60px;}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--pd),var(--p));padding:20px;}
+.login-card{background:var(--card);border-radius:16px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(36,19,56,.35);text-align:center;}
+.login-logo{display:inline-block;background:var(--y);color:var(--pd);font-weight:800;font-size:22px;letter-spacing:1px;border-radius:8px;padding:8px 18px;margin-bottom:12px;}
+.login-card h1{font-size:20px;margin:8px 0 2px;}
+.login-card .sub{color:var(--m2);font-size:13px;margin-bottom:22px;}
+.lbl{display:block;text-align:left;font-size:13px;font-weight:600;margin:14px 0 4px;color:var(--pd);}
+.login-card input{width:100%;padding:10px 12px;border:1px solid var(--b);border-radius:8px;font-size:15px;background:var(--bg);}
+.login-card input:focus{outline:2px solid var(--pl);}
+.login-card button{width:100%;margin-top:20px;padding:12px;border:none;border-radius:8px;background:var(--p);color:#fff;font-weight:700;font-size:15px;cursor:pointer;}
+.login-card button:hover{background:var(--pl);}
+.err{color:#C0392B;font-size:13px;min-height:18px;margin-top:10px;}
+
+/* TOPBAR */
+.topbar{background:var(--pd);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;position:sticky;top:0;z-index:50;}
+.brand{font-weight:800;font-size:18px;letter-spacing:.5px;}
+.brand span{color:var(--y);}
+.user-info{display:flex;align-items:center;gap:12px;font-size:13px;}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;}
+.btn-ghost:hover{background:rgba(255,255,255,.12);}
+
+/* TABS */
+.tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;background:var(--bg);}
+.tab-btn{border:1px solid var(--b);background:#fff;color:var(--p);font-weight:600;font-size:13px;padding:9px 18px;border-radius:999px;cursor:pointer;white-space:nowrap;}
+.tab-btn.active{background:var(--p);color:#fff;border-color:var(--p);}
+.tab-btn:hover:not(.active){background:#EFE9F5;}
+#tab-content{padding:18px 20px 40px;}
+
+/* === GRILLA US (tarjetas grandes) === */
+.us-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;padding:8px 0 12px;}
+@media(max-width:900px){.us-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:560px){.us-grid{grid-template-columns:repeat(2,1fr);}}
+.us-tile{
+  border-radius:18px;padding:40px 24px 32px;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+  text-align:center;border:3px solid;user-select:none;
+  min-height:220px;
+}
+.us-tile:hover{transform:translateY(-5px);box-shadow:0 12px 36px rgba(36,19,56,.22);}
+.us-tile.done{background:var(--gb);border-color:var(--gbr);}
+.us-tile.done .tile-title{color:var(--g);}
+.us-tile.pending{background:var(--rb);border-color:var(--rbr);}
+.us-tile.pending .tile-title{color:var(--r);}
+.tile-icon{font-size:52px;line-height:1;}
+.tile-title{font-size:17px;font-weight:800;line-height:1.3;}
+.tile-period{font-size:13px;color:var(--m2);}
+.tile-badge{font-size:12px;font-weight:800;padding:5px 16px;border-radius:999px;}
+.tile-badge.done{background:var(--g);color:#fff;}
+.tile-badge.pending{background:var(--r);color:#fff;}
+
+/* === VISTA EXCEL DE HISTÓRICO === */
+.excel-view{background:var(--card);border-radius:12px;box-shadow:0 2px 16px rgba(36,19,56,.1);overflow:hidden;}
+.excel-back{
+  display:inline-flex;align-items:center;gap:8px;
+  background:none;border:none;color:var(--p);font-weight:700;font-size:14px;
+  cursor:pointer;padding:0;margin-bottom:14px;
+}
+.excel-back:hover{color:var(--pl);}
+.excel-title{
+  background:var(--p);color:#fff;font-weight:800;font-size:15px;
+  text-align:center;padding:14px 20px;letter-spacing:.4px;
+}
+.ex-table-wrap{overflow-x:hidden;}
+table.ex{border-collapse:collapse;width:100%;table-layout:fixed;font-size:14px;}
+table.ex thead tr{background:var(--y);color:var(--pd);}
+table.ex thead th{
+  padding:11px 8px;font-weight:800;font-size:12px;text-transform:uppercase;
+  letter-spacing:.3px;border:1px solid #C9A800;text-align:center;overflow:hidden;
+}
+/* Anchos de columna proporcionales */
+table.ex col.c-periodo{width:9%;}
+table.ex col.c-num{width:10%;}
+table.ex col.c-rec{width:11%;}
+table.ex col.c-nro{width:9%;}
+table.ex col.c-fecha{width:10%;}
+table.ex col.c-fs{width:16%;}
+table.ex col.c-acc{width:7%;}
+table.ex tbody tr.row-hist{background:#FFFFF0;}
+table.ex tbody tr.row-hist:nth-child(even){background:#FFFDE0;}
+table.ex tbody tr.row-locked{background:#F0FFF4;}
+table.ex tbody tr.row-current{background:#EEF0FF;border-left:4px solid var(--p);}
+table.ex td{
+  padding:8px 8px;border:1px solid #D4C830;vertical-align:middle;
+  overflow:hidden;text-overflow:ellipsis;
+}
+table.ex td.td-periodo{font-weight:700;color:var(--pd);text-align:center;white-space:nowrap;}
+table.ex td.td-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+table.ex td.td-recuperar{text-align:right;font-weight:800;color:var(--g);white-space:nowrap;}
+table.ex td.td-center{text-align:center;}
+td.td-recuperar-calc{text-align:right;font-weight:800;color:var(--g);font-size:14px;white-space:nowrap;}
+
+/* Barra de búsqueda genérica */
+.search-bar{background:#F8F5FB;padding:9px 12px;border-bottom:1px solid var(--b);display:flex;align-items:center;gap:8px;}
+.search-bar input{flex:1;padding:7px 11px;border:1px solid var(--b);border-radius:7px;font-size:13px;background:#fff;}
+.search-bar input:focus{outline:2px solid var(--pl);}
+.search-bar .s-icon{font-size:14px;color:var(--m2);}
+.search-bar .s-clear{background:none;border:none;color:var(--m2);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;}
+.search-bar .s-count{font-size:12px;color:var(--m2);white-space:nowrap;}
+/* Input con prefijo $ */
+.inp-money{display:flex;align-items:center;gap:3px;}
+.inp-money span{font-weight:700;color:var(--m2);font-size:13px;flex-shrink:0;}
+.inp-money input{flex:1;min-width:0;}
+
+/* Inputs dentro de la tabla */
+table.ex input.ex-input{
+  border:1px solid var(--b);border-radius:5px;
+  padding:6px 7px;font-size:13px;width:100%;background:#fff;
+  font-family:inherit;
+}
+table.ex input.ex-input:focus{outline:2px solid var(--pl);border-color:var(--pl);}
+table.ex input.ex-input[readonly]{
+  background:#F0FFF4;border-color:#C8E6C9;color:var(--pd);
+  cursor:default;
+}
+table.ex input.ex-input.inp-num{text-align:right;}
+table.ex input.ex-input.inp-date{width:100%;}
+
+/* Botones dentro de tabla */
+.btn-factura{
+  border:none;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+}
+.btn-f-subir{background:var(--p);color:#fff;}
+.btn-f-subir:hover{background:var(--pl);}
+.btn-f-ver{background:var(--yl);color:var(--pd);border:1px solid var(--y2);}
+.btn-f-ver:hover{background:var(--y2);}
+.btn-f-edit{background:#EFE9F5;color:var(--p);border:1px solid var(--b);}
+.btn-f-edit:hover{background:#DDD4EF;}
+.btn-f-del{background:var(--rb);color:var(--r);border:1px solid var(--rbr);}
+.btn-f-del:hover{background:var(--rbr);}
+.btn-guardar-fila{
+  background:var(--g);color:#fff;border:none;border-radius:6px;
+  padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;width:100%;
+}
+.btn-guardar-fila:hover{filter:brightness(.92);}
+.btn-editar-fila{
+  background:var(--p);color:#fff;border:none;border-radius:6px;
+  padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;width:100%;
+}
+.btn-editar-fila:hover{background:var(--pl);}
+
+/* Visor de archivo inline */
+.file-viewer-wrap{
+  position:fixed;inset:0;background:rgba(20,10,36,.7);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;
+}
+.file-viewer-bar{
+  width:100%;max-width:900px;background:var(--pd);color:#fff;
+  border-radius:10px 10px 0 0;padding:10px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.file-viewer-bar span{font-size:14px;font-weight:600;}
+.file-viewer-bar button{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;}
+.file-viewer-content{
+  width:100%;max-width:900px;height:80vh;background:#fff;border-radius:0 0 10px 10px;overflow:hidden;
+}
+.file-viewer-content iframe{width:100%;height:100%;border:none;}
+.file-viewer-content img{max-width:100%;max-height:100%;object-fit:contain;display:block;margin:auto;}
+
+/* CARDS (Full, Hotel, Varios, Resumen) */
+.cards{display:flex;flex-direction:column;gap:14px;}
+.card{background:var(--card);border:1px solid var(--b);border-radius:var(--radius);overflow:hidden;}
+.card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:#F8F5FB;border-bottom:1px solid var(--b);}
+.card-header h3{margin:0;font-size:15px;color:var(--pd);}
+.card-body{padding:14px 16px;}
+.badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;}
+.badge-ok{background:var(--gb);color:var(--g);}
+.badge-pending{background:var(--rb);color:var(--r);}
+.calc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.calc-box{background:#F8F5FB;border:1px solid var(--b);border-radius:8px;padding:12px;}
+.calc-box.hl{background:var(--p);border-color:var(--p);}
+.calc-box.hl .cl{color:#E6D9F2;}.calc-box.hl .cv{color:var(--y);}
+.cl{font-size:12px;color:var(--m2);margin-bottom:4px;}.cv{font-size:19px;font-weight:800;color:var(--pd);}
+.empty-s{text-align:center;padding:28px 10px;border:2px dashed var(--b);border-radius:10px;}
+.empty-s p{color:var(--m2);margin-bottom:14px;font-size:14px;}
+.fr{margin-bottom:14px;}
+.fr label{display:block;font-size:13px;font-weight:600;color:var(--pd);margin-bottom:5px;}
+.fr input{width:100%;padding:9px 11px;border:1px solid var(--b);border-radius:8px;font-size:14px;}
+.file-slot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid var(--b);}
+.file-slot:last-child{border-bottom:none;}
+.fsl{font-size:13px;font-weight:600;color:var(--pd);flex:1 1 160px;}
+.fsi{font-size:13px;color:var(--m2);flex:1 1 160px;word-break:break-all;}
+.fsa{display:flex;gap:8px;align-items:center;}
+.btn-ul{display:inline-block;background:var(--p);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;}
+.btn-ul:hover{background:var(--pl);}
+.btn-lnk{background:none;border:none;color:var(--p);font-size:12px;font-weight:700;cursor:pointer;padding:4px 2px;text-decoration:underline;}
+.btn-lnk.d{color:var(--r);}
+.btn-add{background:var(--y);color:var(--pd);border:none;border-radius:6px;font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;}
+.varios-rows{display:flex;flex-direction:column;gap:10px;}
+.vrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#F8F5FB;border:1px solid var(--b);border-radius:8px;padding:10px;}
+.vrow select{padding:7px 9px;border:1px solid var(--b);border-radius:6px;font-size:13px;background:#fff;}
+.vrow input[type=number]{padding:7px 9px;border:1px solid var(--b);border-radius:6px;font-size:13px;width:130px;}
+.vrow .file-slot{flex:1 1 200px;border-bottom:none;padding:0;}
+.resumen-table{width:100%;border-collapse:collapse;font-size:14px;}
+.resumen-table td,.resumen-table th{padding:9px 6px;border-bottom:1px solid var(--b);text-align:left;}
+.resumen-table th{color:var(--m2);font-size:12px;text-transform:uppercase;}
+.resumen-table .tr-total td{font-weight:800;color:var(--pd);font-size:15px;border-bottom:none;border-top:2px solid var(--p);}
+.importe-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+@media(max-width:500px){.importe-grid{grid-template-columns:1fr;}.calc-grid{grid-template-columns:1fr;}}
+.ifield{display:flex;flex-direction:column;gap:4px;}
+.ifield label{font-size:12px;font-weight:700;color:var(--m2);text-transform:uppercase;}
+.ifield input{padding:9px 11px;border:1px solid var(--b);border-radius:8px;font-size:15px;font-weight:600;}
+.result-box{background:var(--p);color:#fff;border-radius:10px;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.rl{font-size:13px;opacity:.85;}
+.rv{font-size:24px;font-weight:900;color:var(--y);}
+.divider{border:none;border-top:1px solid var(--b);margin:14px 0;}
+.btn-save{padding:10px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--g);color:#fff;}
+.btn-save:hover{filter:brightness(.92);}
+.btn-cancel{padding:10px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;border:1px solid var(--b);background:#fff;color:var(--m2);}
+
+/* TOAST/LOADING */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--pd);color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:300;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#loading-overlay{position:fixed;inset:0;background:rgba(36,19,56,.25);display:flex;align-items:center;justify-content:center;z-index:400;}
+.spinner{width:42px;height:42px;border:4px solid #fff;border-top-color:var(--y);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+<script>
+// ── USUARIOS ──────────────────────────────────────────────────
+const USERS={
+  admin:  {password:'ACAadmin2026',   name:'Administrador',               role:'admin'},
+  grusso: {password:'Cipolletti2026', name:'Germán Russo — US Cipolletti',role:'empleado'}
+};
+
+// ── ÍTEMS FIJOS ───────────────────────────────────────────────
+const US_ITEMS=[
+  {key:'energia', label:'Energía Eléctrica', icon:'⚡', title:'ENERGÍA ELÉCTRICA ESTACIÓN (100% DEDUCIDO IVA)'},
+  {key:'aguas',   label:'Aguas Rionegrinas',  icon:'💧', title:'AGUAS RIONEGRINAS'},
+  {key:'dpa',     label:'DPA',                icon:'🌊', title:'DPA'},
+  {key:'telefono',label:'Teléfono',           icon:'📞', title:'TELÉFONO'},
+  {key:'canon',   label:'Canon Servicios',    icon:'📄', title:'CANON SERVICIOS'}
+];
+const VARIOS_ITEMS=[
+  {key:'serviclub',     label:'Serviclub'},
+  {key:'cosmeticaFull', label:'Cosmética Full'},
+  {key:'boxesFiltros',  label:'Boxes Filtros'},
+  {key:'boxes20',       label:'Boxes 20%'},
+  {key:'acaIncognito',  label:'ACA Incógnito'}
+];
+const DOC_TYPES=['Factura','Nota de Crédito','Nota de Débito'];
+const MAX_FILE=3.5*1024*1024;
+
+// ── STORAGE ───────────────────────────────────────────────────
+// ── FIREBASE ──────────────────────────────────────────────────
+const firebaseConfig={apiKey:"AIzaSyCw8tsg_WaL-Fo2YJGoEgIMpF6Ed6Wcijc",authDomain:"aca-admin.firebaseapp.com",projectId:"aca-admin",storageBucket:"aca-admin.firebasestorage.app",messagingSenderId:"365461639287",appId:"1:365461639287:web:814f7250fdc5ceedd8b672"};
+let _db=null;
+async function getDB(){
+  if(_db)return _db;
+  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+  const {getFirestore,doc,getDoc,setDoc,deleteDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  const app=getApps().length?getApps()[0]:initializeApp(firebaseConfig);
+  _db={fs:getFirestore(app),doc,getDoc,setDoc,deleteDoc};
+  return _db;
+}
+// Cache en memoria para minimizar lecturas a Firestore
+const _cache={};
+async function sGet(k){
+  if(_cache[k]!==undefined)return _cache[k];
+  try{
+    const db=await getDB();
+    const ref=db.doc(db.fs,'kv',encodeKey(k));
+    const snap=await db.getDoc(ref);
+    const val=snap.exists()?snap.data().v:null;
+    _cache[k]=val;
+    return val;
+  }catch(e){console.warn('sGet error',k,e);return localStorage.getItem(k);}
+}
+async function sSet(k,v){
+  _cache[k]=v;
+  try{
+    const db=await getDB();
+    await db.setDoc(db.doc(db.fs,'kv',encodeKey(k)),{v,k,updatedAt:Date.now()});
+  }catch(e){console.warn('sSet error',k,e);localStorage.setItem(k,v);}
+  return true;
+}
+async function sDel(k){
+  delete _cache[k];
+  try{
+    const db=await getDB();
+    await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(k)));
+  }catch(e){console.warn('sDel error',k,e);localStorage.removeItem(k);}
+}
+function encodeKey(k){
+  // Firestore no acepta / en IDs de documento
+  return k.replace(/\//g,'__').replace(/:/g,'--');
+}
+
+// ── ESTADO ────────────────────────────────────────────────────
+let CU=null,CP=monthStr(),PD=null,AT='us',APS=[],stimer=null;
+let usView=null; // null=grilla, key=vista excel del ítem
+
+function monthStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function periodLabel(p){
+  if(!p)return '';
+  const [y,m]=p.split('-');
+  const mnames=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return mnames[parseInt(m)-1]+'-'+String(y).slice(2);
+}
+
+function defPD(){
+  const us={};
+  US_ITEMS.forEach(it=>{us[it.key]=[];});
+  const varios={};
+  VARIOS_ITEMS.forEach(it=>{varios[it.key]=[];});
+  return{us,full:{ventas:null,nroFacturaACA:'',facturaACA:null,fechaCancelacion:'',comprobanteTransferencia:null,interesMensual:'',diasAtrasados:'',locked:false},hotel:{telefono:{importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null},telHistory:[],canon:{locked:false},canonAlojamiento:null},varios};
+}
+function mergeDef(data){
+  const def=defPD();
+  if(!data.us)data.us={};
+  US_ITEMS.forEach(it=>{if(!Array.isArray(data.us[it.key]))data.us[it.key]=def.us[it.key];});
+  if(!data.varios)data.varios={};
+  VARIOS_ITEMS.forEach(it=>{if(!data.varios[it.key])data.varios[it.key]=def.varios[it.key];});
+  if(!data.full)data.full=def.full;
+  if(!data.hotel)data.hotel=def.hotel;
+  if(!data.hotel.telefono)data.hotel.telefono=def.hotel.telefono;
+  if(!data.hotel.telHistory)data.hotel.telHistory=[];
+  if(!data.hotel.canonHistory)data.hotel.canonHistory=[];
+  if(!data.hotel.canon)data.hotel.canon={locked:false};
+  if(data.hotel.canonAlojamiento===undefined)data.hotel.canonAlojamiento=null;
+  return data;
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function esc(s){const d=document.createElement('div');d.textContent=(s===null||s===undefined)?'':String(s);return d.innerHTML;}
+function fmt(n){if(n===null||n===undefined||isNaN(n))return '—';return new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);}
+function fmtM(n){return n!==null&&n!==undefined&&!isNaN(n)?'$ '+fmt(n):'—';}
+function pN(v){const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;}
+function calcRec(row){
+  const i=row.importe||0,v=row.iva||0,p=row.percepciones||0,it=row.intereses||0;
+  if(row.importe===null&&row.iva===null&&row.percepciones===null&&row.intereses===null)return null;
+  return i-v-p-it;
+}
+function rowDone(row){return !!(row.nroFacturaACA&&row.fecha&&row.importe);}
+function isUSDone(usKey){
+  const rows=PD.us[usKey];
+  return rows.some(r=>r.period===CP&&rowDone(r));
+}
+function readDU(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
+
+function showLoad(show){
+  let el=document.getElementById('loading-overlay');
+  if(show){if(!el){el=document.createElement('div');el.id='loading-overlay';el.innerHTML='<div class="spinner"></div>';document.body.appendChild(el);}}
+  else if(el)el.remove();
+}
+function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
+
+// ── STORAGE PERÍODOS ─────────────────────────────────────────
+async function loadPeriod(p){
+  const raw=await sGet('data:'+p,true);
+  PD=raw?mergeDef(JSON.parse(raw)):defPD();
+  CP=p;
+}
+async function saveP(){await sSet('data:'+CP,JSON.stringify(PD),true);}
+function saveD(){clearTimeout(stimer);stimer=setTimeout(()=>saveP(),600);}
+
+// ── EXCEL VENTAS ─────────────────────────────────────────────
+function parseVentas(ab){
+  const wb=XLSX.read(ab,{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  let tot=0,cig=0,found=false;
+  for(const row of rows){
+    const sec=row[1],det=row[3],total=row[11];
+    // Sectores 2 y 21 = Full
+    if((sec===2||sec===21)&&typeof total==='number'){
+      tot+=total;found=true;
+      if(typeof det==='string'&&det.trim().toLowerCase()==='cigarrillos')cig+=total;
+    }
+  }
+  if(!found)return null;
+  return{totalVentas:tot,cigarrillos:cig,base:tot-cig,recupero12:(tot-cig)*0.12};
+}
+// Abrir Excel en visor inline (sin descarga automática)
+function openExcelViewer(f){
+  try{
+    const arr=Uint8Array.from(atob(f.dataUrl.split(',')[1]),c=>c.charCodeAt(0));
+    const wb=XLSX.read(arr,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const htmlTable=XLSX.utils.sheet_to_html(ws,{editable:false});
+    const wrap=document.createElement('div');
+    wrap.className='file-viewer-wrap';wrap.id='fv-wrap';
+    // Construir sin template literals anidados para evitar conflicto con el html externo
+    const bar=document.createElement('div');
+    bar.className='file-viewer-bar';
+    const nameSpan=document.createElement('span');
+    nameSpan.textContent='📊 '+f.fileName;
+    const btnWrap=document.createElement('div');
+    btnWrap.style.cssText='display:flex;gap:8px;align-items:center;';
+    const dlBtn=document.createElement('button');
+    dlBtn.id='fv-dl';dlBtn.textContent='⬇ Descargar';
+    dlBtn.style.cssText='background:var(--y);color:var(--pd);border:none;border-radius:6px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;';
+    const closeBtn=document.createElement('button');
+    closeBtn.id='fv-close';closeBtn.textContent='✕';closeBtn.title='Cerrar';
+    closeBtn.style.cssText='background:none;border:none;color:#fff;font-size:22px;cursor:pointer;';
+    btnWrap.appendChild(dlBtn);btnWrap.appendChild(closeBtn);
+    bar.appendChild(nameSpan);bar.appendChild(btnWrap);
+    const contentDiv=document.createElement('div');
+    contentDiv.className='file-viewer-content';
+    contentDiv.style.cssText='overflow:auto;background:#fff;';
+    const inner=document.createElement('div');
+    inner.style.cssText='padding:12px;font-size:12px;font-family:monospace;';
+    inner.innerHTML=htmlTable;
+    contentDiv.appendChild(inner);
+    wrap.appendChild(bar);wrap.appendChild(contentDiv);
+    document.body.appendChild(wrap);
+    closeBtn.addEventListener('click',()=>wrap.remove());
+    dlBtn.addEventListener('click',()=>{
+      const a=document.createElement('a');a.href=f.dataUrl;a.download=f.fileName;
+      document.body.appendChild(a);a.click();a.remove();
+    });
+    wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+  }catch(e){alert('No se pudo mostrar el archivo: '+e.message);}
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────
+function renderLogin(){
+  return`<div class="login-wrap"><div class="login-card">
+    <div class="login-logo">ACA</div>
+    <h1>Recuperos Mensuales</h1>
+    <p class="sub">US Cipolletti — Concesión CRESP 3531</p>
+    <form id="lf">
+      <label class="lbl">Usuario</label><input type="text" id="lu" autocomplete="username" required>
+      <label class="lbl">Contraseña</label><input type="password" id="lp" autocomplete="current-password" required>
+      <button type="submit">Ingresar</button>
+      <p class="err" id="le"></p>
+    </form>
+  </div></div>`;
+}
+function attachLogin(){
+  document.getElementById('lf').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;
+    const user=USERS[u];
+    if(user&&user.password===p){
+      CU={username:u,name:user.name,role:user.role};
+      showLoad(true);
+      const raw=await sGet('periodos',true);
+      APS=raw?JSON.parse(raw):[];
+      if(!APS.includes(CP)){APS.push(CP);APS.sort();await sSet('periodos',JSON.stringify(APS),true);}
+      await loadPeriod(CP);
+      await loadYER();
+      showLoad(false);AT='us';usView=null;render();
+    }else document.getElementById('le').textContent='Usuario o contraseña incorrectos';
+  });
+}
+
+// ── SHELL ─────────────────────────────────────────────────────
+function renderShell(){
+  const tabs=[{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'}];
+  if(CU.role==='admin'){tabs.push({key:'varios',label:'Varios'});tabs.push({key:'resumen',label:'Resumen'});}
+  return`<div class="topbar">
+    <div class="brand">ACA <span>Recuperos</span></div>
+    <div class="user-info"><span>${esc(CU.name)}</span><button class="btn-ghost" id="logout-btn">Salir</button></div>
+  </div>
+  <div class="tabs">${tabs.map(t=>`<button class="tab-btn ${AT===t.key?'active':''}" data-tab="${t.key}">${t.label}</button>`).join('')}</div>
+  <div id="tab-content"></div>`;
+}
+function attachShell(){
+  document.getElementById('logout-btn').addEventListener('click',()=>{CU=null;PD=null;render();});
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      AT=btn.getAttribute('data-tab');usView=null;
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));
+      renderTab();
+    });
+  });
+}
+
+// ── HELPER: barra de búsqueda reutilizable ───────────────────
+function renderSearchBar(inputId, placeholder, totalCount){
+  return `<div class="search-bar">
+    <span class="s-icon">🔍</span>
+    <input id="${inputId}" type="text" placeholder="${placeholder}" autocomplete="off">
+    <span class="s-count" id="${inputId}-count">${totalCount} registros</span>
+    <button class="s-clear" id="${inputId}-clear" title="Limpiar">✕</button>
+  </div>`;
+}
+function activateSearch(inputId, rowSelector, countId){
+  const inp=document.getElementById(inputId);
+  const cnt=document.getElementById(countId||inputId+'-count');
+  if(!inp)return;
+  const total=document.querySelectorAll(rowSelector).length;
+  const filter=()=>{
+    const q=inp.value.toLowerCase().trim();
+    let vis=0;
+    document.querySelectorAll(rowSelector).forEach(tr=>{
+      const show=!q||tr.textContent.toLowerCase().includes(q);
+      tr.style.display=show?'':'none';
+      if(show)vis++;
+    });
+    if(cnt)cnt.textContent=vis+' / '+total+' registros';
+  };
+  inp.addEventListener('input',filter);
+  const clr=document.getElementById(inputId+'-clear');
+  if(clr)clr.addEventListener('click',()=>{ inp.value=''; filter(); inp.focus(); });
+}
+
+// ── TAB: UNIDAD SERVICIAL — grilla ───────────────────────────
+function renderUSGrid(){
+  const el=document.getElementById('tab-content');
+  let html=`<p style="font-size:13px;color:var(--m2);padding:4px 0 12px;">Hacé click en un ítem para ver el historial y cargar el recupero del mes.</p>
+  <div class="us-grid">`;
+  US_ITEMS.forEach(it=>{
+    const done=isUSDone(it.key);
+    const rows=PD.us[it.key];
+    const curr=rows.find(r=>r.period===CP);
+    const dateLabel=curr&&curr.fecha?curr.fecha:'Sin cargar';
+    html+=`<div class="us-tile ${done?'done':'pending'}" data-open-us="${it.key}">
+      <div class="tile-icon">${it.icon}</div>
+      <div class="tile-title">${esc(it.label)}</div>
+      <div class="tile-period">${done?dateLabel:'Pendiente'}</div>
+      <span class="tile-badge ${done?'done':'pending'}">${done?'✓ Realizado':'Pendiente'}</span>
+    </div>`;
+  });
+  html+=`</div>`;
+  el.innerHTML=html;
+  el.querySelectorAll('[data-open-us]').forEach(c=>{
+    c.addEventListener('click',()=>{usView=c.getAttribute('data-open-us');renderTab();});
+  });
+}
+
+// ── DATOS REALES DE RECUPEROS (Libro1 2025 + RECUPEROS_2026) ─
+const REAL_DATA = {
+  energia:[
+    {period:'2025-01',importe:6636377.23,iva:1398739.07,percepciones:51805.15,intereses:0,nroFacturaACA:'654-8489',fecha:'2025-02-07',facturaServicio:null,locked:true},
+    {period:'2025-02',importe:6374356,iva:1343462.5,percepciones:49757.87,intereses:0,nroFacturaACA:'654-844',fecha:'2025-03-11',facturaServicio:null,locked:true},
+    {period:'2025-03',importe:6646284.47,iva:1400822.41,percepciones:51882.31,intereses:0,nroFacturaACA:'654-849',fecha:'2025-04-15',facturaServicio:null,locked:true},
+    {period:'2025-04',importe:6225931.66,iva:1312153.25,percepciones:48598.27,intereses:0,nroFacturaACA:'654-862',fecha:'2025-05-21',facturaServicio:null,locked:true},
+    {period:'2025-05',importe:6781795.21,iva:1429403.29,percepciones:52940.86,intereses:0,nroFacturaACA:'654-869',fecha:'2025-06-23',facturaServicio:null,locked:true},
+    {period:'2025-06',importe:7219148,iva:1521568.57,percepciones:56354.39,intereses:0,nroFacturaACA:'654-876',fecha:'2025-07-15',facturaServicio:null,locked:true},
+    {period:'2025-07',importe:7535944.46,iva:1588390.52,percepciones:58829.28,intereses:0,nroFacturaACA:'654-887',fecha:'2025-08-19',facturaServicio:null,locked:true},
+    {period:'2025-08',importe:7490789.34,iva:1578831.41,percepciones:58475.24,intereses:0,nroFacturaACA:'654-891',fecha:'2025-09-16',facturaServicio:null,locked:true},
+    {period:'2025-09',importe:7276481.35,iva:1533621.88,percepciones:56800.81,intereses:0,nroFacturaACA:'654-900',fecha:'2025-10-20',facturaServicio:null,locked:true},
+    {period:'2025-10',importe:7506059.74,iva:1582031.21,percepciones:58593.75,intereses:0,nroFacturaACA:'654-905',fecha:'2025-11-07',facturaServicio:null,locked:true},
+    {period:'2025-11',importe:7130635.21,iva:1502836.94,percepciones:55660.63,intereses:0,nroFacturaACA:'905-005',fecha:'2025-12-22',facturaServicio:null,locked:true},
+    {period:'2025-12',importe:7294907.99,iva:1537564.46,percepciones:56946.83,intereses:0,nroFacturaACA:'654-915',fecha:'2026-01-20',facturaServicio:null,locked:true},
+    {period:'2026-01',importe:7640612.2,iva:1610484.31,percepciones:59647.57,intereses:0,nroFacturaACA:'654-920',fecha:'2026-02-06',facturaServicio:null,locked:true},
+    {period:'2026-02',importe:7574199.79,iva:1596506.46,percepciones:59129.87,intereses:0,nroFacturaACA:'654-930',fecha:'2026-03-19',facturaServicio:null,locked:true},
+    {period:'2026-03',importe:7616516.77,iva:1605015.02,percepciones:59445,intereses:0,nroFacturaACA:'654-934',fecha:'2026-04-10',facturaServicio:null,locked:true},
+    {period:'2026-04',importe:7751229.07,iva:1635352.86,percepciones:60568.62,intereses:0,nroFacturaACA:'654-940',fecha:'2026-05-08',facturaServicio:null,locked:true},
+    {period:'2026-05',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-06',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  ],
+  aguas:[
+    {period:'2025-01',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-02',importe:154122.02,iva:25377.4,percepciones:0,intereses:0,nroFacturaACA:'654-838',fecha:'2025-02-07',facturaServicio:null,locked:true},
+    {period:'2025-03',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-04',importe:148725.33,iva:30054.43,percepciones:0,intereses:0,nroFacturaACA:'654-850',fecha:'2025-04-15',facturaServicio:null,locked:true},
+    {period:'2025-05',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-06',importe:479498.69,iva:96897.13,percepciones:0,intereses:0,nroFacturaACA:'654-869',fecha:'2025-06-23',facturaServicio:null,locked:true},
+    {period:'2025-07',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-08',importe:785322,iva:158697.93,percepciones:0,intereses:0,nroFacturaACA:'654-887',fecha:'2025-08-19',facturaServicio:null,locked:true},
+    {period:'2025-09',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-10',importe:506169.01,iva:102286.67,percepciones:0,intereses:0,nroFacturaACA:'654-900',fecha:'2025-10-20',facturaServicio:null,locked:true},
+    {period:'2025-11',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-12',importe:242005.89,iva:48904.57,percepciones:0,intereses:0,nroFacturaACA:'905-005',fecha:'2025-12-22',facturaServicio:null,locked:true},
+    {period:'2026-01',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-02',importe:151849.21,iva:30685.7,percepciones:0,intereses:0,nroFacturaACA:'654-921',fecha:'2026-02-07',facturaServicio:null,locked:true},
+    {period:'2026-03',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-04',importe:140525.44,iva:28397.39,percepciones:0,intereses:0,nroFacturaACA:'654-934',fecha:'2026-04-10',facturaServicio:null,locked:true},
+    {period:'2026-05',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-06',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  ],
+  dpa:[
+    {period:'2025-01',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-02',importe:20319.97,iva:0,percepciones:0,intereses:1778.84,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-03',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-04',importe:19042.85,iva:0,percepciones:0,intereses:501.72,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-05',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-06',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-07',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-08',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-09',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-10',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-11',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-12',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-01',importe:27872.02,iva:0,percepciones:0,intereses:2091.24,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-02',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-03',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-04',importe:0,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-05',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-06',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  ],
+  telefono:[
+    {period:'2025-01',importe:314,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'2025-04-28',facturaServicio:null,locked:false},
+    {period:'2025-02',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'2025-04-28',facturaServicio:null,locked:false},
+    {period:'2025-03',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'2025-04-28',facturaServicio:null,locked:false},
+    {period:'2025-04',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-862',fecha:'2025-05-21',facturaServicio:null,locked:true},
+    {period:'2025-05',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-06',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-07',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-08',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-09',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-10',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-11',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2025-12',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-928',fecha:'2026-03-19',facturaServicio:null,locked:true},
+    {period:'2026-01',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-02',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-934',fecha:'2026-04-10',facturaServicio:null,locked:true},
+    {period:'2026-03',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-940',fecha:'2026-05-08',facturaServicio:null,locked:true},
+    {period:'2026-04',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-05',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+    {period:'2026-06',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  ],
+  canon:[
+    {period:'2025-01',importe:470448,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-832',fecha:'2025-01-16',facturaServicio:null,locked:true},
+    {period:'2025-02',importe:481580,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-837',fecha:'2025-02-07',facturaServicio:null,locked:true},
+    {period:'2025-03',importe:492712,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-844',fecha:'2025-03-11',facturaServicio:null,locked:true},
+    {period:'2025-04',importe:503844,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-851',fecha:'2025-04-15',facturaServicio:null,locked:true},
+    {period:'2025-05',importe:494648,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-863',fecha:'2025-05-21',facturaServicio:null,locked:true},
+    {period:'2025-06',importe:517000,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-870',fecha:'2025-06-23',facturaServicio:null,locked:true},
+    {period:'2025-07',importe:523204,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-877',fecha:'2025-07-15',facturaServicio:null,locked:true},
+    {period:'2025-08',importe:559020,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-886',fecha:'2025-08-19',facturaServicio:null,locked:true},
+    {period:'2025-09',importe:589996,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-890',fecha:'2025-09-16',facturaServicio:null,locked:true},
+    {period:'2025-10',importe:613712,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-899',fecha:'2025-10-20',facturaServicio:null,locked:true},
+    {period:'2025-11',importe:625812,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-904',fecha:'2025-11-07',facturaServicio:null,locked:true},
+    {period:'2025-12',importe:688248,iva:null,percepciones:null,intereses:null,nroFacturaACA:'905-005',fecha:'2025-12-22',facturaServicio:null,locked:true},
+    {period:'2026-01',importe:687280,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-915',fecha:'2026-01-20',facturaServicio:null,locked:true},
+    {period:'2026-02',importe:689216,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-920',fecha:'2026-02-06',facturaServicio:null,locked:true},
+    {period:'2026-03',importe:796664,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-930',fecha:'2026-03-19',facturaServicio:null,locked:true},
+    {period:'2026-04',importe:864424,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-934',fecha:'2026-04-10',facturaServicio:null,locked:true},
+    {period:'2026-05',importe:870716,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-940',fecha:'2026-05-08',facturaServicio:null,locked:true},
+    {period:'2026-06',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  ]
+};
+function ensureDemoData(usKey){
+  // Los datos de REAL_DATA siempre se imponen para garantizar datos correctos.
+  // Solo se preservan las filas que el usuario guardó manualmente (locked por el usuario, no por los datos reales).
+  // Identificamos esto: si la fila en storage tiene facturaServicio (archivo subido) la conservamos.
+  const existingByPeriod={};
+  PD.us[usKey].forEach(r=>{ existingByPeriod[r.period]=r; });
+  const realRows=REAL_DATA[usKey]||[];
+  const newRows=[];
+  const realPeriods=new Set(realRows.map(r=>r.period));
+  // Primero: todas las filas reales, preservando solo facturaServicio y validaciones del usuario
+  for(const row of realRows){
+    const existing=existingByPeriod[row.period];
+    newRows.push({
+      ...row,
+      // Preservar archivo de factura si el usuario lo subió
+      facturaServicio: existing?.facturaServicio||null
+    });
+  }
+  // Segundo: filas que el usuario agregó manualmente (períodos que no están en REAL_DATA)
+  for(const [period, row] of Object.entries(existingByPeriod)){
+    if(!realPeriods.has(period)) newRows.push(row);
+  }
+  PD.us[usKey]=newRows;
+}
+
+function prevMonth(p){
+  const [y,m]=p.split('-').map(Number);
+  return m===1?(y-1)+'-12':y+'-'+String(m-1).padStart(2,'0');
+}
+
+// ── CANON SERVICIOS: Litros SUPER (persistido globalmente) ───
+async function loadCanonLitros(){
+  const raw=await sGet('canon:litros',true);
+  if(raw) return JSON.parse(raw);
+  return {litros:null,locked:true};
+}
+async function saveCanonLitros(data){
+  await sSet('canon:litros',JSON.stringify(data),true);
+}
+
+// ── TAB: UNIDAD SERVICIAL — vista excel ──────────────────────
+async function renderUSExcel(usKey){
+  const el=document.getElementById('tab-content');
+  const item=US_ITEMS.find(it=>it.key===usKey);
+
+  ensureDemoData(usKey);
+
+  const rows=PD.us[usKey];
+  const currentPeriod=prevMonth(CP);
+  const periodsSet=new Set(rows.map(r=>r.period).filter(p=>p<=currentPeriod));
+  APS.filter(p=>p<=currentPeriod).forEach(p=>periodsSet.add(p));
+  periodsSet.add(currentPeriod);
+  const sortedPeriods=[...periodsSet].sort((a,b)=>a.localeCompare(b));
+
+  const histData={};
+  for(const p of sortedPeriods){
+    const localRow=rows.find(r=>r.period===p);
+    if(localRow){histData[p]=localRow;continue;}
+    const raw=await sGet('data:'+p,true);
+    if(raw){
+      const d=mergeDef(JSON.parse(raw));
+      const r=d.us[usKey].find(x=>x.period===p);
+      if(r)histData[p]=r;
+    }
+  }
+
+  // ── CANON SERVICIOS: tabla especial ──────────────────────────
+  if(usKey==='canon'){
+    const canonLitros=await loadCanonLitros();
+    const litrosFijos=canonLitros.litros||0;
+    const litrosLocked=canonLitros.locked!==false;
+    const lro=litrosLocked?'readonly':'';
+    const lbgl=litrosLocked?'background:#F0FFF4;border-color:#C8E6C9;':'';
+    // Canon va sobre el mes ACTUAL (CP), no el anterior
+    const canonCurrentPeriod=CP;
+    const canonPeriods=[...new Set([...sortedPeriods.filter(p=>p<canonCurrentPeriod),canonCurrentPeriod])].sort((a,b)=>a.localeCompare(b));
+
+    // Cuadro de Litros SUPER
+    const litrosBox=`<div style="background:#F8F5FB;border:1.5px solid var(--b);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Litros SUPER (fijos)</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input id="canon-litros-input" type="number" step="0.01" value="${litrosFijos||''}" ${lro} placeholder="Ej: 80"
+            style="width:120px;padding:8px 10px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${lbgl}">
+          <span style="font-size:14px;font-weight:700;color:var(--m2);">Lt</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;">
+        ${litrosLocked
+          ?`<button id="canon-litros-edit" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;">✏ Editar</button>`
+          :`<button id="canon-litros-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar</button>`
+        }
+      </div>
+      <div style="color:var(--m2);font-size:12px;border-left:2px solid var(--b);padding-left:16px;">
+        Fórmula: <strong>Litros × Precio Super = Importe &nbsp;|&nbsp; Recuperar = Importe + IVA 21%</strong>
+      </div>
+    </div>`;
+
+    let tableRows='';
+    for(const p of canonPeriods){
+      const row=histData[p]||null;
+      const precio=row?row.precioSuper:null;
+      const nro=row?row.nroFacturaACA||'':'';
+      const fecha=row?row.fecha||'':'';
+      const locked=row?(row.locked!==false):true;
+      const isCurr=p===canonCurrentPeriod;
+      const ro=locked?'readonly':'';
+      const pLabel=periodLabel(p);
+      const bgCls=isCurr?(locked?'row-locked':'row-current'):locked?'row-hist':'row-current';
+
+      // Cálculo: importe = litros × precio; IVA = importe × 21%; recuperar = importe + IVA
+      const importe=(litrosFijos&&precio)?(litrosFijos*precio):(row?.importe||null);
+      const iva=importe!=null?importe*0.21:null;
+      const recuperar=importe!=null?importe+(iva||0):null;
+      const recDisp=recuperar!=null?('$ '+fmt(recuperar)):'—';
+
+      const accion=locked
+        ?`<button class="btn-editar-fila" data-edit-us="${usKey}" data-edit-period="${p}">✏ Editar</button>`
+        :`<button class="btn-guardar-fila" data-save-us="${usKey}" data-save-period="${p}">💾 Guardar</button>`;
+
+      const isCurrLabel=isCurr?` <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;vertical-align:middle;">ACTUAL</span>`:'';
+
+      tableRows+=`<tr class="${bgCls}" data-row-period="${p}" data-locked="${locked}">
+        <td class="td-periodo">${pLabel}${isCurrLabel}</td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="precioSuper" value="${precio!=null?precio:''}" ${ro}></div></td>
+        <td style="text-align:right;font-size:13px;padding:7px 10px;" id="imp-${p}">${importe!=null?'$ '+fmt(importe):'—'}</td>
+        <td style="text-align:right;font-size:13px;padding:7px 10px;color:var(--m2);" id="iva-${p}">${iva!=null?'$ '+fmt(iva):'—'}</td>
+        <td class="td-recuperar-calc" id="rec-${p}">${recDisp}</td>
+        <td><input class="ex-input" type="text" placeholder="654-xxx" data-field="nroFacturaACA" value="${esc(nro)}" ${ro}></td>
+        <td class="td-center">${accion}</td>
+      </tr>`;
+    }
+
+    el.innerHTML=`
+      <button class="excel-back" id="back-to-grid">← Volver</button>
+      <div class="excel-view">
+        <div class="excel-title">${esc(item.title)}</div>
+        ${litrosBox}
+        ${renderSearchBar('us-search','Buscar por período, N° factura, fecha...',canonPeriods.length)}
+        <div class="ex-table-wrap">
+          <table class="ex">
+            <colgroup><col class="c-periodo"><col class="c-num"><col class="c-num"><col class="c-num"><col class="c-rec"><col class="c-nro"><col class="c-acc"></colgroup>
+            <thead><tr>
+              <th>PERÍODO</th><th>PRECIO SUPER $</th><th>IMPORTE</th><th>IVA 21%</th><th>RECUPERAR</th><th>N° FAC. ACA</th><th></th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    document.getElementById('back-to-grid').addEventListener('click',()=>{usView=null;renderTab();});
+    activateSearch('us-search','table.ex tbody tr[data-row-period]');
+
+    // Litros SUPER: editar/guardar
+    document.getElementById('canon-litros-edit')?.addEventListener('click',async()=>{
+      canonLitros.locked=false; await saveCanonLitros(canonLitros); renderTab();
+    });
+    document.getElementById('canon-litros-save')?.addEventListener('click',async()=>{
+      const v=pN(document.getElementById('canon-litros-input')?.value)||0;
+      canonLitros.litros=v; canonLitros.locked=true;
+      await saveCanonLitros(canonLitros); toast('Litros SUPER guardados ✓'); renderTab();
+    });
+
+    // Live recalc precio → importe/IVA/recuperar en filas desbloqueadas
+    el.querySelectorAll('tr[data-row-period][data-locked="false"]').forEach(trEl=>{
+      const p=trEl.getAttribute('data-row-period');
+      const precioInp=trEl.querySelector('input[data-field="precioSuper"]');
+      if(precioInp){
+        precioInp.addEventListener('input',()=>{
+          const precio=pN(precioInp.value)||0;
+          const importe=litrosFijos*precio;
+          const iva=importe*0.21;
+          const rec=importe+iva;
+          const impEl=document.getElementById('imp-'+p);
+          const ivaEl=document.getElementById('iva-'+p);
+          const recEl=document.getElementById('rec-'+p);
+          if(impEl)impEl.textContent=precio?'$ '+fmt(importe):'—';
+          if(ivaEl)ivaEl.textContent=precio?'$ '+fmt(iva):'—';
+          if(recEl)recEl.textContent=precio?'$ '+fmt(rec):'—';
+        });
+      }
+    });
+
+    // Guardar filas canon
+    el.querySelectorAll('[data-save-us="canon"]').forEach(btn=>{
+      btn.addEventListener('click',async()=>{
+        const p=btn.getAttribute('data-save-period');
+        const trEl=el.querySelector(`tr[data-row-period="${p}"]`);
+        let row=PD.us.canon.find(r=>r.period===p);
+        if(!row){row={period:p,importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false};PD.us.canon.push(row);}
+        if(trEl){
+          const g=f=>trEl.querySelector(`input[data-field="${f}"]`)?.value;
+          const precio=pN(g('precioSuper'))||0;
+          const importe=litrosFijos*precio;
+          row.precioSuper=precio;
+          row.importe=importe;
+          row.iva=importe*0.21;
+          row.nroFacturaACA=g('nroFacturaACA')||'';
+          row.fecha=g('fecha')||'';
+        }
+        row.locked=true;
+        showLoad(true);await saveP();showLoad(false);toast('Guardado ✓');renderTab();
+      });
+    });
+    el.querySelectorAll('[data-edit-us="canon"]').forEach(btn=>{
+      btn.addEventListener('click',async()=>{
+        const p=btn.getAttribute('data-edit-period');
+        let row=PD.us.canon.find(r=>r.period===p);
+        if(row){row.locked=false;await saveP();renderTab();}
+      });
+    });
+    return;
+  }
+
+  let tableRows='';
+  for(const p of sortedPeriods){
+    const row=histData[p]||null;
+    const imp=row?row.importe:null;
+    const iva=row?row.iva:null;
+    const per=row?row.percepciones:null;
+    const int=row?row.intereses:null;
+    const rec=row?calcRec(row):null;
+    const nro=row?row.nroFacturaACA||'':'';
+    const fecha=row?row.fecha||'':'';
+    const fs=row?row.facturaServicio:null;
+    const locked=row?!!row.locked:false;
+    const pLabel=periodLabel(p);
+    const fileKey=`us:${usKey}:${p}:fs`;
+    const isCurr=p===currentPeriod;
+
+    if(isCurr){
+      // ── Fila del período actual: editable o bloqueada según estado ──
+      const isLocked=locked;
+      const ro=isLocked?'readonly':'' ;
+      const bgCls=isLocked?'row-locked':'row-current';
+      const recDisp=rec!==null?('$ '+fmt(rec)):'—';
+
+      const fsBtn=fs
+        ?`<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>
+           <label class="btn-factura btn-f-edit" style="cursor:pointer;">✏<input type="file" data-upload-us="${usKey}" data-upload-period="${p}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>
+           <button class="btn-factura btn-f-del" data-del-fs="${usKey}" data-del-period="${p}">✕</button>`
+        :`<label class="btn-factura btn-f-subir" style="cursor:pointer;">📁 Subir<input type="file" data-upload-us="${usKey}" data-upload-period="${p}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`;
+
+      const accion=isLocked
+        ?`<button class="btn-editar-fila" data-edit-us="${usKey}" data-edit-period="${p}">✏ Editar</button>`
+        :`<button class="btn-guardar-fila" data-save-us="${usKey}" data-save-period="${p}">💾 Guardar</button>`;
+
+      tableRows+=`<tr class="${bgCls}" data-row-period="${p}" data-locked="${isLocked}">
+        <td class="td-periodo">${pLabel} <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;vertical-align:middle;">ACTUAL</span></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="importe" value="${imp!==null?imp:''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="iva" value="${iva!==null?iva:''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="percepciones" value="${per!==null?per:''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="intereses" value="${int!==null?int:''}" ${ro}></div></td>
+        <td class="td-recuperar-calc" id="rec-${p}">${recDisp}</td>
+        <td><input class="ex-input" type="text" placeholder="654-xxx" data-field="nroFacturaACA" value="${esc(nro)}" ${ro}></td>
+        <td><input class="ex-input inp-date" type="date" data-field="fecha" value="${esc(fecha)}" ${ro}></td>
+        <td class="td-center"><div style="display:flex;gap:4px;flex-wrap:nowrap;justify-content:center;">${isLocked?'':(fsBtn)}</div>${isLocked&&fs?`<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>`:''}</td>
+        <td class="td-center">${accion}</td>
+      </tr>`;
+    } else {
+      // ── Fila histórica: mismo formato editable, siempre bloqueada salvo que locked===false ──
+      const isLocked = row ? (row.locked !== false) : true;
+      const ro = isLocked ? 'readonly' : '';
+      const bgCls = isLocked ? 'row-hist' : 'row-current';
+      const recDisp = rec !== null ? ('$ ' + fmt(rec)) : '—';
+
+      const fsBtn = fs
+        ? `<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>
+           <label class="btn-factura btn-f-edit" style="cursor:pointer;">✏<input type="file" data-upload-us="${usKey}" data-upload-period="${p}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>
+           <button class="btn-factura btn-f-del" data-del-fs="${usKey}" data-del-period="${p}">✕</button>`
+        : `<label class="btn-factura btn-f-subir" style="cursor:pointer;">📁 Subir<input type="file" data-upload-us="${usKey}" data-upload-period="${p}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`;
+
+      const accion = isLocked
+        ? `<button class="btn-editar-fila" data-edit-us="${usKey}" data-edit-period="${p}">✏ Editar</button>`
+        : `<button class="btn-guardar-fila" data-save-us="${usKey}" data-save-period="${p}">💾 Guardar</button>`;
+
+      tableRows += `<tr class="${bgCls}" data-row-period="${p}" data-locked="${isLocked}">
+        <td class="td-periodo">${pLabel}</td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="importe" value="${imp !== null ? imp : ''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="iva" value="${iva !== null ? iva : ''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="percepciones" value="${per !== null ? per : ''}" ${ro}></div></td>
+        <td><div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" placeholder="0,00" data-field="intereses" value="${int !== null ? int : ''}" ${ro}></div></td>
+        <td class="td-recuperar-calc" id="rec-${p}">${recDisp}</td>
+        <td><input class="ex-input" type="text" placeholder="654-xxx" data-field="nroFacturaACA" value="${esc(nro)}" ${ro}></td>
+        <td><input class="ex-input inp-date" type="date" data-field="fecha" value="${esc(fecha)}" ${ro}></td>
+        <td class="td-center"><div style="display:flex;gap:4px;flex-wrap:nowrap;justify-content:center;">${isLocked ? (fs ? `<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>` : '—') : fsBtn}</div></td>
+        <td class="td-center">${accion}</td>
+      </tr>`;
+    }
+  }
+
+  el.innerHTML=`
+    <button class="excel-back" id="back-to-grid">← Volver</button>
+    <div class="excel-view">
+      <div class="excel-title">${esc(item.title)}</div>
+      ${renderSearchBar('us-search','Buscar por período, N° factura, fecha...',sortedPeriods.length)}
+      <div class="ex-table-wrap">
+        <table class="ex">
+          <colgroup>
+            <col class="c-periodo"><col class="c-num"><col class="c-num"><col class="c-num"><col class="c-num">
+            <col class="c-rec"><col class="c-nro"><col class="c-fecha"><col class="c-fs"><col class="c-acc">
+          </colgroup>
+          <thead><tr>
+            <th>PERÍODO</th><th>IMPORTE</th><th>IVA</th><th>PERCEPCIONES</th><th>INTERESES</th>
+            <th>RECUPERAR</th><th>N° FAC. ACA</th><th>FECHA</th><th>FACTURA SERVICIO</th><th></th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  // ── Back ──
+  document.getElementById('back-to-grid').addEventListener('click',()=>{usView=null;renderTab();});
+
+  // ── Búsqueda ──
+  activateSearch('us-search','table.ex tbody tr[data-row-period]');
+
+  // ── Live recalc para todas las filas desbloqueadas ──
+  el.querySelectorAll('tr[data-row-period][data-locked="false"]').forEach(trEl=>{
+    const period=trEl.getAttribute('data-row-period');
+    trEl.querySelectorAll('input[data-field]').forEach(inp=>{
+      inp.addEventListener('input',()=>{
+        const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?pN(i.value):null;};
+        const r2=(g('importe')||0)-(g('iva')||0)-(g('percepciones')||0)-(g('intereses')||0);
+        const lv=document.getElementById('rec-'+period)||document.getElementById('rec-live');
+        if(lv)lv.textContent=g('importe')!==null?('$ '+fmt(r2)):'—';
+      });
+    });
+  });
+
+  // ── Guardar (bloquea la fila) ──
+  el.querySelectorAll('[data-save-us]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const key=btn.getAttribute('data-save-us');
+      const period=btn.getAttribute('data-save-period');
+      const trEl=el.querySelector(`tr[data-row-period="${period}"]`);
+      if(!trEl)return;
+      const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():'';};
+      const imp=pN(g('importe')),iva=pN(g('iva')),per=pN(g('percepciones')),int=pN(g('intereses'));
+      const nro=g('nroFacturaACA'),fecha=g('fecha');
+      let idx=PD.us[key].findIndex(r=>r.period===period);
+      if(idx===-1){PD.us[key].push({period});idx=PD.us[key].length-1;}
+      const rObj=PD.us[key][idx];
+      rObj.importe=imp;rObj.iva=iva;rObj.percepciones=per;rObj.intereses=int;
+      rObj.nroFacturaACA=nro;rObj.fecha=fecha;
+      rObj.locked=true;
+      showLoad(true);await saveP();showLoad(false);
+      toast('Guardado ✓');
+      renderTab();
+    });
+  });
+
+  // ── Editar (desbloquea la fila) ──
+  el.querySelectorAll('[data-edit-us]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const key=btn.getAttribute('data-edit-us');
+      const period=btn.getAttribute('data-edit-period');
+      let idx=PD.us[key].findIndex(r=>r.period===period);
+      if(idx===-1)return;
+      PD.us[key][idx].locked=false;
+      await saveP();
+      renderTab();
+    });
+  });
+
+  // Upload factura servicio
+  el.querySelectorAll('[data-upload-us]').forEach(inp=>{
+    inp.addEventListener('change',async e=>{
+      const file=e.target.files[0];if(!file)return;
+      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      const key=inp.getAttribute('data-upload-us');
+      const period=inp.getAttribute('data-upload-period');
+      showLoad(true);
+      try{
+        const dataUrl=await readDU(file);
+        const fileKey=`us:${key}:${period}:fs`;
+        await sSet('file:'+fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl}),true);
+        let rowIdx=PD.us[key].findIndex(r=>r.period===period);
+        if(rowIdx===-1){PD.us[key].push({period});rowIdx=PD.us[key].length-1;}
+        PD.us[key][rowIdx].facturaServicio={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
+        await saveP();toast('Factura subida ✓');
+      }catch(err){alert('Error: '+err.message);}
+      showLoad(false);renderTab();
+    });
+  });
+
+  // Eliminar factura
+  el.querySelectorAll('[data-del-fs]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Eliminar factura?'))return;
+      const key=btn.getAttribute('data-del-fs');
+      const period=btn.getAttribute('data-del-period');
+      showLoad(true);
+      const fileKey=`us:${key}:${period}:fs`;
+      await sDel('file:'+fileKey,true);
+      const rowIdx=PD.us[key].findIndex(r=>r.period===period);
+      if(rowIdx!==-1)PD.us[key][rowIdx].facturaServicio=null;
+      await saveP();showLoad(false);toast('Eliminada');renderTab();
+    });
+  });
+
+  // Ver archivo
+  el.querySelectorAll('[data-ver-file]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const fk=btn.getAttribute('data-ver-file');
+      showLoad(true);
+      const raw=await sGet('file:'+fk,true);
+      showLoad(false);
+      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      const f=JSON.parse(raw);
+      openFileViewer(f);
+    });
+  });
+}
+
+// ── VISOR DE ARCHIVO INLINE ───────────────────────────────────
+function openFileViewer(f){
+  const isImg=f.type&&f.type.startsWith('image/');
+  const wrap=document.createElement('div');
+  wrap.className='file-viewer-wrap';
+  wrap.id='fv-wrap';
+  const content=isImg
+    ?`<img src="${f.dataUrl}" alt="${esc(f.fileName)}" style="max-width:100%;max-height:80vh;display:block;margin:auto;object-fit:contain;">`
+    :`<iframe src="${f.dataUrl}" title="${esc(f.fileName)}"></iframe>`;
+  wrap.innerHTML=`
+    <div class="file-viewer-bar">
+      <span>📎 ${esc(f.fileName)}</span>
+      <button id="fv-close" title="Cerrar">✕</button>
+    </div>
+    <div class="file-viewer-content">${content}</div>`;
+  document.body.appendChild(wrap);
+  document.getElementById('fv-close').addEventListener('click',()=>wrap.remove());
+  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+}
+
+// ── FULL: bloque de cancelación (editable o bloqueado) ────────
+const BSTYLE_VER='background:#FFF8E1;color:#7B5800;border:1px solid #FFD54F;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
+const BSTYLE_DEL='background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
+const BSTYLE_SUB='background:#4B2563;color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
+function renderFullFileBtn(slotId, fileMeta, locked){
+  if(fileMeta){
+    const delBtn = locked ? '' : `<button style="${BSTYLE_DEL}" data-delete="${slotId}">✕</button>`;
+    return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--pd);font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(fileMeta.fileName)}">📎 ${esc(fileMeta.fileName)}</span>
+      <button style="${BSTYLE_VER}" data-view="${slotId}" data-view-period="${CP}">👁 Ver</button>
+      ${delBtn}
+    </div>`;
+  }
+  if(locked) return `<span style="font-size:12px;color:var(--m2);">Sin archivo</span>`;
+  return `<label style="${BSTYLE_SUB};display:inline-block;">📁 Subir<input type="file" data-upload="${slotId}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`;
+}
+function renderFullRegistro(f){
+  const locked = !!f.locked;
+  const ro = locked ? 'readonly' : '';
+  const roStyle = locked ? 'background:#F0FFF4;border-color:#C8E6C9;' : '';
+  const bgColor = locked ? '#F0FFF4' : '#F8F5FB';
+  const borderColor = locked ? '#81C784' : 'var(--b)';
+
+  const accionBtn = locked
+    ? `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+         <button id="full-reg-edit" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">✏ Editar</button>
+         <button id="full-reg-del" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">🗑 Eliminar</button>
+       </div>`
+    : `<button id="full-reg-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar</button>`;
+
+  return `<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:10px;padding:14px 16px;margin-top:4px;">
+    <div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:12px;">
+      📋 REGISTRO DE CANCELACIÓN ${locked?'<span style="background:var(--g);color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;margin-left:6px;vertical-align:middle;">GUARDADO</span>':''}
+    </div>
+    <div style="display:grid;grid-template-columns:180px 1fr 140px 1fr auto;gap:14px;align-items:end;flex-wrap:wrap;">
+
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N° Factura ACA</div>
+        <input id="full-nro-aca" type="text" placeholder="Ej: 0001-00001" value="${esc(f.nroFacturaACA||'')}" ${ro}
+          style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;${roStyle}">
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Factura ACA</div>
+        ${renderFullFileBtn('full.facturaACA', f.facturaACA, locked)}
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Fecha cancelación</div>
+        <input id="full-fecha-cancel" type="date" value="${esc(f.fechaCancelacion||'')}" ${ro}
+          style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;${roStyle}">
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Comprobante de transferencia</div>
+        ${renderFullFileBtn('full.comprobanteTransferencia', f.comprobanteTransferencia, locked)}
+      </div>
+
+      <div style="padding-bottom:2px;">${accionBtn}</div>
+    </div>
+  </div>`;
+}
+
+// ── FULL ──────────────────────────────────────────────────────
+const REAL_DATA_FULL=[
+  {period:'2026-01',importe:168409510.61,cigarrillos:19156550,recuperar:17910355.27,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false},
+  {period:'2026-02',importe:134215867.61,cigarrillos:15962810,recuperar:14190366.91,nroFacturaACA:'654-942',fechaCancelacion:'2026-05-13',interesMensual:'1.41',diasAtrasados:'',importe_interes:200692.33,comprobanteTransferencia:null,facturaACA:null,locked:true},
+  {period:'2026-03',importe:123126524.47,cigarrillos:16107140,recuperar:12842326.14,nroFacturaACA:'654-939',fechaCancelacion:'2026-04-28',interesMensual:'0.83',diasAtrasados:'',importe_interes:107019.38,comprobanteTransferencia:null,facturaACA:null,locked:true},
+  {period:'2026-04',importe:127694942.7,cigarrillos:17224230,recuperar:13256485.52,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false},
+];
+
+function ensureFullHistory(){
+  if(!PD.fullHistory) PD.fullHistory=[];
+  const existingPeriods=new Set(PD.fullHistory.map(r=>r.period));
+  for(const row of REAL_DATA_FULL){
+    if(!existingPeriods.has(row.period)) PD.fullHistory.push({...row});
+  }
+}
+
+function calcIntereses(f){
+  const tasa=pN(f.interesMensual);
+  const diasAtr=pN(f.diasAtrasados);
+  if(!tasa||!diasAtr||!f.ventas)return null;
+  const [y,m]=CP.split('-').map(Number);
+  const diasMes=new Date(y,m,0).getDate();
+  const tasaDiaria=tasa/diasMes;
+  const montoInt=f.ventas.recupero12*(tasaDiaria/100)*diasAtr;
+  return{tasaDiaria,montoInt};
+}
+
+function renderFull(){
+  ensureFullHistory();
+  const currentPeriod=prevMonth(CP);
+  const history=PD.fullHistory||[];
+  // Solo mostrar hasta el mes anterior a CP
+  const rows=history.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
+  // Asegurar que el período actual existe
+  if(!rows.find(r=>r.period===currentPeriod)){
+    rows.push({period:currentPeriod,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null});
+  }
+  const f=PD.full;
+  if(!f.interesMensual)f.interesMensual='';
+  if(!f.diasAtrasados)f.diasAtrasados='';
+
+  const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+
+  const trs=rows.map(row=>{
+    const isCurr=row.period===currentPeriod;
+    const locked=!!row.locked;
+    const ro=locked?'readonly':'';
+    const bgl=locked?'background:#F0FFF4;border-color:#C8E6C9;':'';
+    const rowBg=isCurr?(locked?'#F0FFF4':'#EEF0FF'):locked?'#F8FFF8':'#FFFFF0';
+    const pLabel=periodLabel(row.period);
+    const rec=row.recuperar!=null?row.recuperar:null;
+    const totalConInt=rec!=null&&row.importe_interes?(rec+(row.importe_interes||0)):rec;
+
+    // Fila histórica bloqueada (no es la actual)
+    if(!isCurr){
+      return `<tr style="background:${rowBg}">
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">${pLabel}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${row.importe!=null?'$ '+fmtArg(row.importe):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${row.cigarrillos!=null?'$ '+fmtArg(row.cigarrillos):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:700;color:var(--g);">${rec!=null?'$ '+fmtArg(rec):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;color:var(--r);">${row.importe_interes?'$ '+fmtArg(row.importe_interes):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:800;color:var(--p);">${totalConInt!=null?'$ '+fmtArg(totalConInt):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;">${esc(row.nroFacturaACA||'—')}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;">${esc(row.fechaCancelacion||'—')}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
+          <button class="full-hist-edit" data-period="${row.period}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;">✏ Editar</button>
+        </td>
+      </tr>`;
+    }
+
+    // Fila ACTUAL — editable con todo el formulario inline
+    const int=f.ventas?calcIntereses(f):null;
+    const subtotal=f.ventas?f.ventas.recupero12:rec;
+    const montoInt=int?int.montoInt:0;
+    const total=(subtotal||0)+montoInt;
+    const [y,m]=CP.split('-').map(Number);
+    const diasMes=new Date(y,m,0).getDate();
+
+    return `<tr style="background:#EEF0FF;border-left:4px solid var(--p);" id="full-curr-row">
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:800;font-size:13px;text-align:center;white-space:nowrap;">
+        ${pLabel} <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;">ACTUAL</span>
+      </td>
+      <td colspan="8" style="padding:10px 14px;border:1px solid #D4C830;">
+        ${f.ventas?`
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+          <div class="calc-box"><div class="cl">Total Ventas (S.2+21)</div><div class="cv" style="font-size:15px;">$ ${fmt(f.ventas.totalVentas)}</div></div>
+          <div class="calc-box"><div class="cl">Cigarrillos</div><div class="cv" style="font-size:15px;">$ ${fmt(f.ventas.cigarrillos)}</div></div>
+          <div class="calc-box"><div class="cl">Base</div><div class="cv" style="font-size:15px;">$ ${fmt(f.ventas.base)}</div></div>
+          <div class="calc-box hl"><div class="cl">Subtotal 12%</div><div class="cv" style="font-size:15px;">$ ${fmt(subtotal)}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#F8F5FB;border:1px solid var(--b);border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+          <span style="font-size:13px;font-weight:600;color:var(--pd);flex:1;">📊 ${esc(f.ventas.fileName)}</span>
+          <button class="btn-lnk" data-view-excel="full.ventas">👁 Ver</button>
+          <button class="btn-lnk d" data-delete="full.ventas">Eliminar</button>
+        </div>
+        <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:12px;margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:800;color:#7B5800;margin-bottom:8px;">INTERESES POR MORA</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+            <div class="ifield"><label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;">Tasa mensual (%)</label>
+              <input type="number" step="0.01" id="full-tasa" value="${esc(f.interesMensual||'')}" placeholder="Ej: 5.5" style="padding:7px;border:1px solid var(--b);border-radius:6px;font-size:13px;width:100%;"></div>
+            <div class="ifield"><label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;">Días del mes</label>
+              <input type="number" readonly value="${diasMes}" style="padding:7px;border:1px solid var(--b);border-radius:6px;font-size:13px;width:100%;background:#F4F1F8;"></div>
+            <div class="ifield"><label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;">Días atrasados</label>
+              <input type="number" id="full-diasatr" value="${esc(f.diasAtrasados||'')}" placeholder="0" style="padding:7px;border:1px solid var(--b);border-radius:6px;font-size:13px;width:100%;"></div>
+            <div class="ifield"><label style="font-size:11px;font-weight:700;color:var(--r);text-transform:uppercase;">Interés $</label>
+              <input type="number" id="full-intcalc" readonly value="${int?int.montoInt.toFixed(2):''}" style="padding:7px;border:1px solid #FFD54F;border-radius:6px;font-size:13px;width:100%;background:#FFF3CD;font-weight:700;"></div>
+          </div>
+        </div>
+        <div style="background:var(--p);color:#fff;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:13px;opacity:.85;">Subtotal: $ ${fmt(subtotal||0)} + Intereses: $ ${fmt(montoInt)}</div>
+          <div id="full-total" style="font-size:22px;font-weight:900;color:var(--y);">$ ${fmt(total)}</div>
+        </div>`
+        :`<div style="text-align:center;padding:16px;border:2px dashed var(--b);border-radius:8px;margin-bottom:12px;">
+          <p style="color:var(--m2);margin-bottom:10px;font-size:14px;">Subí el Excel de ventas del mes para calcular el recupero</p>
+          <label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">📊 Subir Excel<input type="file" id="full-xl" accept=".xlsx,.xls" hidden></label>
+        </div>`}
+        ${renderFullRegistro(f)}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="cards"><div class="card">
+    <div class="card-header"><h3>Recupero Full</h3></div>
+    <div class="card-body" style="padding:0;">
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:collapse;width:100%;min-width:900px;">
+          <thead><tr>
+            <th style="${th}">PERÍODO</th>
+            <th style="${th}">IMPORTE FACTURADO</th>
+            <th style="${th}">CIGARRILLOS</th>
+            <th style="${th}">RECUPERAR (12%)</th>
+            <th style="${th}">INTERESES</th>
+            <th style="${th}">TOTAL</th>
+            <th style="${th}">N° FAC. ACA</th>
+            <th style="${th}">FECHA CANCEL.</th>
+            <th style="${th}"></th>
+          </tr></thead>
+          <tbody>${trs}</tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>`;
+}
+// ── HOTEL ─────────────────────────────────────────────────────
+// ── HOTEL: datos reales de teléfono ───────────────────────────
+const REAL_DATA_HOTEL_TEL=[
+  {period:'2025-01',importe:33114.83,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-853',fecha:'2025-04-28',facturaServicio:null,locked:true},
+  {period:'2025-02',importe:34913.57,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-853',fecha:'2025-04-28',facturaServicio:null,locked:true},
+  {period:'2025-03',importe:35452.23,iva:0,percepciones:0,intereses:0,nroFacturaACA:'654-853',fecha:'2025-04-28',facturaServicio:null,locked:true},
+  {period:'2025-04',importe:36180.69,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-05',importe:37714.87,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-06',importe:38427.85,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-07',importe:40188.5,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-08',importe:40879.86,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-09',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-10',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-11',importe:43871.59,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2025-12',importe:44931.27,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2026-01',importe:46471.73,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2026-02',importe:48016.54,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2026-03',importe:49169.52,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2026-04',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+  {period:'2026-05',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
+];
+function ensureHotelTelHistory(){
+  if(!PD.hotel.telHistory) PD.hotel.telHistory=[];
+  const existing=new Set(PD.hotel.telHistory.map(r=>r.period));
+  for(const row of REAL_DATA_HOTEL_TEL){
+    if(!existing.has(row.period)) PD.hotel.telHistory.push({...row});
+  }
+}
+
+const REAL_DATA_CANON=[
+  {period:'2026-01',factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
+  {period:'2026-02',factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
+  {period:'2026-03',factNro:'650-21338',factTotal:9504132.01,ncNro:'650-7331',ncTotal:1782024.75,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
+  {period:'2026-04',factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
+];
+function ensureCanonHistory(){
+  if(!PD.hotel.canonHistory) PD.hotel.canonHistory=[];
+  const existing=new Set(PD.hotel.canonHistory.map(r=>r.period));
+  for(const row of REAL_DATA_CANON){
+    if(!existing.has(row.period)) PD.hotel.canonHistory.push({...row});
+  }
+}
+
+function renderHotel(){
+  const isAdmin=CU.role==='admin';
+  const currentPeriod=prevMonth(CP);
+  ensureHotelTelHistory();
+  ensureCanonHistory();
+
+  // ── CANON ALOJAMIENTO — tabla histórica estilo Full ───────────
+  const canonRows=PD.hotel.canonHistory.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
+  if(!canonRows.find(r=>r.period===currentPeriod)){
+    canonRows.push({period:currentPeriod,factNro:'',factTotal:null,ncNro:'',ncTotal:null,transferencia:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false});
+  }
+
+  const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+
+  const canonTrs=canonRows.map(row=>{
+    const isCurr=row.period===currentPeriod;
+    const locked=!!row.locked;
+    const transf=row.factTotal&&row.ncTotal!=null?(row.factTotal-row.ncTotal):row.factTotal||null;
+    const pLabel=periodLabel(row.period);
+
+    const fileBtn=(slotKey,meta,period)=>{
+      if(meta) return `<button style="${BSTYLE_VER}" data-view="${slotKey}" data-view-period="${period}">👁</button>
+        ${!locked?`<button style="${BSTYLE_DEL}" data-canon-file-del="${slotKey}" data-canon-period="${period}">✕</button>`:''}`;
+      if(locked) return `<span style="font-size:11px;color:var(--m2);">—</span>`;
+      return `<label style="${BSTYLE_SUB};cursor:pointer;font-size:11px;padding:3px 8px;">📁<input type="file" data-canon-upload-row="${slotKey}" data-canon-period="${period}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`;
+    };
+
+    if(!isCurr || locked){
+      // Fila histórica (o ACTUAL ya guardada)
+      return `<tr style="background:${isCurr?'#F0FFF4':locked?'#F8FFF8':'#FFFFF0'};${isCurr?'border-left:4px solid var(--g);':''}">
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">
+          ${pLabel}${isCurr?' <span style="font-size:10px;background:var(--g);color:#fff;padding:1px 6px;border-radius:3px;">✓</span>':''}
+        </td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${row.factNro?`<div style="font-size:11px;color:var(--m2);">N° ${esc(row.factNro)}</div>`:''}<div style="font-weight:700;color:var(--g);">${row.factTotal?'$ '+fmtArg(row.factTotal):'—'}</div></td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${row.ncNro?`<div style="font-size:11px;color:var(--m2);">N° ${esc(row.ncNro)}</div>`:''}<div style="font-weight:700;color:var(--r);">${row.ncTotal?'- $ '+fmtArg(row.ncTotal):'—'}</div></td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:800;color:var(--p);">${transf?'$ '+fmtArg(transf):'—'}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(row.nroRecibo||'—')}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">${fileBtn('canon:'+row.period+':fact',row.facturaACA,row.period)}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">${fileBtn('canon:'+row.period+':nc',row.notaCredito,row.period)}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">${fileBtn('canon:'+row.period+':transf',row.transf,row.period)}</td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
+          <div style="display:flex;gap:5px;justify-content:center;">
+            <button class="btn-editar-fila" data-canon-edit="${row.period}">✏ Editar</button>
+            <button style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" data-canon-row-del="${row.period}">🗑</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    // Fila editable (ACTUAL sin guardar, o histórica en modo edición)
+    return `<tr style="background:#EEF0FF;border-left:4px solid var(--p);" id="canon-curr-row">
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:800;font-size:13px;text-align:center;white-space:nowrap;">
+        ${pLabel} <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;">${isCurr?'ACTUAL':'EDITANDO'}</span>
+      </td>
+      <td colspan="8" style="padding:12px 16px;border:1px solid #D4C830;">
+        <!-- Tres cuadros: Factura / NC / Transferencia -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+
+          <!-- FACTURA -->
+          <div style="background:#fff;border:1px solid var(--b);border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">📄 Factura</div>
+            <div style="margin-bottom:6px;">
+              <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:2px;">N° Factura</div>
+              <input id="canon-fact-nro-${row.period}" type="text" placeholder="Ej: 0650-00022038" value="${esc(row.factNro||'')}"
+                style="width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:5px;font-size:12px;">
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:2px;">Total $</div>
+              <input id="canon-fact-total-${row.period}" type="number" step="0.01" placeholder="0,00" value="${row.factTotal||''}"
+                style="width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:5px;font-size:13px;font-weight:700;color:var(--g);" class="canon-recalc" data-canon-period="${row.period}">
+            </div>
+            <div style="border-top:1px solid var(--b);padding-top:8px;">
+              ${row.facturaACA
+                ? `<div style="display:flex;gap:5px;align-items:center;"><button style="${BSTYLE_VER}" data-view="canon:${row.period}:fact" data-view-period="${row.period}">👁 Ver</button><button style="${BSTYLE_DEL}" data-canon-file-del="canon:${row.period}:fact" data-canon-period="${row.period}">✕</button></div>`
+                : `<label style="background:var(--p);color:#fff;border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;">📁 Subir PDF<input type="file" data-canon-upload-row="canon:${row.period}:fact" data-canon-period="${row.period}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`}
+            </div>
+          </div>
+
+          <!-- NOTA DE CRÉDITO -->
+          <div style="background:#fff;border:1px solid var(--b);border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">📄 Nota de Crédito</div>
+            <div style="margin-bottom:6px;">
+              <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:2px;">N° Nota de Crédito</div>
+              <input id="canon-nc-nro-${row.period}" type="text" placeholder="Ej: 0650-00007679" value="${esc(row.ncNro||'')}"
+                style="width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:5px;font-size:12px;">
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:2px;">Total $</div>
+              <input id="canon-nc-total-${row.period}" type="number" step="0.01" placeholder="0,00" value="${row.ncTotal||''}"
+                style="width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:5px;font-size:13px;font-weight:700;color:var(--r);" class="canon-recalc" data-canon-period="${row.period}">
+            </div>
+            <div style="border-top:1px solid var(--b);padding-top:8px;">
+              ${row.notaCredito
+                ? `<div style="display:flex;gap:5px;align-items:center;"><button style="${BSTYLE_VER}" data-view="canon:${row.period}:nc" data-view-period="${row.period}">👁 Ver</button><button style="${BSTYLE_DEL}" data-canon-file-del="canon:${row.period}:nc" data-canon-period="${row.period}">✕</button></div>`
+                : `<label style="background:var(--p);color:#fff;border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;">📁 Subir PDF<input type="file" data-canon-upload-row="canon:${row.period}:nc" data-canon-period="${row.period}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`}
+            </div>
+          </div>
+
+          <!-- COMPROBANTE TRANSFERENCIA -->
+          <div style="background:#fff;border:1px solid var(--b);border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">💸 A Transferir</div>
+            <div id="canon-transf-display-${row.period}" style="font-size:22px;font-weight:900;color:var(--p);margin-bottom:12px;">${transf?'$ '+fmtArg(transf):'—'}</div>
+            <div style="font-size:10px;color:var(--m2);margin-bottom:8px;">Factura − Nota de Crédito</div>
+            <div style="border-top:1px solid var(--b);padding-top:8px;">
+              ${row.transf
+                ? `<div style="display:flex;gap:5px;align-items:center;"><button style="${BSTYLE_VER}" data-view="canon:${row.period}:transf" data-view-period="${row.period}">👁 Comprobante</button><button style="${BSTYLE_DEL}" data-canon-file-del="canon:${row.period}:transf" data-canon-period="${row.period}">✕</button></div>`
+                : `<label style="background:var(--p);color:#fff;border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;">📁 Subir Comprobante<input type="file" data-canon-upload-row="canon:${row.period}:transf" data-canon-period="${row.period}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`}
+            </div>
+          </div>
+        </div>
+
+        <!-- N° Recibo + Guardar -->
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;">
+            <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N° Recibo ACA</div>
+            <input id="canon-nro-${row.period}" type="text" placeholder="Ej: 654-XXX" value="${esc(row.nroRecibo||'')}"
+              style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
+          </div>
+          <div style="padding-top:18px;">
+            <button data-canon-save="${row.period}" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar</button>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const canonHtml=`<div class="card" style="order:-1;">
+    <div class="card-header"><h3>🏨 Canon Alojamiento</h3></div>
+    <div class="card-body" style="padding:0;">
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:collapse;width:100%;min-width:900px;">
+          <thead><tr>
+            <th style="${th}">PERÍODO</th>
+            <th style="${th}">FACTURA</th>
+            <th style="${th}">NOTA CRÉDITO</th>
+            <th style="${th}">TRANSFERENCIA</th>
+            <th style="${th}">N° RECIBO ACA</th>
+            <th style="${th}">📄 Fact.</th>
+            <th style="${th}">📄 NC</th>
+            <th style="${th}">💸 Comp.</th>
+            <th style="${th}"></th>
+          </tr></thead>
+          <tbody>${canonTrs}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  // ── TELÉFONO — tabla histórica igual que US ───────────────────
+  const telRows=PD.hotel.telHistory.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
+  if(!telRows.find(r=>r.period===currentPeriod)){
+    telRows.push({period:currentPeriod,importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false});
+  }
+
+  const thTel=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+  const telTrs=telRows.map(row=>{
+    const isCurr=row.period===currentPeriod;
+    const locked=!!row.locked;
+    const ro=locked?'readonly':'';
+    const bgl=locked?'background:#F0FFF4;border-color:#C8E6C9;':'';
+    const rec=calcRec(row);
+    const pLabel=periodLabel(row.period);
+    const fileKey=`hotel.tel:${row.period}:fs`;
+    const fsBtn=row.facturaServicio
+      ?('<button style="'+BSTYLE_VER+'" data-view="'+fileKey+'" data-view-period="'+row.period+'">👁 Ver</button>'
+        +(!locked?'<label style="'+BSTYLE_SUB+';cursor:pointer;font-size:11px;">✏<input type="file" data-tel-upload="'+row.period+'" accept=".pdf,.jpg,.jpeg,.png" hidden></label>'
+        +'<button style="'+BSTYLE_DEL+'" data-tel-del="'+row.period+'">✕</button>':''))
+      :(!locked?'<label style="'+BSTYLE_SUB+';cursor:pointer;">📁 Subir<input type="file" data-tel-upload="'+row.period+'" accept=".pdf,.jpg,.jpeg,.png" hidden></label>':'—');
+
+    const accionBtn=locked
+      ?`<button class="btn-editar-fila" data-tel-edit="${row.period}">✏ Editar</button>`
+      :`<button class="btn-guardar-fila" data-tel-save="${row.period}">💾 Guardar</button>`;
+
+    return `<tr style="background:${isCurr?(locked?'#F0FFF4':'#EEF0FF'):locked?'#F8FFF8':'#FFFFF0'};${isCurr?'border-left:4px solid var(--p);':''}" data-tel-row="${row.period}" data-locked="${locked}">
+      <td style="padding:7px 8px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">
+        ${pLabel}${isCurr?` <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;">ACTUAL</span>`:''}
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" data-tel-f="importe" data-tel-p="${row.period}" value="${row.importe??''}" ${ro} style="${bgl}"></div>
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" data-tel-f="iva" data-tel-p="${row.period}" value="${row.iva??''}" ${ro} style="${bgl}"></div>
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" data-tel-f="percepciones" data-tel-p="${row.period}" value="${row.percepciones??''}" ${ro} style="${bgl}"></div>
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <div class="inp-money"><span>$</span><input class="ex-input inp-num" type="number" step="0.01" data-tel-f="intereses" data-tel-p="${row.period}" value="${row.intereses??''}" ${ro} style="${bgl}"></div>
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;text-align:right;font-weight:800;color:var(--g);" id="tel-rec-${row.period}">${rec!==null?'$ '+fmt(rec):'—'}</td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <input class="ex-input" type="text" placeholder="654-xxx" data-tel-f="nroFacturaACA" data-tel-p="${row.period}" value="${esc(row.nroFacturaACA||'')}" ${ro} style="${bgl}">
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;">
+        <input class="ex-input inp-date" type="date" data-tel-f="fecha" data-tel-p="${row.period}" value="${esc(row.fecha||'')}" ${ro} style="${bgl}">
+      </td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;text-align:center;">${fsBtn}</td>
+      <td style="padding:7px 8px;border:1px solid #D4C830;text-align:center;">${accionBtn}</td>
+    </tr>`;
+  }).join('');
+
+  const telHtml=`<div class="card">
+    <div class="card-header"><h3>📞 Teléfono Hotel</h3></div>
+    <div class="card-body" style="padding:0;">
+      <div style="overflow-x:auto;">
+        ${renderSearchBar('hotel-tel-search','Buscar por período, N° factura, fecha...',telRows.length)}
+        <table class="ex" style="min-width:850px;">
+          <colgroup><col style="width:9%"><col style="width:10%"><col style="width:9%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:9%"><col style="width:10%"><col style="width:14%"><col style="width:9%"></colgroup>
+          <thead><tr>
+            <th style="${thTel}">PERÍODO</th><th style="${thTel}">IMPORTE</th><th style="${thTel}">IVA</th>
+            <th style="${thTel}">PERCEPCIONES</th><th style="${thTel}">INTERESES</th><th style="${thTel}">RECUPERAR</th>
+            <th style="${thTel}">N° FAC. ACA</th><th style="${thTel}">FECHA</th><th style="${thTel}">FACTURA SERVICIO</th><th style="${thTel}"></th>
+          </tr></thead>
+          <tbody>${telTrs}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  return`<div class="cards">${canonHtml}${telHtml}</div>`;
+}
+
+function attachHotel(){
+  const el=document.getElementById('tab-content');
+
+  // ── CANON handlers ────────────────────────────────────────────
+  if(!PD.hotel.canonHistory) PD.hotel.canonHistory=[];
+
+  // Extraer N° y total de un PDF de ACA usando pdf.js
+  async function extractCanonPDF(file){
+    try{
+      // Usar pdf.js sin worker para evitar problemas de seguridad en archivos locales
+      const pdfjsLib=window['pdfjs-dist/build/pdf'];
+      if(!pdfjsLib){throw new Error('pdf.js no disponible');}
+      pdfjsLib.GlobalWorkerOptions.workerSrc='';
+      const ab=await file.arrayBuffer();
+      const loadingTask=pdfjsLib.getDocument({data:new Uint8Array(ab),disableWorker:true,useSystemFonts:true});
+      const pdf=await loadingTask.promise;
+      let text='';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const content=await page.getTextContent();
+        text+=content.items.map(it=>it.str).join(' ')+'\n';
+      }
+      // N° Factura: "FACTURA N° 0650 00022038"
+      const factMatch=text.match(/FACTURA\s+N[°o]?\s*(\d{4})\s+(\d{8})/i);
+      // N° NC: "N.CREDITO N° 0650 00007679"
+      const ncMatch=text.match(/N\.?CREDITO\s+N[°o]?\s*(\d{4})\s+(\d{8})/i);
+      // TOTAL: buscar el último "TOTAL 9.504.132,01"
+      const totalMatches=[...text.matchAll(/TOTAL\s+([\d.]+,\d{2})/gi)];
+      const lastTotal=totalMatches.length?totalMatches[totalMatches.length-1][1]:null;
+      const total=lastTotal?parseFloat(lastTotal.replace(/\./g,'').replace(',','.')):null;
+      return{nroFactura:factMatch?factMatch[1]+'-'+factMatch[2]:null,nroNC:ncMatch?ncMatch[1]+'-'+ncMatch[2]:null,total};
+    }catch(err){
+      console.warn('PDF.js falló:',err.message);
+      return{nroFactura:null,nroNC:null,total:null};
+    }
+  }
+
+  // Upload archivos del canon por fila
+  el.querySelectorAll('[data-canon-upload-row]').forEach(inp=>{
+    inp.addEventListener('change',async e=>{
+      const file=e.target.files[0]; if(!file) return;
+      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      const slotKey=inp.getAttribute('data-canon-upload-row');
+      const period=inp.getAttribute('data-canon-period');
+      showLoad(true);
+      try{
+        const du=await readDU(file);
+        await sSet('file:'+slotKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+        let row=PD.hotel.canonHistory.find(r=>r.period===period);
+        if(!row){row={period,factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};PD.hotel.canonHistory.push(row);}
+        const meta={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
+        if(slotKey.endsWith(':fact')){
+          row.facturaACA=meta;
+          const ex=await extractCanonPDF(file);
+          if(ex.nroFactura)row.factNro=ex.nroFactura;
+          if(ex.total)row.factTotal=ex.total;
+          toast('Factura cargada ✓');
+        } else if(slotKey.endsWith(':nc')){
+          row.notaCredito=meta;
+          const ex=await extractCanonPDF(file);
+          if(ex.nroNC)row.ncNro=ex.nroNC;
+          if(ex.total)row.ncTotal=ex.total;
+          toast('Nota de crédito cargada ✓');
+        } else if(slotKey.endsWith(':transf')){
+          row.transf=meta;
+          toast('Comprobante cargado ✓');
+        }
+        await saveP();
+      }catch(err){alert('Error: '+err.message);}
+      showLoad(false);renderTab();
+    });
+  });
+
+  // Recálculo live de transferencia al escribir montos
+  el.querySelectorAll('.canon-recalc').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const period=inp.getAttribute('data-canon-period');
+      const ft=parseFloat(el.querySelector('#canon-fact-total-'+period)?.value)||0;
+      const nc=parseFloat(el.querySelector('#canon-nc-total-'+period)?.value)||0;
+      const disp=document.getElementById('canon-transf-display-'+period);
+      if(disp) disp.textContent=ft>0?'$ '+fmtArg(ft-nc):'—';
+    });
+  });
+
+  // Guardar fila canon — lee campos manuales
+  el.querySelectorAll('[data-canon-save]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-canon-save');
+      let row=PD.hotel.canonHistory.find(r=>r.period===period);
+      if(!row){row={period,factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};PD.hotel.canonHistory.push(row);}
+      // Leer campos manuales
+      row.factNro  = el.querySelector('#canon-fact-nro-'+period)?.value.trim()||row.factNro||'';
+      row.factTotal= parseFloat(el.querySelector('#canon-fact-total-'+period)?.value)||row.factTotal||null;
+      row.ncNro    = el.querySelector('#canon-nc-nro-'+period)?.value.trim()||row.ncNro||'';
+      row.ncTotal  = parseFloat(el.querySelector('#canon-nc-total-'+period)?.value)||row.ncTotal||null;
+      row.nroRecibo= el.querySelector('#canon-nro-'+period)?.value.trim()||'';
+      row.locked=true;
+      showLoad(true);await saveP();showLoad(false);toast('Canon guardado ✓');renderTab();
+    });
+  });
+
+  // Editar fila canon
+  el.querySelectorAll('[data-canon-edit]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-canon-edit');
+      const row=PD.hotel.canonHistory.find(r=>r.period===period);
+      if(row){row.locked=false;await saveP();renderTab();}
+    });
+  });
+
+  // Eliminar fila completa del canon
+  el.querySelectorAll('[data-canon-row-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-canon-row-del');
+      if(!confirm('¿Eliminar todos los datos del canon de '+periodLabel(period)+'?'))return;
+      showLoad(true);
+      await sDel('file:canon:'+period+':fact',true);
+      await sDel('file:canon:'+period+':nc',true);
+      await sDel('file:canon:'+period+':transf',true);
+      PD.hotel.canonHistory=PD.hotel.canonHistory.filter(r=>r.period!==period);
+      await saveP();showLoad(false);toast('Eliminado');renderTab();
+    });
+  });
+
+  // Eliminar archivo canon
+  el.querySelectorAll('[data-canon-file-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Eliminar este archivo?'))return;
+      const slotKey=btn.getAttribute('data-canon-file-del');
+      const period=btn.getAttribute('data-canon-period');
+      showLoad(true);
+      await sDel('file:'+slotKey,true);
+      const row=PD.hotel.canonHistory.find(r=>r.period===period);
+      if(row){
+        if(slotKey.endsWith(':fact')){row.facturaACA=null;row.factNro='';row.factTotal=null;}
+        else if(slotKey.endsWith(':nc')){row.notaCredito=null;row.ncNro='';row.ncTotal=null;}
+        else if(slotKey.endsWith(':transf')){row.transf=null;}
+      }
+      await saveP();showLoad(false);renderTab();
+    });
+  });
+
+  // ── TELÉFONO handlers ─────────────────────────────────────────
+  // Live recalc
+  el.querySelectorAll('[data-tel-f]').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const period=inp.getAttribute('data-tel-p');
+      const field=inp.getAttribute('data-tel-f');
+      const row=PD.hotel.telHistory.find(r=>r.period===period);
+      if(row){
+        row[field]=inp.type==='number'?pN(inp.value):inp.value;
+        const rec=calcRec(row);
+        const td=document.getElementById('tel-rec-'+period);
+        if(td)td.textContent=rec!==null?'$ '+fmt(rec):'—';
+        saveD();
+      }
+    });
+  });
+
+  // Guardar fila teléfono
+  el.querySelectorAll('[data-tel-save]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-tel-save');
+      let row=PD.hotel.telHistory.find(r=>r.period===period);
+      if(!row){row={period};PD.hotel.telHistory.push(row);}
+      const tr=el.querySelector(`tr[data-tel-row="${period}"]`);
+      if(tr){
+        tr.querySelectorAll('[data-tel-f]').forEach(inp=>{
+          const f=inp.getAttribute('data-tel-f');
+          row[f]=inp.type==='number'?pN(inp.value):inp.value;
+        });
+      }
+      row.locked=true;
+      showLoad(true);await saveP();showLoad(false);toast('Guardado ✓');renderTab();
+    });
+  });
+
+  // Editar fila teléfono
+  el.querySelectorAll('[data-tel-edit]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-tel-edit');
+      const row=PD.hotel.telHistory.find(r=>r.period===period);
+      if(row){row.locked=false;await saveP();renderTab();}
+    });
+  });
+
+  // Upload factura teléfono
+  el.querySelectorAll('[data-tel-upload]').forEach(inp=>{
+    inp.addEventListener('change',async e=>{
+      const file=e.target.files[0];if(!file)return;
+      if(file.size>MAX_FILE){alert('Archivo muy grande');return;}
+      const period=inp.getAttribute('data-tel-upload');
+      const fileKey=`hotel.tel:${period}:fs`;
+      showLoad(true);
+      try{
+        const du=await readDU(file);
+        await sSet('file:'+fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+        let row=PD.hotel.telHistory.find(r=>r.period===period);
+        if(!row){row={period};PD.hotel.telHistory.push(row);}
+        row.facturaServicio={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
+        await saveP();toast('Factura subida ✓');
+      }catch(err){alert('Error: '+err.message);}
+      showLoad(false);renderTab();
+    });
+  });
+
+  // Eliminar factura teléfono
+  el.querySelectorAll('[data-tel-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Eliminar factura?'))return;
+      const period=btn.getAttribute('data-tel-del');
+      showLoad(true);
+      await sDel('file:hotel.tel:'+period+':fs',true);
+      const row=PD.hotel.telHistory.find(r=>r.period===period);
+      if(row)row.facturaServicio=null;
+      await saveP();showLoad(false);toast('Eliminada');renderTab();
+    });
+  });
+
+  // Ver factura teléfono
+  el.querySelectorAll('[data-view][data-view-period]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const sid=btn.getAttribute('data-view');
+      const period=btn.getAttribute('data-view-period');
+      showLoad(true);
+      const raw=await sGet('file:'+sid,true)||await sGet('file:'+period+':'+sid,true);
+      showLoad(false);
+      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      openFileViewer(JSON.parse(raw));
+    });
+  });
+
+  // Búsqueda en tabla teléfono
+  activateSearch('hotel-tel-search','table.ex tbody tr[data-tel-row]');
+
+  // Handlers genéricos de archivos (canon)
+  attachGenericFiles();
+}
+
+// ── VARIOS ────────────────────────────────────────────────────
+function renderVarios(){
+  let html=`<div class="cards">`;
+  VARIOS_ITEMS.forEach(it=>{
+    const rows=PD.varios[it.key];
+    const rhtml=rows.length?rows.map(r=>renderVRow(it.key,r)).join(''):'<p style="color:var(--m2);margin:0;font-size:13px;">Sin comprobantes.</p>';
+    html+=`<div class="card"><div class="card-header"><h3>${esc(it.label)}</h3><button class="btn-add" data-va="${it.key}">+ Agregar</button></div><div class="card-body varios-rows">${rhtml}</div></div>`;
+  });
+  return html+`</div>`;
+}
+function renderVRow(ik,row){
+  const sid=`varios.${ik}.${row.id}`;
+  return`<div class="vrow">
+    <select data-vt="${sid}">${DOC_TYPES.map(t=>`<option ${row.tipo===t?'selected':''}>${t}</option>`).join('')}</select>
+    <input type="number" step="0.01" placeholder="Monto" data-vm="${sid}" value="${row.monto!=null?row.monto:''}">
+    ${renderFileSlotG(sid,'Comprobante (PDF)',row.file,true,CP)}
+    <button class="btn-lnk d" data-vr="${sid}">Quitar</button>
+  </div>`;
+}
+
+// ── RESUMEN ───────────────────────────────────────────────────
+function renderResumen(){
+  const usCompleto=US_ITEMS.filter(it=>isUSDone(it.key)).length;
+  const fullOk=!!PD.full.ventas;
+  const fullM=fullOk?PD.full.ventas.recupero12:0;
+  const hotelOk=rowDone(PD.hotel.telefono);
+  const canonOk=!!PD.hotel.canonAlojamiento;
+  let vT=0,vC=0;
+  VARIOS_ITEMS.forEach(it=>{PD.varios[it.key].forEach(r=>{vC++;if(typeof r.monto==='number')vT+=(r.tipo==='Nota de Crédito'?-r.monto:r.monto);});});
+  const usRows=US_ITEMS.map(it=>{
+    const rows=PD.us[it.key];
+    const curr=rows.find(r=>r.period===CP);
+    const rec=curr?calcRec(curr):null;
+    return`<tr><td>${it.icon} ${it.label}</td><td>${rowDone(curr||{})?`<span style="color:var(--g);">✓</span> ${curr.nroFacturaACA} — ${curr.fecha}`:'<span style="color:var(--r);">Pendiente</span>'}</td><td style="text-align:right">${fmtM(rec)}</td></tr>`;
+  }).join('');
+  return`<div class="cards">
+    <div class="card"><div class="card-header"><h3>Estado del período ${CP}</h3></div><div class="card-body">
+      <table class="resumen-table"><tr><th>Ítem</th><th>Estado</th><th>Monto</th></tr>
+        ${usRows}
+        <tr><td>Full</td><td>${fullOk?'✓ Calculado':'Sin excel'}</td><td style="text-align:right">${fullOk?'$ '+fmt(fullM):'—'}</td></tr>
+        <tr><td>Hotel — Teléfono</td><td>${hotelOk?'✓':'Pendiente'}</td><td>—</td></tr>
+        <tr><td>Hotel — Canon</td><td>${canonOk?'✓ Cargado':'Pendiente'}</td><td>—</td></tr>
+        <tr><td>Varios (${vC})</td><td></td><td style="text-align:right">$ ${fmt(vT)}</td></tr>
+        <tr class="tr-total"><td colspan="2">Total (Full + Varios)</td><td style="text-align:right">$ ${fmt(fullM+vT)}</td></tr>
+      </table>
+    </div></div>
+    <div class="card"><div class="card-header"><h3>Historial de períodos</h3></div>
+    <div class="card-body" id="hist-body"><p style="color:var(--m2)">Cargando…</p></div></div>
+  </div>`;
+}
+async function loadHist(){
+  const body=document.getElementById('hist-body');
+  if(!body)return;
+  const rows=[];
+  for(const p of [...APS].sort((a,b)=>b.localeCompare(a))){
+    const raw=await sGet('data:'+p,true);
+    if(!raw)continue;
+    const d=mergeDef(JSON.parse(raw));
+    const usDone=US_ITEMS.filter(it=>d.us[it.key].some(r=>r.period===p&&rowDone(r))).length;
+    const fullM=(d.full&&d.full.ventas)?d.full.ventas.recupero12:null;
+    rows.push({p,usDone,fullM});
+  }
+  body.innerHTML=rows.length
+    ?`<table class="resumen-table"><tr><th>Período</th><th>US</th><th>Full</th></tr>`+
+      rows.map(r=>`<tr><td>${r.p}</td><td>${r.usDone}/${US_ITEMS.length}</td><td>${r.fullM!=null?'$ '+fmt(r.fullM):'—'}</td></tr>`).join('')+`</table>`
+    :'<p style="color:var(--m2)">Sin datos todavía.</p>';
+}
+
+// ── FILE SLOT GENÉRICO ────────────────────────────────────────
+function renderFileSlotG(slotId,label,fileMeta,editable,period){
+  let actions;
+  if(fileMeta){
+    actions=`<button class="btn-lnk" data-view="${slotId}" data-view-period="${period}">Ver</button>`;
+    if(editable)actions+=` <button class="btn-lnk d" data-delete="${slotId}">Eliminar</button>`;
+  }else{
+    actions=editable?`<label class="btn-ul" style="font-size:12px;padding:6px 12px;">Subir<input type="file" data-upload="${slotId}" hidden></label>`:`<span style="color:var(--m2);font-size:12px;">Sin archivo</span>`;
+  }
+  return`<div class="file-slot"><div class="fsl">${esc(label)}</div><div class="fsi">${fileMeta?esc(fileMeta.fileName):'<span style="color:var(--m2)">Sin subir</span>'}</div><div class="fsa">${actions}</div></div>`;
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function render(){
+  const app=document.getElementById('app');
+  if(!CU){app.innerHTML=renderLogin();attachLogin();return;}
+  app.innerHTML=renderShell();attachShell();renderTab();
+}
+function renderTab(){
+  const el=document.getElementById('tab-content');
+  if(AT==='us'){
+    if(usView){renderUSExcel(usView);}
+    else{renderUSGrid();}
+    return;
+  }
+  switch(AT){
+    case 'full':   el.innerHTML=renderFull();attachFull();break;
+    case 'hotel':  el.innerHTML=renderHotel();attachHotel();break;
+    case 'yer':    {
+      const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq;
+      loadYER().then(()=>{
+        // Restaurar flags de estado (no se persisten en storage)
+        if(_vl!=null) YER._viewingLiq=_vl;
+        if(_bl!=null) YER._backup=_bl;
+        if(_el!=null) YER._editingLiq=_el;
+        el.innerHTML=renderYER();
+        attachYER();
+      });break;
+    }
+    case 'varios': el.innerHTML=renderVarios();attachVarios();break;
+    case 'resumen':el.innerHTML=renderResumen();loadHist();break;
+  }
+  attachGenericFiles();
+}
+
+// ── GENERIC FILE HANDLERS ─────────────────────────────────────
+function attachGenericFiles(){
+  const el=document.getElementById('tab-content');
+  el.querySelectorAll('[data-upload]').forEach(inp=>{
+    inp.addEventListener('change',async e=>{
+      const sid=inp.getAttribute('data-upload');
+      const file=e.target.files[0];if(!file)return;
+      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      showLoad(true);
+      try{
+        const du=await readDU(file);
+        await sSet('file:'+CP+':'+sid,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+        setMeta(sid,{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()});
+        await saveP();toast('Archivo guardado ✓');
+      }catch(err){alert('Error: '+err.message);}
+      showLoad(false);renderTab();
+    });
+  });
+  el.querySelectorAll('[data-view]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const sid=btn.getAttribute('data-view');
+      const period=btn.getAttribute('data-view-period')||CP;
+      showLoad(true);
+      const raw=await sGet('file:'+period+':'+sid,true);
+      showLoad(false);
+      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      openFileViewer(JSON.parse(raw));
+    });
+  });
+  el.querySelectorAll('[data-delete]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Eliminar este archivo?'))return;
+      const sid=btn.getAttribute('data-delete');
+      showLoad(true);
+      await sDel('file:'+CP+':'+sid,true);
+      setMeta(sid,null);
+      await saveP();showLoad(false);toast('Eliminado');renderTab();
+    });
+  });
+}
+function setMeta(sid,meta){
+  if(sid==='full.ventas'){PD.full.ventas=meta;return;}
+  if(sid==='full.facturaACA'){PD.full.facturaACA=meta;return;}
+  if(sid==='full.comprobanteTransferencia'){PD.full.comprobanteTransferencia=meta;return;}
+  if(sid==='hotel.canon.factura'){if(!PD.hotel.canon)PD.hotel.canon={};PD.hotel.canon.facturaACA=meta;return;}
+  if(sid==='hotel.canon.nc'){if(!PD.hotel.canon)PD.hotel.canon={};PD.hotel.canon.notaCredito=meta;return;}
+  if(sid==='hotel.canon.transf'){if(!PD.hotel.canon)PD.hotel.canon={};PD.hotel.canon.transferencia=meta;return;}
+  if(sid==='hotel.canon'){PD.hotel.canonAlojamiento=meta;return;}
+  if(sid==='hotel.tel.fs'){PD.hotel.telefono.facturaServicio=meta;return;}
+  if(sid.startsWith('varios.')){
+    const p=sid.split('.');
+    const row=PD.varios[p[1]].find(r=>r.id===p[2]);
+    if(row)row.file=meta;
+  }
+}
+
+// ── FULL HANDLERS ─────────────────────────────────────────────
+function attachFull(){
+  const el=document.getElementById('tab-content');
+
+  // Subir excel (fila actual)
+  const xi=el.querySelector('#full-xl');
+  if(xi)xi.addEventListener('change',async e=>{
+    const file=e.target.files[0];if(!file)return;
+    if(file.size>MAX_FILE){alert('Archivo muy grande.');return;}
+    showLoad(true);
+    try{
+      const buf=await file.arrayBuffer();
+      const calc=parseVentas(buf);
+      if(!calc){showLoad(false);alert('No se encontraron filas del Sector 2 o 21.');return;}
+      const du=await readDU(file);
+      await sSet('file:'+CP+':full.ventas',JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+      PD.full.ventas={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),...calc};
+      await saveP();toast('Excel procesado ✓');
+    }catch(err){alert('Error: '+err.message);}
+    showLoad(false);renderTab();
+  });
+
+  // Ver excel inline
+  el.querySelectorAll('[data-view-excel]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const sid=btn.getAttribute('data-view-excel');
+      showLoad(true);
+      const raw=await sGet('file:'+CP+':'+sid,true);
+      showLoad(false);
+      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      openExcelViewer(JSON.parse(raw));
+    });
+  });
+
+  // Editar fila histórica del Full
+  el.querySelectorAll('.full-hist-edit').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-period');
+      if(!PD.fullHistory)PD.fullHistory=[];
+      const row=PD.fullHistory.find(r=>r.period===period);
+      if(row){row.locked=false; await saveP(); renderTab();}
+    });
+  });
+
+  // Intereses: recalcular en tiempo real
+  function recalcIntereses(){
+    const tasa=pN(el.querySelector('#full-tasa')?.value);
+    const diasAtr=pN(el.querySelector('#full-diasatr')?.value);
+    const [y,m]=prevMonth(CP).split('-').map(Number);
+    const diasMes=new Date(y,m,0).getDate();
+    const icEl=el.querySelector('#full-intcalc');
+    const totEl=document.getElementById('full-total');
+    const subtotal=PD.full.ventas?PD.full.ventas.recupero12:0;
+    if(tasa&&diasMes){
+      const tasaDiaria=tasa/diasMes;
+      const montoInt=(diasAtr&&PD.full.ventas)?subtotal*(tasaDiaria/100)*diasAtr:0;
+      if(icEl)icEl.value=montoInt.toFixed(2);
+      if(totEl)totEl.textContent='$ '+fmt(subtotal+montoInt);
+      PD.full.interesMensual=String(tasa);
+      if(diasAtr)PD.full.diasAtrasados=String(diasAtr);
+      saveD();
+    } else {
+      if(icEl)icEl.value='';
+      if(totEl)totEl.textContent='$ '+fmt(subtotal);
+    }
+  }
+  el.querySelector('#full-tasa')?.addEventListener('input',recalcIntereses);
+  el.querySelector('#full-diasatr')?.addEventListener('input',recalcIntereses);
+
+  // ── Guardar registro de cancelación ──
+  el.querySelector('#full-reg-save')?.addEventListener('click',async()=>{
+    PD.full.nroFacturaACA=el.querySelector('#full-nro-aca')?.value.trim()||'';
+    PD.full.fechaCancelacion=el.querySelector('#full-fecha-cancel')?.value||'';
+    PD.full.locked=true;
+    showLoad(true);await saveP();showLoad(false);
+    toast('Registro guardado ✓');renderTab();
+  });
+
+  // ── Editar registro ──
+  el.querySelector('#full-reg-edit')?.addEventListener('click',async()=>{
+    PD.full.locked=false;
+    await saveP();renderTab();
+  });
+
+  // ── Eliminar registro ──
+  el.querySelector('#full-reg-del')?.addEventListener('click',async()=>{
+    if(!confirm('¿Eliminar el registro de cancelación?\n(Se eliminarán también los archivos subidos)'))return;
+    showLoad(true);
+    await sDel('file:'+CP+':full.facturaACA',true);
+    await sDel('file:'+CP+':full.comprobanteTransferencia',true);
+    PD.full.nroFacturaACA='';PD.full.fechaCancelacion='';
+    PD.full.facturaACA=null;PD.full.comprobanteTransferencia=null;
+    PD.full.locked=false;
+    await saveP();showLoad(false);toast('Registro eliminado');renderTab();
+  });
+}
+
+// ── HOTEL HANDLERS ────────────────────────────────────────────
+// ── VARIOS HANDLERS ───────────────────────────────────────────
+function attachVarios(){
+  const el=document.getElementById('tab-content');
+  el.querySelectorAll('[data-va]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      PD.varios[btn.getAttribute('data-va')].push({id:Math.random().toString(36).slice(2,8),tipo:'Factura',monto:null,file:null});
+      await saveP();renderTab();
+    });
+  });
+  el.querySelectorAll('[data-vr]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Quitar este comprobante?'))return;
+      const p=btn.getAttribute('data-vr').split('.');
+      showLoad(true);
+      await sDel('file:'+CP+':'+btn.getAttribute('data-vr'),true);
+      PD.varios[p[1]]=PD.varios[p[1]].filter(r=>r.id!==p[2]);
+      await saveP();showLoad(false);renderTab();
+    });
+  });
+  el.querySelectorAll('[data-vt]').forEach(sel=>{
+    sel.addEventListener('change',e=>{
+      const p=sel.getAttribute('data-vt').split('.');
+      const row=PD.varios[p[1]].find(r=>r.id===p[2]);
+      if(row){row.tipo=e.target.value;saveD();}
+    });
+  });
+  el.querySelectorAll('[data-vm]').forEach(inp=>{
+    inp.addEventListener('input',e=>{
+      const p=inp.getAttribute('data-vm').split('.');
+      const row=PD.varios[p[1]].find(r=>r.id===p[2]);
+      if(row){row.monto=pN(e.target.value);saveD();}
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── YER ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+const YER_COMBUST = [
+  { key:'infinia_diesel', label:'INFINIA DIESEL', descs:['D-INFINIA'] },
+  { key:'super',          label:'SUPER',           descs:['N-SUPER'] },
+  { key:'infinia',        label:'INFINIA',          descs:['N-INFINIA'] },
+  { key:'diesel500',      label:'DIESEL 500',       descs:['D. DIESEL 500','D-DIESEL500','DIESEL 500'] }
+];
+
+let YER = {
+  pcts: { infinia_diesel:0, super:0, infinia:0, diesel500:0 },
+  pctLocked: true,
+  rows: [],
+  evRows: [],
+  ventasFile: null,
+  everilioFile: null
+};
+let yerSub = 'diferencias';
+
+async function loadYER(){
+  const raw = await sGet('yer:'+CP, true);
+  if(raw){ YER = JSON.parse(raw); }
+  else {
+    const praw = await sGet('yer:pcts', true);
+    if(praw) YER.pcts = JSON.parse(praw);
+  }
+  if(!YER.evRows) YER.evRows = [];
+  if(!YER.everilioFile) YER.everilioFile = null;
+  if(!YER.liqHistory) YER.liqHistory = [];
+}
+async function saveYER(){
+  await sSet('yer:'+CP, JSON.stringify(YER), true);
+  await sSet('yer:pcts', JSON.stringify(YER.pcts), true);
+}
+
+function parseArg(v){
+  if(v===null||v===undefined||v==='') return 0;
+  return parseFloat(String(v).replace(/\./g,'').replace(',','.')) || 0;
+}
+function fmtArg(n, dec=2){
+  return new Intl.NumberFormat('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(n);
+}
+function descToCombust(desc){
+  const d = String(desc).trim();
+  for(const c of YER_COMBUST){
+    if(c.descs.some(ds => d.toLowerCase().includes(ds.toLowerCase()))) return c.key;
+  }
+  return null;
+}
+function normRemito(r){
+  r = String(r).trim();
+  const parts = r.split('-');
+  // Comparar solo el número de remito (parte derecha), sin ceros iniciales
+  // El prefijo puede variar (3573 vs 03573 vs 3753) por errores de tipeo entre sistemas
+  if(parts.length === 2) return parts[1].replace(/^0+/,'');
+  return r;
+}
+function yerPeriod(){
+  const [y, m] = CP.split('-').map(Number);
+  const mesLiq = m === 1 ? 12 : m - 1;
+  const anyoLiq = m === 1 ? y - 1 : y;
+  const mesAnterior = mesLiq === 1 ? 12 : mesLiq - 1;
+  const anyoAnterior = mesLiq === 1 ? anyoLiq - 1 : anyoLiq;
+  const lastDayAnterior = new Date(anyoAnterior, mesAnterior, 0).getDate();
+  const lastDayLiq = new Date(anyoLiq, mesLiq, 0).getDate();
+  const desde = new Date(anyoAnterior, mesAnterior - 1, lastDayAnterior, 22, 0, 0);
+  const hasta  = new Date(anyoLiq, mesLiq - 1, lastDayLiq, 22, 0, 0);
+  return { desde, hasta, mesLiq, anyoLiq };
+}
+function yerMesLabel(){
+  const { mesLiq, anyoLiq } = yerPeriod();
+  const mnames=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  return mnames[mesLiq-1]+' '+anyoLiq;
+}
+
+function processVentasExcel(ab){
+  const wb = XLSX.read(ab, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  if(!data.length) return [];
+  const header = data[0].map(h => String(h).trim().toLowerCase());
+  const col = name => header.findIndex(h => h.includes(name));
+  const cFecha=col('fecha'), cDesc=col('descripcion'), cLitros=col('litros');
+  const cTotal=col('total'), cTipoV=col('tipo venta'), cRemito=col('remitonro');
+  const cMotivo=col('motivo');
+  const { desde, hasta } = yerPeriod();
+  const seen = new Set(), rows = [];
+  for(let i=1; i<data.length; i++){
+    const r = data[i];
+    const tipoVenta = String(r[cTipoV]||'').trim();
+    const motivo    = String(r[cMotivo]||'').trim();
+    // Incluir YER normales y YER_NoComb
+    const isYER      = tipoVenta === 'YER';
+    const isNoComb   = motivo === 'YER_NoComb';
+    if(!isYER && !isNoComb) continue;
+    const fechaStr = String(r[cFecha]||'').trim();
+    const fparts = fechaStr.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);
+    if(!fparts) continue;
+    const fDate = new Date(+fparts[3], +fparts[2]-1, +fparts[1], +fparts[4], +fparts[5]);
+    if(fDate < desde || fDate > hasta) continue;
+    const remito = String(r[cRemito]||'').trim();
+    if(remito && seen.has(remito)) continue;
+    if(remito) seen.add(remito);
+    const litros=parseArg(r[cLitros]), total=parseArg(r[cTotal]);
+    const desc=String(r[cDesc]||'').trim();
+    // NoComb: sin combustible ni comisión
+    const ck   = isNoComb ? null : descToCombust(desc);
+    const pct  = ck ? (YER.pcts[ck]||0) : 0;
+    const precio = litros > 0 ? total / litros : 0;
+    const comxLt = precio*(pct/100);
+    rows.push({
+      id:Math.random().toString(36).slice(2,9),
+      fecha:fechaStr, desc, litros, total,
+      remito, precio, combustKey:ck, pct, comxLt,
+      totalCom:litros*comxLt,
+      motivo: isNoComb ? 'YER_NoComb' : 'YER'
+    });
+  }
+  return rows;
+}
+
+function processEverilioExcel(ab){
+  const wb = XLSX.read(ab, {type:'array', cellDates:true});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+  if(!data.length) return [];
+  // Columnas fijas: A(0)=fecha, D(3)=remito, I(8)=importe (TOTAL PVP)
+  const { desde, hasta } = yerPeriod();
+  const rows = [];
+  for(let i=1; i<data.length; i++){
+    const r = data[i];
+    const remito = String(r[3]||'').trim();
+    if(!remito || remito.startsWith('00000-')) continue;
+    const fechaStr = String(r[0]||'').slice(0,16);
+    // Parsear fecha "dd/mm/yyyy hh:mm" para filtrar por período
+    const fparts = fechaStr.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);
+    if(fparts){
+      const fDate = new Date(+fparts[3], +fparts[2]-1, +fparts[1], +fparts[4], +fparts[5]);
+      if(fDate < desde || fDate > hasta) continue;
+    }
+    const importe = parseFloat(String(r[8]||'0')) || 0;
+    rows.push({
+      id: Math.random().toString(36).slice(2,9),
+      fecha: fechaStr,
+      remito,
+      remitoNorm: normRemito(remito),
+      pvp: importe,
+      totalYer: 0
+    });
+  }
+  return rows;
+}
+
+function calcConciliacion(){
+  const vRows=YER.rows||[], eRows=YER.evRows||[];
+  const eByRemito={};
+  eRows.forEach(r=>{ eByRemito[r.remitoNorm]=r; });
+  // Set de remitos de ventas (todos: YER + NoComb)
+  const vSet=new Set(vRows.map(r=>normRemito(r.remito)));
+  // Set específico de NoComb — sus remitos no son inconsistencias aunque no estén en Everilio como YER
+  const noCombSet=new Set(vRows.filter(r=>r.motivo==='YER_NoComb').map(r=>normRemito(r.remito)));
+  const eSet=new Set(eRows.map(r=>r.remitoNorm));
+  // Solo en ventas: excluir NoComb (no se espera que estén en Everilio)
+  const soloVentas=vRows.filter(r=>r.motivo!=='YER_NoComb'&&!eSet.has(normRemito(r.remito)));
+  // Solo en everilio: excluir los que matchean con NoComb de ventas
+  const soloEv=eRows.filter(r=>!vSet.has(r.remitoNorm)&&!noCombSet.has(r.remitoNorm));
+  const diffMonto=[];
+  vRows.forEach(r=>{
+    if(r.motivo==='YER_NoComb') return; // NoComb no participa en diff de monto
+    const rn=normRemito(r.remito), eRow=eByRemito[rn];
+    if(!eRow) return;
+    const diff=r.total-eRow.pvp;
+    if(Math.abs(diff)>20) diffMonto.push({vRow:r,eRow,diff});
+  });
+  // Contar solo YER normales para las estadísticas
+  const vYER=vRows.filter(r=>r.motivo!=='YER_NoComb');
+  return { soloVentas, soloEv, diffMonto,
+    vTotalPesos:vYER.reduce((a,r)=>a+r.total,0),
+    vTotalLitros:vYER.reduce((a,r)=>a+r.litros,0),
+    eTotalPesos:eRows.reduce((a,r)=>a+r.pvp,0),
+    vCount:vYER.length, eCount:eRows.length };
+}
+
+function recalcYERRows(){
+  YER.rows=YER.rows.map(r=>{
+    const pct=r.combustKey?(YER.pcts[r.combustKey]||0):0;
+    const comxLt=r.precio*(pct/100);
+    return {...r,pct,comxLt,totalCom:r.litros*comxLt};
+  });
+}
+
+function renderYERSubTabs(){
+  const subs=[
+    {key:'diferencias',label:'Diferencias'},
+    {key:'detalle-ventas',label:'Detalle — Ventas'},
+    {key:'detalle-everilio',label:'Detalle — Everilio'}
+  ];
+  return `<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+    ${subs.map(s=>`<button class="yer-sub-btn" data-sub="${s.key}" style="border:1px solid ${yerSub===s.key?'var(--p)':'var(--b)'};background:${yerSub===s.key?'var(--p)':'#fff'};color:${yerSub===s.key?'#fff':'var(--p)'};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;">${s.label}</button>`).join('')}
+  </div>`;
+}
+
+function renderYER(){
+  const locked=YER.pctLocked!==false;
+  const ro=locked?'readonly':'', bgl=locked?'background:#F0FFF4;border-color:#C8E6C9;':'';
+  const pctGrid=YER_COMBUST.map(c=>{
+    const val=YER.pcts[c.key]||0;
+    return `<div style="background:#fff;border:2px solid var(--b);border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">${c.label}</div><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><input type="number" step="0.001" data-pct="${c.key}" value="${val}" ${ro} style="width:80px;padding:8px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${bgl}"><span style="font-size:16px;font-weight:700;color:var(--m2);">%</span></div></div>`;
+  }).join('');
+  const pctBtns=locked
+    ?`<button id="yer-pct-edit" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Editar %</button>`
+    :`<button id="yer-pct-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Guardar %</button>`;
+
+  // ── Período ya liquidado: solo mostrar historial + porcentajes ──
+  const yaLiquidado=!!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
+  if(yaLiquidado){
+    const mesLabel=yerMesLabel();
+    const liqHistory=YER.liqHistory||[];
+    // Modo vista o edición desde historial
+    const modoVista=YER._viewingLiq!=null;
+    const modoEdicion=modoVista&&!!YER._editingLiq;
+    const bannerVista=modoVista?`
+      <div style="background:${modoEdicion?'#EEF0FF':'#FFF8E1'};border:1px solid ${modoEdicion?'var(--p)':'#FFD54F'};border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="font-size:13px;font-weight:700;color:${modoEdicion?'var(--pd)':'#7B5800'};">${modoEdicion?'✏ Editando':'👁 Viendo'} liquidación: <strong>${esc(liqHistory[YER._viewingLiq]?.mesLabel||'')}</strong></div>
+        <button id="yer-volver-liq" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">← Volver</button>
+      </div>`:'';
+    const thL=`padding:8px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+    const liqRows=liqHistory.map((liq,i)=>`<tr style="background:${i%2===0?'#FFFFF0':'#FFFDE0'}">
+      <td style="padding:8px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;">${esc(liq.mesLabel)}</td>
+      ${YER_COMBUST.map(c=>{const s=liq.detalle.find(d=>d.key===c.key)||{litros:0,importe:0};return `<td style="padding:8px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;"><div style="font-size:11px;color:var(--m2);">${fmtArg(Math.round(s.litros),0)} Lt</div><div style="font-weight:700;color:var(--g);">$ ${fmtArg(s.importe)}</div></td>`;}).join('')}
+      <td style="padding:8px 10px;border:1px solid #D4C830;font-size:14px;font-weight:900;color:var(--p);text-align:right;">$ ${fmtArg(liq.totalCom)}</td>
+      <td style="padding:8px 10px;border:1px solid #D4C830;text-align:center;">
+        <div style="display:flex;gap:5px;justify-content:center;">
+          <button data-liq-ver="${i}" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">👁 Ver</button>
+          <button data-liq-edit="${i}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏</button>
+          <button data-liq-del="${i}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+    // Modo VISTA — mostrar todo el detalle del período con banner de volver
+    if(modoVista){
+      const archivosVista=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Ventas Especiales</div>${YER.ventasFile?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.ventasFile.fileName)}</span>`:`<span style="font-size:12px;color:var(--m2);">Sin archivo</span>`}</div>
+        <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Everilio</div>${YER.everilioFile?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span>`:`<span style="font-size:12px;color:var(--m2);">Sin archivo</span>`}</div>
+      </div>`;
+      let subVista='';
+      if(yerSub==='diferencias') subVista=renderYERDiferencias();
+      else if(yerSub==='detalle-ventas') subVista=renderYERDetalleVentas();
+      else if(yerSub==='detalle-everilio') subVista=renderYERDetalleEverilio();
+      const btnLiqEdicion=modoEdicion&&(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0?`
+        <div style="margin-top:16px;text-align:right;">
+          <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
+            💰 RE-LIQUIDAR ${yerMesLabel().toUpperCase()}
+          </button>
+        </div>`:'';
+      return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${bannerVista}${archivosVista}${renderYERSubTabs()}${subVista}${btnLiqEdicion}
+      <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;"><div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;"><div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;"><button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button><button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button><button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button></div></div></div>`;
+    }
+
+    return `
+    <div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>
+        ${pctBtns}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div>
+    </div>
+
+    <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:var(--g);">✓ Período ${mesLabel} liquidado</div>
+        <div style="font-size:12px;color:var(--m2);margin-top:2px;">Para cargar el nuevo período subí los archivos del mes siguiente.</div>
+      </div>
+      <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
+    </div>
+
+    <div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;">
+      <div style="background:var(--p);color:#fff;padding:10px 14px;font-size:13px;font-weight:800;">📋 Liquidaciones guardadas</div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">
+        <thead><tr>
+          <th style="${thL}">MES</th>
+          ${YER_COMBUST.map(c=>`<th style="${thL}">${c.label}</th>`).join('')}
+          <th style="${thL}">TOTAL COMISIÓN</th>
+          <th style="${thL}"></th>
+        </tr></thead>
+        <tbody>${liqRows}</tbody>
+      </table></div>
+    </div>
+
+    <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
+      <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+        <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
+        <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
+          <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
+          <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
+          <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── Período sin liquidar: mostrar todo ─────────────────────────
+  const archivos=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">Ventas Especiales (Excel)</div>
+    ${YER.ventasFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.ventasFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-ventas">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-ventas-input" accept=".xlsx,.xls" hidden></label>`}</div>
+    <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">Everilio (Excel)</div>
+    ${YER.everilioFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-everilio">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-everilio-input" accept=".xlsx,.xls" hidden></label>`}</div>
+  </div>`;
+  let subContent='';
+  if(yerSub==='diferencias') subContent=renderYERDiferencias();
+  else if(yerSub==='detalle-ventas') subContent=renderYERDetalleVentas();
+  else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
+  return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${archivos}${renderYERSubTabs()}${subContent}
+  <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+      <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
+      <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
+        <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
+        <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
+        <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderYERDiferencias(){
+  const ambos=YER.ventasFile&&YER.everilioFile;
+  if(!ambos) return `<div class="empty-s"><p>Carga ambos archivos (Ventas Especiales y Everilio) para ver las diferencias entre bases.</p></div>`;
+  const {soloVentas,soloEv,diffMonto,vTotalPesos,vTotalLitros,eTotalPesos,vCount,eCount}=calcConciliacion();
+  const parseF=s=>{const m=(s||'').match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);return m?new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5]):0;};
+  soloVentas.sort((a,b)=>parseF(a.fecha)-parseF(b.fecha));
+  soloEv.sort((a,b)=>parseF(a.fecha)-parseF(b.fecha));
+  diffMonto.sort((a,b)=>parseF(a.vRow.fecha)-parseF(b.vRow.fecha));
+  const ok=vCount-soloVentas.length-diffMonto.length;
+
+  if(!YER.validaciones)YER.validaciones={};
+  const val=YER.validaciones;
+
+  // Celda de validación reutilizable
+  const valCell=(key)=>{
+    const v=val[key]||{};
+    const estado=v.estado||'';
+    const comentario=v.comentario||'';
+    const validado=estado==='ok'||estado==='error'||estado==='pendiente';
+    const badgeColor={'ok':'#1B6B35','error':'var(--r)','pendiente':'#7B5800'}[estado]||'transparent';
+    const badgeLabel={'ok':'✓ OK','error':'✗ Error','pendiente':'⏳ Pendiente'}[estado]||'';
+    return `<td style="padding:5px 8px;border:1px solid var(--b);min-width:220px;vertical-align:middle;">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          <select data-val-key="${esc(key)}" data-val-field="estado" style="padding:4px 6px;border:1px solid var(--b);border-radius:5px;font-size:12px;background:#fff;">
+            <option value="">— Sin validar</option>
+            <option value="ok" ${estado==='ok'?'selected':''}>✓ OK</option>
+            <option value="error" ${estado==='error'?'selected':''}>✗ Error</option>
+            <option value="pendiente" ${estado==='pendiente'?'selected':''}>⏳ Pendiente</option>
+          </select>
+          ${validado?`<span style="font-size:11px;font-weight:700;color:${badgeColor};">${badgeLabel}</span>`:''}
+        </div>
+        <input type="text" data-val-key="${esc(key)}" data-val-field="comentario"
+          placeholder="Comentario breve..." value="${esc(comentario)}"
+          style="padding:4px 7px;border:1px solid var(--b);border-radius:5px;font-size:12px;width:100%;background:${comentario?'#FFFDE0':'#fff'};">
+      </div>
+    </td>`;
+  };
+
+  const cards=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:20px;">
+    <div style="background:#F8F5FB;border:1px solid var(--b);border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Registros Ventas</div><div style="font-size:22px;font-weight:800;color:var(--pd);">${vCount}</div><div style="font-size:12px;color:var(--m2);margin-top:3px;">$ ${fmtArg(vTotalPesos)}</div><div style="font-size:12px;color:var(--m2);">${fmtArg(vTotalLitros,2)} Lt</div></div>
+    <div style="background:#F8F5FB;border:1px solid var(--b);border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Registros Everilio</div><div style="font-size:22px;font-weight:800;color:var(--pd);">${eCount}</div><div style="font-size:12px;color:var(--m2);margin-top:3px;">$ ${fmtArg(eTotalPesos)}</div></div>
+    <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:6px;">Solo en Ventas</div><div style="font-size:22px;font-weight:800;color:var(--r);">${soloVentas.length}</div><div style="font-size:12px;color:var(--r);margin-top:3px;">$ ${fmtArg(soloVentas.reduce((a,r)=>a+r.total,0))}</div></div>
+    <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#7B5800;text-transform:uppercase;margin-bottom:6px;">Solo en Everilio</div><div style="font-size:22px;font-weight:800;color:#7B5800;">${soloEv.length}</div><div style="font-size:12px;color:#7B5800;margin-top:3px;">$ ${fmtArg(soloEv.reduce((a,r)=>a+r.pvp,0))}</div></div>
+    <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:6px;">Dif. monto &gt;$20</div><div style="font-size:22px;font-weight:800;color:var(--r);">${diffMonto.length}</div></div>
+    <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:14px;"><div style="font-size:11px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:6px;">Sin diferencias</div><div style="font-size:22px;font-weight:800;color:var(--g);">${Math.max(0,ok)}</div></div>
+  </div>`;
+
+  const th=`padding:8px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
+
+  // Filas con validador
+  const svRows=soloVentas.map((r,i)=>{
+    const vKey='sv:'+normRemito(r.remito);
+    const v=val[vKey]||{};
+    const rowBg=v.estado==='ok'?'#F0FFF4':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFF8F8';
+    return `<tr style="background:${rowBg}">
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;color:var(--m2);">${esc(r.fecha.slice(0,16))}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;">${esc(r.desc)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;">${fmtArg(Math.round(r.litros),0)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;font-weight:700;color:var(--r);">$ ${fmtArg(r.total)}</td>
+      ${valCell(vKey)}
+    </tr>`;
+  }).join('');
+
+  const seRows=soloEv.map((r,i)=>{
+    const vKey='se:'+normRemito(r.remito);
+    const v=val[vKey]||{};
+    const rowBg=v.estado==='ok'?'#F0FFF4':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFFCF0';
+    return `<tr style="background:${rowBg}">
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;color:var(--m2);">${esc(r.fecha)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;font-weight:700;color:#7B5800;">$ ${fmtArg(r.pvp)}</td>
+      ${valCell(vKey)}
+    </tr>`;
+  }).join('');
+
+  const dmRows=diffMonto.map((d,i)=>{
+    const s=d.diff>0?'+':'';
+    const col=Math.abs(d.diff)>500?'var(--r)':'#B8860B';
+    const vKey='dm:'+normRemito(d.vRow.remito);
+    const v=val[vKey]||{};
+    const rowBg=v.estado==='ok'?'#F0FFF4':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFF8F8';
+    return `<tr style="background:${rowBg}">
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(d.vRow.remito)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;">${esc(d.vRow.desc)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;">${fmtArg(Math.round(d.vRow.litros),0)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;">$ ${fmtArg(d.vRow.total)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;">$ ${fmtArg(d.eRow.pvp)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;font-weight:800;color:${col};">${s}$ ${fmtArg(Math.abs(d.diff))}</td>
+      ${valCell(vKey)}
+    </tr>`;
+  }).join('');
+
+  const tbSV=soloVentas.length?`<div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:14px;">
+    <div style="background:var(--rb);padding:9px 14px;font-size:13px;font-weight:800;color:var(--r);">En Ventas sin respaldo en Everilio — <span id="sv-count-lbl">${soloVentas.length}</span> de ${soloVentas.length} registros</div>
+    ${renderSearchBar('sv-search','Buscar remito, fecha, producto...',soloVentas.length)}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
+      <th style="${th}">Remito</th><th style="${th}">Fecha</th><th style="${th}">Producto</th><th style="${th}">Litros</th><th style="${th}">Total $</th>
+      <th style="${th}">Validación</th>
+    </tr></thead><tbody class="sv-tbody">${svRows}</tbody></table></div></div>`
+    :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Todos los remitos de Ventas tienen respaldo en Everilio</div>`;
+
+  const tbSE=soloEv.length?`<div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:14px;">
+    <div style="background:#FFF8E1;padding:9px 14px;font-size:13px;font-weight:800;color:#7B5800;">En Everilio sin respaldo en Ventas — <span id="se-count-lbl">${soloEv.length}</span> de ${soloEv.length} registros</div>
+    ${renderSearchBar('se-search','Buscar remito, fecha...',soloEv.length)}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
+      <th style="${th}">Remito</th><th style="${th}">Fecha</th><th style="${th}">Total PVP $</th>
+      <th style="${th}">Validación</th>
+    </tr></thead><tbody class="se-tbody">${seRows}</tbody></table></div></div>`
+    :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Todos los remitos de Everilio tienen respaldo en Ventas</div>`;
+
+  const tbDM=diffMonto.length?`<div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:14px;">
+    <div style="background:var(--rb);padding:9px 14px;font-size:13px;font-weight:800;color:var(--r);">Diferencias de monto significativas (&gt;$20) — <span id="dm-count-lbl">${diffMonto.length}</span> de ${diffMonto.length} casos</div>
+    ${renderSearchBar('dm-search','Buscar remito, producto...',diffMonto.length)}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
+      <th style="${th}">Remito</th><th style="${th}">Producto</th><th style="${th}">Litros</th><th style="${th}">$ Ventas</th><th style="${th}">$ Everilio</th><th style="${th}">Diferencia</th>
+      <th style="${th}">Validación</th>
+    </tr></thead><tbody class="dm-tbody">${dmRows}</tbody></table></div></div>`
+    :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Sin diferencias de monto significativas</div>`;
+
+  // ── HISTORIAL DE LIQUIDACIONES ────────────────────────────────
+  const liqHistory = YER.liqHistory||[];
+  const thL=`padding:8px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+
+  const liqRows=liqHistory.map((liq,i)=>{
+    return `<tr style="background:${i%2===0?'#FFFFF0':'#FFFDE0'}">
+      <td style="padding:8px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;">${esc(liq.mesLabel)}</td>
+      ${YER_COMBUST.map(c=>{
+        const s=liq.detalle.find(d=>d.key===c.key)||{litros:0,importe:0};
+        return `<td style="padding:8px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--m2);">${fmtArg(Math.round(s.litros),0)} Lt</div>
+          <div style="font-weight:700;color:var(--g);">$ ${fmtArg(s.importe)}</div>
+        </td>`;
+      }).join('')}
+      <td style="padding:8px 10px;border:1px solid #D4C830;font-size:14px;font-weight:900;color:var(--p);text-align:right;">$ ${fmtArg(liq.totalCom)}</td>
+      <td style="padding:8px 10px;border:1px solid #D4C830;text-align:center;">
+        <div style="display:flex;gap:5px;justify-content:center;">
+          <button data-liq-ver="${i}" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">👁 Ver</button>
+          <button data-liq-edit="${i}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏</button>
+          <button data-liq-del="${i}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const liqHistorialHtml = liqHistory.length ? `
+    <div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-top:14px;">
+      <div style="background:var(--p);color:#fff;padding:10px 14px;font-size:13px;font-weight:800;">📋 Liquidaciones guardadas</div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">
+        <thead><tr>
+          <th style="${thL}">MES</th>
+          ${YER_COMBUST.map(c=>`<th style="${thL}">${c.label}</th>`).join('')}
+          <th style="${thL}">TOTAL COMISIÓN</th>
+          <th style="${thL}"></th>
+        </tr></thead>
+        <tbody>${liqRows}</tbody>
+      </table></div>
+    </div>` : '';
+
+  // Botón LIQUIDAR (solo si hay ventas cargadas)
+  const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
+  const btnLiquidar=canLiquidar?`
+    <div style="margin-top:16px;text-align:right;">
+      <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
+        💰 LIQUIDAR ${yerMesLabel().toUpperCase()}
+      </button>
+    </div>` : '';
+
+  return cards+tbSV+tbSE+tbDM+liqHistorialHtml+btnLiquidar;
+}
+
+function renderYERDetalleVentas(){
+  const rows=[...(YER.rows||[])], mesLabel=yerMesLabel();
+  if(!rows.length) return `<div class="empty-s"><p>Subi el archivo de Ventas Especiales para ver el detalle.</p></div>`;
+  // Ordenar por fecha ascendente
+  const parseF=s=>{const m=s.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);return m?new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5]):0;};
+  rows.sort((a,b)=>parseF(a.fecha)-parseF(b.fecha));
+  const trs=rows.map((r,i)=>{
+    const isNoComb = r.motivo==='YER_NoComb';
+    const rowBg = isNoComb ? (i%2===0?'#F0F4FF':'#E8EEFF') : (i%2===0?'#FFFFF0':'#FFFDE0');
+    const motivoBadge = isNoComb
+      ? `<span style="background:#5C6BC0;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">NO COMB</span>`
+      : `<span style="background:#2E7D32;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">YER</span>`;
+    return `<tr class="yer-v-row" style="background:${rowBg}">
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;white-space:nowrap;">${esc(r.fecha)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;">${esc(r.desc)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">${fmtArg(Math.round(r.litros),0)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">$ ${fmtArg(r.total)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:center;">${motivoBadge}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">${isNoComb?'—':'$ '+fmtArg(r.precio)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:center;">${isNoComb?'—':r.pct+'%'}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">${isNoComb?'—':'$ '+fmtArg(r.comxLt)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;font-weight:700;color:${isNoComb?'var(--m2)':'var(--g)'};">${isNoComb?'—':'$ '+fmtArg(r.totalCom)}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;text-align:center;"><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;" data-yer-del="${r.id}">X</button></td>
+    </tr>`;
+  }).join('');
+  return `<div style="border-radius:10px;box-shadow:0 2px 12px rgba(36,19,56,.1);overflow:hidden;">
+    <div style="background:var(--p);color:#fff;font-weight:800;font-size:14px;text-align:center;padding:11px 16px;">DETALLE VENTAS YER — ${mesLabel} (<span id="yer-v-search-count">${rows.length} registros</span>)</div>
+    ${renderSearchBar('yer-v-search','Buscar por fecha, producto, remito...',rows.length)}
+    <div style="overflow-x:auto;">
+      <table id="yer-v-table" style="border-collapse:collapse;width:100%;min-width:900px;">
+        <thead><tr style="background:var(--y);color:var(--pd);">
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">FECHA</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">PRODUCTO</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">REMITO</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">LITROS</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">TOTAL $</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">MOTIVO</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">PRECIO OP.</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">%</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">COM/LT</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">TOTAL COM.</th>
+          <th style="padding:8px;border:1px solid #C9A800;"></th>
+        </tr></thead>
+        <tbody>${trs}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderYERDetalleEverilio(){
+  const rows=[...(YER.evRows||[])], mesLabel=yerMesLabel();
+  if(!rows.length) return `<div class="empty-s"><p>Subi el archivo de Everilio para ver el detalle.</p></div>`;
+  rows.sort((a,b)=>{
+    const parse=s=>{const m=s.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);return m?new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5]):0;};
+    return parse(a.fecha)-parse(b.fecha);
+  });
+  const totalPVP=rows.reduce((a,r)=>a+r.pvp,0);
+  const trs=rows.map((r,i)=>`<tr class="yer-e-row" style="background:${i%2===0?'#FFFFF0':'#FFFDE0'}">
+    <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;white-space:nowrap;">${esc(r.fecha)}</td>
+    <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+    <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;font-weight:700;">$ ${fmtArg(r.pvp)}</td>
+    <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;color:var(--m2);">${r.totalYer>0?'$ '+fmtArg(r.totalYer):'--'}</td>
+  </tr>`).join('');
+  return `<div style="border-radius:10px;box-shadow:0 2px 12px rgba(36,19,56,.1);overflow:hidden;">
+    <div style="background:var(--p);color:#fff;font-weight:800;font-size:14px;text-align:center;padding:11px 16px;">DETALLE EVERILIO — ${mesLabel} — Total PVP: $ ${fmtArg(totalPVP)} (<span id="yer-e-search-count">${rows.length} registros</span>)</div>
+    ${renderSearchBar('yer-e-search','Buscar por fecha, remito...',rows.length)}
+    <div style="overflow-x:auto;">
+      <table id="yer-e-table" style="border-collapse:collapse;width:100%;min-width:600px;">
+        <thead><tr style="background:var(--y);color:var(--pd);">
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">FECHA</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">REMITO</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">TOTAL PVP $</th>
+          <th style="padding:8px;border:1px solid #C9A800;font-size:11px;text-transform:uppercase;">TOTAL YER $</th>
+        </tr></thead>
+        <tbody>${trs}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function attachYER(){
+  const el=document.getElementById('tab-content');
+  el.querySelectorAll('.yer-sub-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{ yerSub=btn.getAttribute('data-sub'); renderTab(); });
+  });
+
+  // Validador de diferencias — guardar al cambiar
+  if(yerSub==='diferencias'){
+    activateSearch('sv-search','.sv-tbody tr','sv-count-lbl');
+    activateSearch('se-search','.se-tbody tr','se-count-lbl');
+    activateSearch('dm-search','.dm-tbody tr','dm-count-lbl');
+
+    if(!YER.validaciones)YER.validaciones={};
+
+    const saveVal=async()=>{ await saveYER(); toast('Validación guardada ✓'); };
+
+    // Select de estado
+    el.querySelectorAll('select[data-val-key][data-val-field=estado]').forEach(sel=>{
+      sel.addEventListener('change',async()=>{
+        const key=sel.getAttribute('data-val-key');
+        if(!YER.validaciones[key])YER.validaciones[key]={};
+        YER.validaciones[key].estado=sel.value;
+        // Cambiar color de fila según estado
+        const tr=sel.closest('tr');
+        if(tr){
+          const bg={'ok':'#F0FFF4','error':'#FFF0F0','pendiente':'#FFFCF0','':''}[sel.value]||'';
+          if(bg)tr.style.background=bg;
+        }
+        await saveVal();
+      });
+    });
+
+    // Input de comentario — guardar con debounce
+    let valTimer=null;
+    el.querySelectorAll('input[data-val-key][data-val-field=comentario]').forEach(inp=>{
+      inp.addEventListener('input',()=>{
+        const key=inp.getAttribute('data-val-key');
+        if(!YER.validaciones[key])YER.validaciones[key]={};
+        YER.validaciones[key].comentario=inp.value.trim();
+        inp.style.background=inp.value.trim()?'#FFFDE0':'#fff';
+        clearTimeout(valTimer);
+        valTimer=setTimeout(()=>saveYER(),800);
+      });
+    });
+  }
+
+  // Filtro búsqueda — Ventas
+  if(yerSub==='detalle-ventas') activateSearch('yer-v-search','.yer-v-row','yer-v-count');
+
+  // Filtro búsqueda — Everilio
+  if(yerSub==='detalle-everilio') activateSearch('yer-e-search','.yer-e-row','yer-e-count');
+  el.querySelector('#yer-pct-edit')?.addEventListener('click',()=>{ YER.pctLocked=false; saveYER(); renderTab(); });
+  el.querySelector('#yer-pct-save')?.addEventListener('click',async()=>{
+    el.querySelectorAll('[data-pct]').forEach(inp=>{ YER.pcts[inp.getAttribute('data-pct')]=parseFloat(inp.value)||0; });
+    YER.pctLocked=true; recalcYERRows();
+    showLoad(true); await saveYER(); showLoad(false);
+    toast('Porcentajes guardados'); renderTab();
+  });
+  el.querySelector('#yer-ventas-input')?.addEventListener('change',async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    showLoad(true);
+    try{ const ab=await file.arrayBuffer(); YER.rows=processVentasExcel(ab); YER.ventasFile={fileName:file.name,size:file.size}; await saveYER(); toast(YER.rows.length+' operaciones YER cargadas'); }
+    catch(err){alert('Error: '+err.message);}
+    showLoad(false); renderTab();
+  });
+  el.querySelector('#yer-del-ventas')?.addEventListener('click',async()=>{
+    if(!confirm('Quitar archivo y borrar operaciones?')) return;
+    YER.rows=[]; YER.ventasFile=null; showLoad(true); await saveYER(); showLoad(false); renderTab();
+  });
+  el.querySelector('#yer-everilio-input')?.addEventListener('change',async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    showLoad(true);
+    try{ const ab=await file.arrayBuffer(); YER.evRows=processEverilioExcel(ab); YER.everilioFile={fileName:file.name,size:file.size}; await saveYER(); toast(YER.evRows.length+' registros Everilio cargados'); }
+    catch(err){alert('Error: '+err.message);}
+    showLoad(false); renderTab();
+  });
+  el.querySelector('#yer-del-everilio')?.addEventListener('click',async()=>{
+    if(!confirm('Quitar archivo Everilio?')) return;
+    YER.evRows=[]; YER.everilioFile=null; showLoad(true); await saveYER(); showLoad(false); renderTab();
+  });
+  el.querySelectorAll('[data-yer-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      YER.rows=YER.rows.filter(r=>r.id!==btn.getAttribute('data-yer-del'));
+      showLoad(true); await saveYER(); showLoad(false); renderTab();
+    });
+  });
+  // Helper: armar contenido del modal de liquidación
+  function buildLiqContent(liq){
+    const combRows=YER_COMBUST.map(c=>{
+      const s=liq.detalle.find(d=>d.key===c.key)||{litros:0,importe:0,precio:0};
+      return `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--b);font-weight:700;">${c.label}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--b);text-align:right;">${fmtArg(Math.round(s.litros),0)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--b);text-align:right;font-weight:700;">$ ${fmtArg(s.importe)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--b);text-align:right;">$ ${fmtArg(s.precio)}</td>
+      </tr>`;
+    }).join('');
+    return `<div id="yer-liq-printable">
+      <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
+        <div style="font-size:13px;opacity:.75;text-transform:uppercase;">ACA — US Cipolletti</div>
+        <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACION YER POR PORCENTAJE</div>
+        <div style="font-size:15px;opacity:.85;">MES: ${liq.mesLabel.toUpperCase()}</div>
+        ${liq.fecha?`<div style="font-size:11px;opacity:.6;margin-top:4px;">Generada: ${liq.fecha}</div>`:''}
+      </div>
+      <div style="padding:20px 24px;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <thead><tr style="background:#F8F5FB;">
+            <th style="padding:10px 14px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--m2);">COMBUSTIBLE</th>
+            <th style="padding:10px 14px;text-align:right;font-size:12px;text-transform:uppercase;color:var(--m2);">LITROS</th>
+            <th style="padding:10px 14px;text-align:right;font-size:12px;text-transform:uppercase;color:var(--m2);">IMPORTE</th>
+            <th style="padding:10px 14px;text-align:right;font-size:12px;text-transform:uppercase;color:var(--m2);">PRECIO</th>
+          </tr></thead>
+          <tbody>${combRows}</tbody>
+        </table>
+        <div style="background:var(--p);color:#fff;border-radius:8px;padding:14px 18px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;">
+          <div><div style="font-size:12px;opacity:.75;">TOTAL LITROS</div><div style="font-size:18px;font-weight:800;">${fmtArg(Math.round(liq.totalLt),0)}</div></div>
+          <div style="text-align:right;"><div style="font-size:12px;opacity:.75;">TOTAL COMISIÓN</div><div style="font-size:22px;font-weight:900;color:var(--y);">$ ${fmtArg(liq.totalCom)}</div></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function openLiqModal(liqData, canSave){
+    document.getElementById('yer-liq-content').innerHTML=buildLiqContent(liqData);
+    const modal=document.getElementById('yer-modal-liq');
+    const btnSave=document.getElementById('yer-liq-save');
+    btnSave.style.display=canSave?'':'none';
+    modal.style.display='flex';
+
+    document.getElementById('yer-liq-close').onclick=()=>{ modal.style.display='none'; };
+    document.getElementById('yer-liq-print').onclick=()=>{
+      const w=window.open('','_blank');
+      w.document.write(`<html><head><title>Liquidacion YER ${liqData.mesLabel}</title><style>body{font-family:Arial,sans-serif;margin:0;}table{width:100%;border-collapse:collapse;}td,th{padding:8px 12px;border-bottom:1px solid #eee;}</style></head><body>${document.getElementById('yer-liq-printable').innerHTML}</body></html>`);
+      w.document.close(); w.focus(); setTimeout(()=>{w.print();w.close();},400);
+    };
+    if(canSave){
+      btnSave.onclick=async()=>{
+        if(!YER.liqHistory) YER.liqHistory=[];
+        YER.liqHistory=YER.liqHistory.filter(l=>l.mesLabel!==liqData.mesLabel);
+        // Guardar snapshot completo del período para Ver/Editar
+        liqData.snapshot={
+          rows: JSON.parse(JSON.stringify(YER.rows||[])),
+          evRows: JSON.parse(JSON.stringify(YER.evRows||[])),
+          ventasFile: YER.ventasFile||null,
+          everilioFile: YER.everilioFile||null,
+          validaciones: JSON.parse(JSON.stringify(YER.validaciones||{}))
+        };
+        YER.liqHistory.push(liqData);
+        // Resetear para el próximo mes
+        YER.rows=[]; YER.evRows=[];
+        YER.ventasFile=null; YER.everilioFile=null;
+        YER.validaciones={};
+        modal.style.display='none';
+        showLoad(true); await saveYER(); showLoad(false);
+        toast('Liquidación guardada ✓'); renderTab();
+      };
+    }
+  }
+
+  // LIQUIDAR — calcula y abre modal con botón Guardar
+  el.querySelector('#yer-liquidar')?.addEventListener('click',()=>{
+    const mesLabel=yerMesLabel();
+    const summary={};
+    YER_COMBUST.forEach(c=>{summary[c.key]={key:c.key,label:c.label,litros:0,importe:0,precio:0};});
+    YER.rows.filter(r=>r.motivo!=='YER_NoComb').forEach(r=>{
+      if(r.combustKey&&summary[r.combustKey]){
+        summary[r.combustKey].litros+=r.litros;
+        summary[r.combustKey].importe+=r.totalCom;
+      }
+    });
+    const detalle=YER_COMBUST.map(c=>{const s=summary[c.key];return {...s,precio:s.litros>0?s.importe/s.litros:0};});
+    const totalLt=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.litros,0);
+    const totalCom=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.totalCom,0);
+    const liq={mesLabel, period:prevMonth(CP), detalle, totalLt, totalCom, fecha:new Date().toLocaleDateString('es-AR')};
+    openLiqModal(liq, true); // canSave=true
+  });
+
+  // Nuevo período — resetea archivos y datos del período actual
+  el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
+    if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
+    YER.rows=[]; YER.evRows=[];
+    YER.ventasFile=null; YER.everilioFile=null;
+    YER.validaciones={};
+    showLoad(true); await saveYER(); showLoad(false);
+    yerSub='diferencias'; renderTab();
+  });
+
+  // Ver liquidación — restaura snapshot y muestra toda la pantalla de trabajo
+  el.querySelectorAll('[data-liq-ver]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const i=parseInt(btn.getAttribute('data-liq-ver'));
+      const liq=YER.liqHistory?.[i]; if(!liq) return;
+      // Guardar estado actual
+      YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
+      // Restaurar snapshot si existe, sino dejar los datos actuales
+      if(liq.snapshot){
+        YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
+        YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
+        YER.ventasFile=liq.snapshot.ventasFile||null;
+        YER.everilioFile=liq.snapshot.everilioFile||null;
+        YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
+      }
+      YER._viewingLiq=i;
+      YER._editingLiq=null;
+      yerSub='diferencias';
+      // Render directo sin loadYER para preservar los flags
+      document.getElementById('tab-content').innerHTML=renderYER();
+      attachYER();
+    });
+  });
+
+  // Botón volver desde modo vista
+  el.querySelector('#yer-volver-liq')?.addEventListener('click',()=>{
+    if(YER._backup){
+      YER.rows=YER._backup.rows;
+      YER.evRows=YER._backup.evRows;
+      YER.ventasFile=YER._backup.ventasFile;
+      YER.everilioFile=YER._backup.everilioFile;
+      YER.validaciones=YER._backup.validaciones;
+    }
+    YER._backup=null; YER._viewingLiq=null; YER._editingLiq=null;
+    document.getElementById('tab-content').innerHTML=renderYER();
+    attachYER();
+  });
+
+  // Editar liquidación — restaura snapshot y muestra pantalla completa para re-liquidar
+  el.querySelectorAll('[data-liq-edit]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const i=parseInt(btn.getAttribute('data-liq-edit'));
+      const liqOld=YER.liqHistory?.[i]; if(!liqOld) return;
+      YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
+      if(liqOld.snapshot){
+        YER.rows=JSON.parse(JSON.stringify(liqOld.snapshot.rows||[]));
+        YER.evRows=JSON.parse(JSON.stringify(liqOld.snapshot.evRows||[]));
+        YER.ventasFile=liqOld.snapshot.ventasFile||null;
+        YER.everilioFile=liqOld.snapshot.everilioFile||null;
+        YER.validaciones=JSON.parse(JSON.stringify(liqOld.snapshot.validaciones||{}));
+      }
+      YER._viewingLiq=i;
+      YER._editingLiq=true;
+      yerSub='diferencias';
+      document.getElementById('tab-content').innerHTML=renderYER();
+      attachYER();
+    });
+  });
+
+  // Eliminar liquidación
+  el.querySelectorAll('[data-liq-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const i=parseInt(btn.getAttribute('data-liq-del'));
+      const liq=YER.liqHistory?.[i];
+      if(!liq||!confirm('¿Eliminar la liquidación de '+liq.mesLabel+'?')) return;
+      YER.liqHistory.splice(i,1);
+      showLoad(true); await saveYER(); showLoad(false); toast('Eliminada'); renderTab();
+    });
+  });
+}
+
+
+// ── INICIO ────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
