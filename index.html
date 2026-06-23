@@ -385,13 +385,33 @@ function parseVentas(ab){
   const wb=XLSX.read(ab,{type:'array'});
   const ws=wb.Sheets[wb.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+
+  // Detectar columnas buscando la fila de encabezados
+  let colSec=1, colDet=3, colTotal=11;
+  for(let i=0;i<Math.min(10,rows.length);i++){
+    const r=rows[i];
+    for(let j=0;j<r.length;j++){
+      const v=String(r[j]||'').toLowerCase().trim();
+      if(v==='sec'||v==='sector') colSec=j;
+      if(v.includes('detalle')) colDet=j;
+      if(v==='tv8555'||v.includes('total')||v==='importe') colTotal=j;
+    }
+  }
+
   let tot=0,cig=0,found=false;
   for(const row of rows){
-    const sec=row[1],det=row[3],total=row[11];
+    const sec=row[colSec];
+    const det=row[colDet];
+    const total=row[colTotal];
     // Sectores 2 y 21 = Full
-    if((sec===2||sec===21)&&typeof total==='number'){
-      tot+=total;found=true;
-      if(typeof det==='string'&&det.trim().toLowerCase()==='cigarrillos')cig+=total;
+    const secNum=typeof sec==='number'?sec:parseFloat(sec);
+    if((secNum===2||secNum===21)&&typeof total==='number'&&total>0){
+      tot+=total; found=true;
+      // Cigarrillos y tabaco
+      if(typeof det==='string'){
+        const d=det.trim().toLowerCase();
+        if(d.includes('cigarril')||d.includes('tabaco')||d.includes('tobacco')) cig+=total;
+      }
     }
   }
   if(!found)return null;
@@ -1261,7 +1281,38 @@ function renderFull(){
         </div>`
         :`<div style="text-align:center;padding:16px;border:2px dashed var(--b);border-radius:8px;margin-bottom:12px;">
           <p style="color:var(--m2);margin-bottom:10px;font-size:14px;">Subí el Excel de ventas del mes para calcular el recupero</p>
-          <label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">📊 Subir Excel<input type="file" id="full-xl" accept=".xlsx,.xls" hidden></label>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">📊 Subir Excel<input type="file" id="full-xl" accept=".xlsx,.xls" hidden></label>
+            <button id="full-manual-btn" style="background:#fff;color:var(--p);border:2px solid var(--p);border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">✏ Carga manual</button>
+          </div>
+        </div>
+        <div id="full-manual-form" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:800;color:#7B5800;text-transform:uppercase;margin-bottom:10px;">Carga manual de ventas (contingencia)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Total Ventas S.2 + S.21 $</div>
+              <input id="full-man-total" type="number" step="0.01" placeholder="0,00"
+                style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:6px;font-size:14px;font-weight:700;">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Cigarrillos + Tabaco $</div>
+              <input id="full-man-cig" type="number" step="0.01" placeholder="0,00"
+                style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:6px;font-size:14px;">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;">
+              <div style="font-size:10px;color:var(--m2);font-weight:700;text-transform:uppercase;">Base</div>
+              <div id="full-man-base" style="font-size:15px;font-weight:800;color:var(--pd);">—</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;">
+              <div style="font-size:10px;color:var(--m2);font-weight:700;text-transform:uppercase;">Recupero 12%</div>
+              <div id="full-man-rec" style="font-size:15px;font-weight:800;color:var(--g);">—</div>
+            </div>
+            <div style="text-align:center;display:flex;align-items:center;justify-content:center;">
+              <button id="full-man-confirm" style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">✓ Confirmar</button>
+            </div>
+          </div>
         </div>`}
         ${renderFullRegistro(f)}
       </td>
@@ -2007,7 +2058,34 @@ function attachFull(){
     });
   });
 
-  // Intereses: recalcular en tiempo real
+  // Carga manual (contingencia)
+  el.querySelector('#full-manual-btn')?.addEventListener('click',()=>{
+    const form=el.querySelector('#full-manual-form');
+    if(form) form.style.display=form.style.display==='none'?'block':'none';
+  });
+  const manTotal=el.querySelector('#full-man-total');
+  const manCig=el.querySelector('#full-man-cig');
+  const recalcManual=()=>{
+    const tot=pN(manTotal?.value)||0;
+    const cig=pN(manCig?.value)||0;
+    const base=tot-cig;
+    const rec=base*0.12;
+    const baseEl=el.querySelector('#full-man-base');
+    const recEl=el.querySelector('#full-man-rec');
+    if(baseEl)baseEl.textContent=tot?'$ '+fmt(base):'—';
+    if(recEl)recEl.textContent=tot?'$ '+fmt(rec):'—';
+  };
+  manTotal?.addEventListener('input',recalcManual);
+  manCig?.addEventListener('input',recalcManual);
+  el.querySelector('#full-man-confirm')?.addEventListener('click',async()=>{
+    const tot=pN(manTotal?.value)||0;
+    const cig=pN(manCig?.value)||0;
+    if(!tot){alert('Ingresá el total de ventas.');return;}
+    const base=tot-cig;
+    PD.full.ventas={fileName:'Carga manual',size:0,uploadedAt:new Date().toISOString(),
+      totalVentas:tot,cigarrillos:cig,base,recupero12:base*0.12,manual:true};
+    showLoad(true);await saveP();showLoad(false);toast('Datos cargados ✓');renderTab();
+  });
   function recalcIntereses(){
     const tasa=pN(el.querySelector('#full-tasa')?.value);
     const diasAtr=pN(el.querySelector('#full-diasatr')?.value);
