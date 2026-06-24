@@ -408,10 +408,7 @@ function parseVentas(ab){
     if((secNum===2||secNum===21)&&typeof total==='number'&&total>0){
       tot+=total; found=true;
       // Cigarrillos y tabaco
-      if(typeof det==='string'){
-        const d=det.trim().toLowerCase();
-        if(d.includes('cigarril')||d.includes('tabaco')||d.includes('tobacco')) cig+=total;
-      }
+      if(typeof det==='string'&&det.trim()==='Cigarrillos') cig+=total;
     }
   }
   if(!found)return null;
@@ -670,25 +667,25 @@ const REAL_DATA = {
   ]
 };
 function ensureDemoData(usKey){
-  // Los datos de REAL_DATA siempre se imponen para garantizar datos correctos.
-  // Solo se preservan las filas que el usuario guardó manualmente (locked por el usuario, no por los datos reales).
-  // Identificamos esto: si la fila en storage tiene facturaServicio (archivo subido) la conservamos.
   const existingByPeriod={};
   PD.us[usKey].forEach(r=>{ existingByPeriod[r.period]=r; });
   const realRows=REAL_DATA[usKey]||[];
   const newRows=[];
   const realPeriods=new Set(realRows.map(r=>r.period));
-  // Primero: todas las filas reales, preservando solo facturaServicio y validaciones del usuario
   for(const row of realRows){
     const existing=existingByPeriod[row.period];
-    newRows.push({
-      ...row,
-      // Preservar archivo de factura si el usuario lo subió
-      facturaServicio: existing?.facturaServicio||null
-    });
+    // Si el usuario modificó esta fila (tiene nroFacturaACA propio, o datos distintos a REAL_DATA), preservar la del usuario
+    if(existing){
+      const userModified=existing.nroFacturaACA&&existing.nroFacturaACA!==row.nroFacturaACA
+        ||existing.importe!=null&&existing.importe!==row.importe
+        ||existing.facturaServicio!=null
+        ||existing.precioSuper!=null;
+      newRows.push(userModified?existing:{...row,facturaServicio:existing.facturaServicio||null});
+    } else {
+      newRows.push({...row});
+    }
   }
-  // Segundo: filas que el usuario agregó manualmente (períodos que no están en REAL_DATA)
-  for(const [period, row] of Object.entries(existingByPeriod)){
+  for(const [period,row] of Object.entries(existingByPeriod)){
     if(!realPeriods.has(period)) newRows.push(row);
   }
   PD.us[usKey]=newRows;
@@ -717,7 +714,8 @@ async function renderUSExcel(usKey){
   ensureDemoData(usKey);
 
   const rows=PD.us[usKey];
-  const currentPeriod=prevMonth(CP);
+  // Canon y Aguas = mes actual (CP); resto = mes anterior
+  const currentPeriod=(usKey==='aguas')?CP:prevMonth(CP);
   const periodsSet=new Set(rows.map(r=>r.period).filter(p=>p<=currentPeriod));
   APS.filter(p=>p<=currentPeriod).forEach(p=>periodsSet.add(p));
   periodsSet.add(currentPeriod);
@@ -742,9 +740,14 @@ async function renderUSExcel(usKey){
     const litrosLocked=canonLitros.locked!==false;
     const lro=litrosLocked?'readonly':'';
     const lbgl=litrosLocked?'background:#F0FFF4;border-color:#C8E6C9;':'';
-    // Canon va sobre el mes ACTUAL (CP), no el anterior
+    // Canon va sobre el mes ACTUAL (CP)
     const canonCurrentPeriod=CP;
     const canonPeriods=[...new Set([...sortedPeriods.filter(p=>p<canonCurrentPeriod),canonCurrentPeriod])].sort((a,b)=>a.localeCompare(b));
+
+    // Asegurar que el período actual existe en PD.us.canon
+    if(!PD.us.canon.find(r=>r.period===canonCurrentPeriod)){
+      PD.us.canon.push({period:canonCurrentPeriod,importe:null,iva:null,percepciones:null,intereses:null,precioSuper:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false});
+    }
 
     // Cuadro de Litros SUPER
     const litrosBox=`<div style="background:#F8F5FB;border:1.5px solid var(--b);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
@@ -1220,10 +1223,12 @@ function renderFull(){
     const rec=row.recuperar!=null?row.recuperar:null;
     const totalConInt=rec!=null&&row.importe_interes?(rec+(row.importe_interes||0)):rec;
 
-    // Fila histórica bloqueada (no es la actual)
-    if(!isCurr){
-      return `<tr style="background:${rowBg}">
-        <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">${pLabel}</td>
+    // Fila histórica bloqueada (no es la actual, O es la actual ya guardada)
+    if(!isCurr || (isCurr && locked)){
+      const rowBgF=isCurr?'#F0FFF4':rowBg;
+      const isCurrLabel=isCurr?` <span style="font-size:10px;background:var(--g);color:#fff;padding:1px 6px;border-radius:3px;">✓ GUARDADO</span>`:'';
+      return `<tr style="background:${rowBgF}${isCurr?';border-left:4px solid var(--g);':''}">
+        <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">${pLabel}${isCurrLabel}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${row.importe!=null?'$ '+fmtArg(row.importe):'—'}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${row.cigarrillos!=null?'$ '+fmtArg(row.cigarrillos):'—'}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:700;color:var(--g);">${rec!=null?'$ '+fmtArg(rec):'—'}</td>
