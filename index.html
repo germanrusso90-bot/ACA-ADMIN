@@ -358,9 +358,14 @@ function calcRec(row){
   return i-v-p-it;
 }
 function rowDone(row){return !!(row.nroFacturaACA&&row.fecha&&row.importe);}
+function usCurrentPeriod(usKey){
+  // Canon y Aguas = mes actual (CP); resto = mes anterior
+  return (usKey==='canon'||usKey==='aguas')?CP:prevMonth(CP);
+}
 function isUSDone(usKey){
   const rows=PD.us[usKey];
-  return rows.some(r=>r.period===CP&&rowDone(r));
+  const period=usCurrentPeriod(usKey);
+  return rows.some(r=>r.period===period&&r.locked===true);
 }
 function readDU(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 
@@ -546,13 +551,15 @@ function renderUSGrid(){
   <div class="us-grid">`;
   US_ITEMS.forEach(it=>{
     const done=isUSDone(it.key);
+    const period=usCurrentPeriod(it.key);
     const rows=PD.us[it.key];
-    const curr=rows.find(r=>r.period===CP);
-    const dateLabel=curr&&curr.fecha?curr.fecha:'Sin cargar';
+    const curr=rows.find(r=>r.period===period);
+    const dateLabel=curr&&curr.fecha?curr.fecha:(curr&&curr.fechaCancelacion?curr.fechaCancelacion:'Sin cargar');
+    const periodLabel2=periodLabel(period);
     html+=`<div class="us-tile ${done?'done':'pending'}" data-open-us="${it.key}">
       <div class="tile-icon">${it.icon}</div>
       <div class="tile-title">${esc(it.label)}</div>
-      <div class="tile-period">${done?dateLabel:'Pendiente'}</div>
+      <div class="tile-period">${done?dateLabel:periodLabel2+' — Pendiente'}</div>
       <span class="tile-badge ${done?'done':'pending'}">${done?'✓ Realizado':'Pendiente'}</span>
     </div>`;
   });
@@ -674,13 +681,18 @@ function ensureDemoData(usKey){
   const realPeriods=new Set(realRows.map(r=>r.period));
   for(const row of realRows){
     const existing=existingByPeriod[row.period];
-    // Si el usuario modificó esta fila (tiene nroFacturaACA propio, o datos distintos a REAL_DATA), preservar la del usuario
     if(existing){
+      // Si el usuario desbloqueó la fila (locked=false) o la modificó, preservar sus datos
+      const userUnlocked=existing.locked===false&&row.locked===true;
       const userModified=existing.nroFacturaACA&&existing.nroFacturaACA!==row.nroFacturaACA
         ||existing.importe!=null&&existing.importe!==row.importe
         ||existing.facturaServicio!=null
         ||existing.precioSuper!=null;
-      newRows.push(userModified?existing:{...row,facturaServicio:existing.facturaServicio||null});
+      if(userUnlocked||userModified){
+        newRows.push(existing);
+      } else {
+        newRows.push({...row,facturaServicio:existing.facturaServicio||null});
+      }
     } else {
       newRows.push({...row});
     }
@@ -1002,8 +1014,8 @@ async function renderUSExcel(usKey){
     });
   });
 
-  // ── Guardar (bloquea la fila) ──
-  el.querySelectorAll('[data-save-us]').forEach(btn=>{
+  // ── Guardar (bloquea la fila) — excluye canon que tiene handler propio ──
+  el.querySelectorAll('[data-save-us]:not([data-save-us="canon"])').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const key=btn.getAttribute('data-save-us');
       const period=btn.getAttribute('data-save-period');
@@ -1024,8 +1036,8 @@ async function renderUSExcel(usKey){
     });
   });
 
-  // ── Editar (desbloquea la fila) ──
-  el.querySelectorAll('[data-edit-us]').forEach(btn=>{
+  // ── Editar (desbloquea la fila) — excluye canon que tiene handler propio ──
+  el.querySelectorAll('[data-edit-us]:not([data-edit-us="canon"])').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const key=btn.getAttribute('data-edit-us');
       const period=btn.getAttribute('data-edit-period');
@@ -1226,7 +1238,13 @@ function renderFull(){
     // Fila histórica bloqueada (no es la actual, O es la actual ya guardada)
     if(!isCurr || (isCurr && locked)){
       const rowBgF=isCurr?'#F0FFF4':rowBg;
-      const isCurrLabel=isCurr?` <span style="font-size:10px;background:var(--g);color:#fff;padding:1px 6px;border-radius:3px;">✓ GUARDADO</span>`:'';
+      const isCurrLabel=isCurr?` <span style="font-size:10px;background:var(--g);color:#fff;padding:1px 6px;border-radius:3px;">✓</span>`:'';
+      const btnAccion=isCurr
+        ?`<div style="display:flex;gap:6px;">
+            <button class="full-hist-edit" data-period="${row.period}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏ Editar</button>
+            <button id="full-nuevo-mes" style="background:var(--g);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">+ Nuevo mes</button>
+          </div>`
+        :`<button class="full-hist-edit" data-period="${row.period}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;">✏ Editar</button>`;
       return `<tr style="background:${rowBgF}${isCurr?';border-left:4px solid var(--g);':''}">
         <td style="padding:7px 10px;border:1px solid #D4C830;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;">${pLabel}${isCurrLabel}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${row.importe!=null?'$ '+fmtArg(row.importe):'—'}</td>
@@ -1236,9 +1254,7 @@ function renderFull(){
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:800;color:var(--p);">${totalConInt!=null?'$ '+fmtArg(totalConInt):'—'}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;">${esc(row.nroFacturaACA||'—')}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;">${esc(row.fechaCancelacion||'—')}</td>
-        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
-          <button class="full-hist-edit" data-period="${row.period}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;">✏ Editar</button>
-        </td>
+        <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">${btnAccion}</td>
       </tr>`;
     }
 
@@ -2115,11 +2131,47 @@ function attachFull(){
   el.querySelector('#full-tasa')?.addEventListener('input',recalcIntereses);
   el.querySelector('#full-diasatr')?.addEventListener('input',recalcIntereses);
 
+  // ── Nuevo mes (después de guardar cancelación) ──
+  el.querySelector('#full-nuevo-mes')?.addEventListener('click',async()=>{
+    if(!confirm('¿Iniciar el recupero del nuevo mes?\nSe va a limpiar el formulario actual.'))return;
+    PD.full={ventas:null,nroFacturaACA:'',facturaACA:null,fechaCancelacion:'',comprobanteTransferencia:null,interesMensual:'',diasAtrasados:'',locked:false};
+    showLoad(true);await saveP();showLoad(false);
+    toast('Listo para el nuevo mes ✓');renderTab();
+  });
+
   // ── Guardar registro de cancelación ──
   el.querySelector('#full-reg-save')?.addEventListener('click',async()=>{
-    PD.full.nroFacturaACA=el.querySelector('#full-nro-aca')?.value.trim()||'';
-    PD.full.fechaCancelacion=el.querySelector('#full-fecha-cancel')?.value||'';
+    const nro=el.querySelector('#full-nro-aca')?.value.trim()||'';
+    const fecha=el.querySelector('#full-fecha-cancel')?.value||'';
+    PD.full.nroFacturaACA=nro;
+    PD.full.fechaCancelacion=fecha;
     PD.full.locked=true;
+
+    // Calcular totales para guardar en historial
+    const int=calcIntereses(PD.full);
+    const subtotal=PD.full.ventas?PD.full.ventas.recupero12:null;
+    const montoInt=int?int.montoInt:0;
+    const totalFinal=(subtotal||0)+montoInt;
+
+    // Guardar en fullHistory como registro del período actual
+    if(!PD.fullHistory)PD.fullHistory=[];
+    const existIdx=PD.fullHistory.findIndex(r=>r.period===prevMonth(CP));
+    const histRow={
+      period:prevMonth(CP),
+      importe:PD.full.ventas?PD.full.ventas.totalVentas:null,
+      cigarrillos:PD.full.ventas?PD.full.ventas.cigarrillos:null,
+      recuperar:subtotal,
+      nroFacturaACA:nro,
+      fechaCancelacion:fecha,
+      interesMensual:PD.full.interesMensual,
+      diasAtrasados:PD.full.diasAtrasados,
+      importe_interes:montoInt||null,
+      totalFinal,
+      locked:true
+    };
+    if(existIdx>=0) PD.fullHistory[existIdx]=histRow;
+    else PD.fullHistory.push(histRow);
+
     showLoad(true);await saveP();showLoad(false);
     toast('Registro guardado ✓');renderTab();
   });
