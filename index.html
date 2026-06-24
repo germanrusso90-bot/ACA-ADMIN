@@ -652,26 +652,7 @@ const REAL_DATA = {
     {period:'2026-05',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
     {period:'2026-06',importe:314.05,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
   ],
-  canon:[
-    {period:'2025-01',importe:470448,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-832',fecha:'2025-01-16',facturaServicio:null,locked:true},
-    {period:'2025-02',importe:481580,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-837',fecha:'2025-02-07',facturaServicio:null,locked:true},
-    {period:'2025-03',importe:492712,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-844',fecha:'2025-03-11',facturaServicio:null,locked:true},
-    {period:'2025-04',importe:503844,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-851',fecha:'2025-04-15',facturaServicio:null,locked:true},
-    {period:'2025-05',importe:494648,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-863',fecha:'2025-05-21',facturaServicio:null,locked:true},
-    {period:'2025-06',importe:517000,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-870',fecha:'2025-06-23',facturaServicio:null,locked:true},
-    {period:'2025-07',importe:523204,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-877',fecha:'2025-07-15',facturaServicio:null,locked:true},
-    {period:'2025-08',importe:559020,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-886',fecha:'2025-08-19',facturaServicio:null,locked:true},
-    {period:'2025-09',importe:589996,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-890',fecha:'2025-09-16',facturaServicio:null,locked:true},
-    {period:'2025-10',importe:613712,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-899',fecha:'2025-10-20',facturaServicio:null,locked:true},
-    {period:'2025-11',importe:625812,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-904',fecha:'2025-11-07',facturaServicio:null,locked:true},
-    {period:'2025-12',importe:688248,iva:null,percepciones:null,intereses:null,nroFacturaACA:'905-005',fecha:'2025-12-22',facturaServicio:null,locked:true},
-    {period:'2026-01',importe:687280,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-915',fecha:'2026-01-20',facturaServicio:null,locked:true},
-    {period:'2026-02',importe:689216,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-920',fecha:'2026-02-06',facturaServicio:null,locked:true},
-    {period:'2026-03',importe:796664,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-930',fecha:'2026-03-19',facturaServicio:null,locked:true},
-    {period:'2026-04',importe:864424,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-934',fecha:'2026-04-10',facturaServicio:null,locked:true},
-    {period:'2026-05',importe:870716,iva:null,percepciones:null,intereses:null,nroFacturaACA:'654-940',fecha:'2026-05-08',facturaServicio:null,locked:true},
-    {period:'2026-06',importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
-  ]
+  canon:[]
 };
 function ensureDemoData(usKey){
   const existingByPeriod={};
@@ -747,19 +728,15 @@ async function renderUSExcel(usKey){
 
   // ── CANON SERVICIOS: tabla especial ──────────────────────────
   if(usKey==='canon'){
+    ensureCanonData(); // carga datos históricos reales + asegura período actual
     const canonLitros=await loadCanonLitros();
     const litrosFijos=canonLitros.litros||0;
     const litrosLocked=canonLitros.locked!==false;
     const lro=litrosLocked?'readonly':'';
     const lbgl=litrosLocked?'background:#F0FFF4;border-color:#C8E6C9;':'';
-    // Canon va sobre el mes ACTUAL (CP)
     const canonCurrentPeriod=CP;
-    const canonPeriods=[...new Set([...sortedPeriods.filter(p=>p<canonCurrentPeriod),canonCurrentPeriod])].sort((a,b)=>a.localeCompare(b));
-
-    // Asegurar que el período actual existe en PD.us.canon
-    if(!PD.us.canon.find(r=>r.period===canonCurrentPeriod)){
-      PD.us.canon.push({period:canonCurrentPeriod,importe:null,iva:null,percepciones:null,intereses:null,precioSuper:null,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false});
-    }
+    // Usar PD.us.canon directamente (no histData que puede tener datos viejos)
+    const canonPeriods=[...new Set(PD.us.canon.map(r=>r.period).filter(p=>p<=canonCurrentPeriod))].sort((a,b)=>a.localeCompare(b));
 
     // Cuadro de Litros SUPER
     const litrosBox=`<div style="background:#F8F5FB;border:1.5px solid var(--b);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
@@ -784,7 +761,7 @@ async function renderUSExcel(usKey){
 
     let tableRows='';
     for(const p of canonPeriods){
-      const row=histData[p]||null;
+      const row=PD.us.canon.find(r=>r.period===p)||null;
       const precio=row?row.precioSuper:null;
       const nro=row?row.nroFacturaACA||'':'';
       const fecha=row?row.fecha||'':'';
@@ -1388,6 +1365,38 @@ function ensureHotelTelHistory(){
   const existing=new Set(PD.hotel.telHistory.map(r=>r.period));
   for(const row of REAL_DATA_HOTEL_TEL){
     if(!existing.has(row.period)) PD.hotel.telHistory.push({...row});
+  }
+}
+
+// ── CANON SERVICIOS US: datos históricos reales ───────────────
+const REAL_DATA_CANON_US=[
+  {period:'2025-01',precioSuper:null,importe:470448,nroFacturaACA:'654-832',locked:true},
+  {period:'2025-02',precioSuper:null,importe:481580,nroFacturaACA:'654-837',locked:true},
+  {period:'2025-03',precioSuper:null,importe:492712,nroFacturaACA:'654-844',locked:true},
+  {period:'2025-04',precioSuper:null,importe:503844,nroFacturaACA:'654-851',locked:true},
+  {period:'2025-05',precioSuper:null,importe:494648,nroFacturaACA:'654-863',locked:true},
+  {period:'2025-06',precioSuper:null,importe:517000,nroFacturaACA:'654-870',locked:true},
+  {period:'2025-07',precioSuper:null,importe:523204,nroFacturaACA:'654-877',locked:true},
+  {period:'2025-08',precioSuper:null,importe:559020,nroFacturaACA:'654-886',locked:true},
+  {period:'2025-09',precioSuper:null,importe:589996,nroFacturaACA:'654-890',locked:true},
+  {period:'2025-10',precioSuper:null,importe:613712,nroFacturaACA:'654-899',locked:true},
+  {period:'2025-11',precioSuper:null,importe:625812,nroFacturaACA:'654-904',locked:true},
+  {period:'2025-12',precioSuper:null,importe:688248,nroFacturaACA:'905-005',locked:true},
+  {period:'2026-01',precioSuper:null,importe:687280,nroFacturaACA:'654-915',locked:true},
+  {period:'2026-02',precioSuper:null,importe:689216,nroFacturaACA:'654-920',locked:true},
+  {period:'2026-03',precioSuper:null,importe:796664,nroFacturaACA:'654-930',locked:true},
+  {period:'2026-04',precioSuper:null,importe:864424,nroFacturaACA:'654-934',locked:true},
+  {period:'2026-05',precioSuper:null,importe:870716,nroFacturaACA:'654-940',locked:true},
+];
+function ensureCanonData(){
+  const existing=new Set(PD.us.canon.map(r=>r.period));
+  for(const row of REAL_DATA_CANON_US){
+    if(!existing.has(row.period)){
+      PD.us.canon.push({...row,iva:null,percepciones:null,intereses:null,facturaServicio:null});
+    }
+  }
+  if(!PD.us.canon.find(r=>r.period===CP)){
+    PD.us.canon.push({period:CP,precioSuper:null,importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',facturaServicio:null,locked:false});
   }
 }
 
