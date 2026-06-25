@@ -1858,15 +1858,24 @@ function attachHotel(){
   });
 
   // Ver factura teléfono
-  el.querySelectorAll('[data-view][data-view-period]').forEach(btn=>{
-    btn.addEventListener('click',async()=>{
-      const sid=btn.getAttribute('data-view');
-      const period=btn.getAttribute('data-view-period');
-      showLoad(true);
-      const raw=await sGet('file:'+sid,true)||await sGet('file:'+period+':'+sid,true);
-      showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo.');return;}
-      openFileViewer(JSON.parse(raw));
+  // ── Guardar inputs del canon en tiempo real (sin renderTab) ──
+  el.querySelectorAll('[id^="canon-fact-nro-"],[id^="canon-fact-total-"],[id^="canon-nc-nro-"],[id^="canon-nc-total-"],[id^="canon-nro-"]').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const period=inp.id.split('-').pop();
+      let row=PD.hotel.canonHistory.find(r=>r.period===period);
+      if(!row){row={period,factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};PD.hotel.canonHistory.push(row);}
+      if(inp.id.startsWith('canon-fact-nro-')) row.factNro=inp.value.trim();
+      else if(inp.id.startsWith('canon-fact-total-')){ row.factTotal=parseFloat(inp.value)||null; }
+      else if(inp.id.startsWith('canon-nc-nro-')) row.ncNro=inp.value.trim();
+      else if(inp.id.startsWith('canon-nc-total-')){ row.ncTotal=parseFloat(inp.value)||null; }
+      else if(inp.id.startsWith('canon-nro-')) row.nroRecibo=inp.value.trim();
+      // Recalcular transferencia en tiempo real
+      if(inp.id.startsWith('canon-fact-total-')||inp.id.startsWith('canon-nc-total-')){
+        const ft=row.factTotal||0, nc=row.ncTotal||0;
+        const disp=document.getElementById('canon-transf-display-'+period);
+        if(disp) disp.textContent=ft>0?'$ '+fmtArg(ft-nc):'—';
+      }
+      saveD(); // guardar sin renderTab
     });
   });
 
