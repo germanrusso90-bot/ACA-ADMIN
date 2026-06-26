@@ -3162,38 +3162,49 @@ function renderCancel(){
 }
 
 // ── GRILLA MESES ─────────────────────────────────────────────
+let cancelAnio=new Date().getFullYear();
+
 function renderCancelGrid(){
-  const [y]=CP.split('-').map(Number);
-  // Mostrar el año actual y el anterior
-  const anios=[y-1,y];
-  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-    <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">📋 Cancelaciones</h3>
-    <button id="cancel-historial-btn" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">📂 Historial</button>
-  </div>`;
-  for(const anio of anios){
-    html+=`<div style="margin-bottom:20px;">
-      <div style="font-size:14px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--b);">${anio}</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">`;
-    for(let m=1;m<=12;m++){
-      const period=anio+'-'+String(m).padStart(2,'0');
-      const regs=(PD.cancelaciones||[]).filter(r=>r.periodo===period);
-      const done=regs.length>0&&regs.every(r=>r.locked);
-      const count=regs.length;
-      const bg=done?'var(--gb)':count>0?'#FFF8E1':'var(--card)';
-      const border=done?'var(--gbr)':count>0?'#FFD54F':'var(--b)';
-      const labelColor=done?'var(--g)':count>0?'#7B5800':'var(--pd)';
-      const badge=done?'<span style="background:var(--g);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">✓</span>'
-        :count>0?`<span style="background:#FFB300;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${count}</span>`:'';
-      html+=`<div data-cancel-mes="${period}" style="background:${bg};border:1.5px solid ${border};border-radius:10px;padding:14px 12px;cursor:pointer;transition:all .15s;" 
-        onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:14px;font-weight:800;color:${labelColor};">${MESES_LABELS[m-1]}</span>${badge}
+  const anios=[];
+  const yearNow=new Date().getFullYear();
+  for(let y=yearNow-2;y<=yearNow+1;y++) anios.push(y);
+
+  let html=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">📋 Cancelaciones</h3>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-right:8px;">AÑO</label>
+          <select id="cancel-anio-sel" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
+            ${anios.map(y=>`<option value="${y}" ${y===cancelAnio?'selected':''}>${y}</option>`).join('')}
+          </select>
         </div>
-        <div style="font-size:12px;color:var(--m2);">${count>0?count+' cancelación'+(count>1?'es':''):' — Sin registros'}</div>
-      </div>`;
-    }
-    html+=`</div></div>`;
+        <button id="cancel-historial-btn" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">📂 Historial</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">`;
+
+  for(let m=1;m<=12;m++){
+    const period=cancelAnio+'-'+String(m).padStart(2,'0');
+    const regs=(PD.cancelaciones||[]).filter(r=>r.periodo===period);
+    const count=regs.length;
+    const done=count>0;
+    const bg=done?'var(--gb)':'var(--rb)';
+    const border=done?'var(--gbr)':'var(--rbr)';
+    const labelColor=done?'var(--g)':'var(--r)';
+    const badge=done
+      ?`<span style="background:var(--g);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">${count} reg.</span>`
+      :`<span style="background:var(--r);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">Sin datos</span>`;
+
+    html+=`<div data-cancel-mes="${period}" style="background:${bg};border:2px solid ${border};border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;"
+      onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
+      onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:16px;font-weight:800;color:${labelColor};margin-bottom:8px;">${MESES_LABELS[m-1]}</div>
+      ${badge}
+    </div>`;
   }
+
+  html+=`</div>`;
   return `<div class="cards"><div class="card"><div class="card-body">${html}</div></div></div>`;
 }
 
@@ -3342,6 +3353,12 @@ function renderCancelHistorial(){
 function attachCancel(){
   const el=document.getElementById('tab-content');
   if(!PD.cancelaciones) PD.cancelaciones=[];
+
+  // Selector de año
+  el.querySelector('#cancel-anio-sel')?.addEventListener('change',e=>{
+    cancelAnio=parseInt(e.target.value);
+    renderTab();
+  });
 
   // Grilla: click en mes
   el.querySelectorAll('[data-cancel-mes]').forEach(tile=>{
