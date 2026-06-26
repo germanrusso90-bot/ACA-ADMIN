@@ -3134,34 +3134,81 @@ function attachYER(){
 // ── CANCELACIONES ─────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
-const CANCEL_TIPOS=[
-  'Serviclub','Pelotas','Camisetas','Reintegro promo Full + Cosmética',
-  'CUOCAM','Reintegro promo 20% Boxes','YER No Lubricante',
-  'Objetivo Plus','YER','Incógnito 100%','Servicios'
-];
-const CANCEL_COMP_TIPOS=['Factura','Recibo','Nota de Crédito','Nota de Débito'];
+// ══════════════════════════════════════════════════════════════
+// ── CANCELACIONES ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 
-const MESES=[
-  {v:'01',l:'Enero'},{v:'02',l:'Febrero'},{v:'03',l:'Marzo'},{v:'04',l:'Abril'},
-  {v:'05',l:'Mayo'},{v:'06',l:'Junio'},{v:'07',l:'Julio'},{v:'08',l:'Agosto'},
-  {v:'09',l:'Septiembre'},{v:'10',l:'Octubre'},{v:'11',l:'Noviembre'},{v:'12',l:'Diciembre'}
+const CANCEL_TIPOS=[
+  'SERVICLUB','PELOTAS','CAMISETAS','REINTEGRO PROMO FULL + COSMÉTICA',
+  'CUOCAM','REINTEGRO PROMO 20% BOXES','YER NO LUBRICANTE','LUBRICANTES POR COMBO',
+  'OBJETIVO PLUS','YER','INCÓGNITO 100%','CANON SERVICIOS','SERVICIOS','VARIOS'
 ];
+const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO','OTROS'];
+
+const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
+
+function cancelPeriodLabel(period){
+  const [y,m]=period.split('-');
+  return MESES_LABELS[parseInt(m)-1]+' '+y;
+}
 
 function renderCancel(){
-  const registros=(PD.cancelaciones||[]).sort((a,b)=>{
-    if(b.anio!==a.anio) return b.anio-a.anio;
-    return b.mes-a.mes || CANCEL_TIPOS.indexOf(a.tipo)-CANCEL_TIPOS.indexOf(b.tipo);
-  });
+  if(cancelView==='historial') return renderCancelHistorial();
+  if(cancelView) return renderCancelMes(cancelView);
+  return renderCancelGrid();
+}
 
+// ── GRILLA MESES ─────────────────────────────────────────────
+function renderCancelGrid(){
+  const [y]=CP.split('-').map(Number);
+  // Mostrar el año actual y el anterior
+  const anios=[y-1,y];
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">📋 Cancelaciones</h3>
+    <button id="cancel-historial-btn" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">📂 Historial</button>
+  </div>`;
+  for(const anio of anios){
+    html+=`<div style="margin-bottom:20px;">
+      <div style="font-size:14px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--b);">${anio}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">`;
+    for(let m=1;m<=12;m++){
+      const period=anio+'-'+String(m).padStart(2,'0');
+      const regs=(PD.cancelaciones||[]).filter(r=>r.periodo===period);
+      const done=regs.length>0&&regs.every(r=>r.locked);
+      const count=regs.length;
+      const bg=done?'var(--gb)':count>0?'#FFF8E1':'var(--card)';
+      const border=done?'var(--gbr)':count>0?'#FFD54F':'var(--b)';
+      const labelColor=done?'var(--g)':count>0?'#7B5800':'var(--pd)';
+      const badge=done?'<span style="background:var(--g);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">✓</span>'
+        :count>0?`<span style="background:#FFB300;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${count}</span>`:'';
+      html+=`<div data-cancel-mes="${period}" style="background:${bg};border:1.5px solid ${border};border-radius:10px;padding:14px 12px;cursor:pointer;transition:all .15s;" 
+        onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:14px;font-weight:800;color:${labelColor};">${MESES_LABELS[m-1]}</span>${badge}
+        </div>
+        <div style="font-size:12px;color:var(--m2);">${count>0?count+' cancelación'+(count>1?'es':''):' — Sin registros'}</div>
+      </div>`;
+    }
+    html+=`</div></div>`;
+  }
+  return `<div class="cards"><div class="card"><div class="card-body">${html}</div></div></div>`;
+}
+
+// ── VISTA MES ─────────────────────────────────────────────────
+function renderCancelMes(period){
+  const regs=(PD.cancelaciones||[]).filter(r=>r.periodo===period)
+    .sort((a,b)=>(a.fechaReg||'').localeCompare(b.fechaReg||''));
   const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
 
-  const trs=registros.map((r,i)=>{
-    const mesLabel=MESES.find(m=>parseInt(m.v)===r.mes)?.l||r.mes;
+  const trs=regs.map((r,i)=>{
     const locked=!!r.locked;
     const rowBg=locked?(i%2===0?'#F8FFF8':'#F0FFF4'):(i%2===0?'#FFFFF0':'#FFFDE0');
     return `<tr style="background:${rowBg}" data-cancel-id="${r.id}">
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;text-align:center;white-space:nowrap;">${mesLabel} ${r.anio}</td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;">${esc(r.tipo)}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
         <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
       </td>
@@ -3170,8 +3217,7 @@ function renderCancel(){
       <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
         ${r.archivo
           ?`<button style="${BSTYLE_VER}" data-cancel-ver="${r.id}">👁 Ver</button>`
-          :`${!locked?`<label style="${BSTYLE_SUB};cursor:pointer;font-size:11px;">📁<input type="file" data-cancel-upload="${r.id}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`:'—'}`
-        }
+          :(!locked?`<label style="${BSTYLE_SUB};cursor:pointer;font-size:11px;">📁<input type="file" data-cancel-upload="${r.id}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`:'—')}
       </td>
       <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
         <div style="display:flex;gap:5px;justify-content:center;">
@@ -3179,27 +3225,26 @@ function renderCancel(){
             ?`<button data-cancel-edit="${r.id}" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">✏</button>
                <button data-cancel-del="${r.id}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>`
             :`<button data-cancel-save="${r.id}" style="background:var(--g);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">💾</button>
-               <button data-cancel-del="${r.id}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>`
-          }
+               <button data-cancel-del="${r.id}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>`}
         </div>
       </td>
     </tr>`;
   }).join('');
 
-  // Formulario inline de edición (si hay algún registro en edición)
-  const editando=registros.find(r=>!r.locked&&r._editando);
-
   return `<div class="cards"><div class="card">
     <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <h3>📋 Cancelaciones</h3>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button id="cancel-back" style="background:none;border:none;color:var(--p);font-size:20px;cursor:pointer;font-weight:700;">←</button>
+        <h3>${cancelPeriodLabel(period)}</h3>
+      </div>
       <button id="cancel-new-btn" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nueva cancelación</button>
     </div>
     <div class="card-body">
 
       <!-- Formulario nueva cancelación -->
       <div id="cancel-form" style="display:none;background:#F8F5FB;border:1.5px solid var(--p);border-radius:10px;padding:16px;margin-bottom:16px;">
-        <div style="font-size:13px;font-weight:800;color:var(--pd);margin-bottom:12px;">Nueva cancelación</div>
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:800;color:var(--pd);margin-bottom:12px;">Nueva cancelación — ${cancelPeriodLabel(period)}</div>
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px;">
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Tipo</div>
             <select id="cancel-tipo" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
@@ -3208,14 +3253,8 @@ function renderCancel(){
             </select>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Mes</div>
-            <select id="cancel-mes" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
-              ${MESES.map(m=>`<option value="${m.v}" ${parseInt(m.v)===new Date().getMonth()+1?'selected':''}>${m.l}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Año</div>
-            <input id="cancel-anio" type="number" value="${new Date().getFullYear()}" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
+            <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Fecha de registro</div>
+            <input id="cancel-fecha" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
@@ -3240,24 +3279,62 @@ function renderCancel(){
         </div>
       </div>
 
-      <!-- Tabla de registros -->
-      ${registros.length?`
-      ${renderSearchBar('cancel-search','Buscar por tipo, mes, N° comprobante...',registros.length)}
-      <div style="overflow-x:auto;">
-        <table style="border-collapse:collapse;width:100%;min-width:750px;">
-          <thead><tr>
-            <th style="${th}">MES / AÑO</th>
-            <th style="${th}">TIPO</th>
-            <th style="${th}">COMPROBANTE</th>
-            <th style="${th}">N° COMP.</th>
-            <th style="${th}">IMPORTE</th>
-            <th style="${th}">ARCHIVO</th>
-            <th style="${th}"></th>
-          </tr></thead>
-          <tbody class="cancel-tbody">${trs}</tbody>
-        </table>
-      </div>`
-      :`<div class="empty-s"><p>No hay cancelaciones registradas. Usá el botón <strong>+ Nueva cancelación</strong> para agregar.</p></div>`}
+      ${regs.length
+        ?`${renderSearchBar('cancel-search','Buscar por tipo, N° comprobante...',regs.length)}
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;width:100%;min-width:750px;">
+            <thead><tr>
+              <th style="${th}">FECHA REG.</th><th style="${th}">TIPO</th><th style="${th}">COMPROBANTE</th>
+              <th style="${th}">N° COMP.</th><th style="${th}">IMPORTE</th><th style="${th}">ARCHIVO</th><th style="${th}"></th>
+            </tr></thead>
+            <tbody class="cancel-tbody">${trs}</tbody>
+          </table>
+        </div>`
+        :`<div class="empty-s"><p>No hay cancelaciones en ${cancelPeriodLabel(period)}. Usá <strong>+ Nueva cancelación</strong>.</p></div>`}
+    </div>
+  </div></div>`;
+}
+
+// ── HISTORIAL ─────────────────────────────────────────────────
+function renderCancelHistorial(){
+  const todos=(PD.cancelaciones||[]).sort((a,b)=>
+    b.periodo?.localeCompare(a.periodo)||b.fechaReg?.localeCompare(a.fechaReg)||0);
+  const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
+  const trs=todos.map((r,i)=>{
+    const rowBg=i%2===0?'#FFFFF0':'#FFFDE0';
+    return `<tr class="cancel-hist-row" style="background:${rowBg}">
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;white-space:nowrap;">${r.periodo?cancelPeriodLabel(r.periodo):'—'}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
+        <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
+      </td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;font-family:monospace;">${esc(r.nroComp||'—')}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;font-weight:700;color:var(--g);">${r.importe?'$ '+fmtArg(r.importe):'—'}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
+        ${r.archivo?`<button style="${BSTYLE_VER}" data-cancel-ver="${r.id}">👁 Ver</button>`:'—'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="cards"><div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:12px;">
+      <button id="cancel-back" style="background:none;border:none;color:var(--p);font-size:20px;cursor:pointer;font-weight:700;">←</button>
+      <h3>📂 Historial de Cancelaciones</h3>
+    </div>
+    <div class="card-body">
+      ${todos.length
+        ?`${renderSearchBar('cancel-hist-search','Buscar por tipo, período, N° comprobante...',todos.length)}
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;width:100%;min-width:800px;">
+            <thead><tr>
+              <th style="${th}">PERÍODO</th><th style="${th}">FECHA REG.</th><th style="${th}">TIPO</th>
+              <th style="${th}">COMPROBANTE</th><th style="${th}">N° COMP.</th><th style="${th}">IMPORTE</th><th style="${th}">ARCHIVO</th>
+            </tr></thead>
+            <tbody>${trs}</tbody>
+          </table>
+        </div>`
+        :`<div class="empty-s"><p>No hay cancelaciones registradas aún.</p></div>`}
     </div>
   </div></div>`;
 }
@@ -3265,6 +3342,24 @@ function renderCancel(){
 function attachCancel(){
   const el=document.getElementById('tab-content');
   if(!PD.cancelaciones) PD.cancelaciones=[];
+
+  // Grilla: click en mes
+  el.querySelectorAll('[data-cancel-mes]').forEach(tile=>{
+    tile.addEventListener('click',()=>{
+      cancelView=tile.getAttribute('data-cancel-mes');
+      renderTab();
+    });
+  });
+
+  // Historial
+  el.querySelector('#cancel-historial-btn')?.addEventListener('click',()=>{
+    cancelView='historial'; renderTab();
+  });
+
+  // Volver
+  el.querySelector('#cancel-back')?.addEventListener('click',()=>{
+    cancelView=null; renderTab();
+  });
 
   // Mostrar/ocultar formulario
   el.querySelector('#cancel-new-btn')?.addEventListener('click',()=>{
@@ -3276,35 +3371,32 @@ function attachCancel(){
     if(f) f.style.display='none';
   });
 
-  // Agregar nuevo registro
+  // Agregar
   el.querySelector('#cancel-form-add')?.addEventListener('click',async()=>{
     const tipo=el.querySelector('#cancel-tipo')?.value;
-    const mes=parseInt(el.querySelector('#cancel-mes')?.value);
-    const anio=parseInt(el.querySelector('#cancel-anio')?.value)||new Date().getFullYear();
-    const tipoComp=el.querySelector('#cancel-tipo-comp')?.value||'Factura';
+    const fecha=el.querySelector('#cancel-fecha')?.value||'';
+    const tipoComp=el.querySelector('#cancel-tipo-comp')?.value||'FACTURA';
     const nroComp=el.querySelector('#cancel-nro')?.value.trim()||'';
     const importe=pN(el.querySelector('#cancel-importe')?.value)||null;
-    if(!tipo){alert('Seleccioná un tipo de cancelación.');return;}
+    if(!tipo){alert('Seleccioná un tipo.');return;}
     const id=Math.random().toString(36).slice(2,10);
-    PD.cancelaciones.push({id,tipo,mes,anio,tipoComp,nroComp,importe,archivo:null,locked:false});
+    PD.cancelaciones.push({id,tipo,periodo:cancelView,fechaReg:fecha,tipoComp,nroComp,importe,archivo:null,locked:false});
     showLoad(true);await saveP();showLoad(false);
     toast('Cancelación agregada ✓');renderTab();
   });
 
-  // Guardar (bloquear)
+  // Guardar
   el.querySelectorAll('[data-cancel-save]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
-      const id=btn.getAttribute('data-cancel-save');
-      const r=PD.cancelaciones.find(x=>x.id===id);
+      const r=PD.cancelaciones.find(x=>x.id===btn.getAttribute('data-cancel-save'));
       if(r){r.locked=true;showLoad(true);await saveP();showLoad(false);toast('Guardado ✓');renderTab();}
     });
   });
 
-  // Editar (desbloquear)
+  // Editar
   el.querySelectorAll('[data-cancel-edit]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
-      const id=btn.getAttribute('data-cancel-edit');
-      const r=PD.cancelaciones.find(x=>x.id===id);
+      const r=PD.cancelaciones.find(x=>x.id===btn.getAttribute('data-cancel-edit'));
       if(r){r.locked=false;showLoad(true);await saveP();showLoad(false);renderTab();}
     });
   });
@@ -3312,12 +3404,11 @@ function attachCancel(){
   // Eliminar
   el.querySelectorAll('[data-cancel-del]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
-      const id=btn.getAttribute('data-cancel-del');
-      const r=PD.cancelaciones.find(x=>x.id===id);
+      const r=PD.cancelaciones.find(x=>x.id===btn.getAttribute('data-cancel-del'));
       if(!r||!confirm('¿Eliminar esta cancelación?'))return;
       showLoad(true);
-      await sDel('file:cancel:'+id,true);
-      PD.cancelaciones=PD.cancelaciones.filter(x=>x.id!==id);
+      await sDel('file:cancel:'+r.id,true);
+      PD.cancelaciones=PD.cancelaciones.filter(x=>x.id!==r.id);
       await saveP();showLoad(false);toast('Eliminado');renderTab();
     });
   });
@@ -3352,8 +3443,10 @@ function attachCancel(){
     });
   });
 
-  // Búsqueda
+  // Búsqueda mes
   activateSearch('cancel-search','.cancel-tbody tr');
+  // Búsqueda historial
+  activateSearch('cancel-hist-search','.cancel-hist-row');
 }
 
 // ── INICIO ────────────────────────────────────────────────────
