@@ -377,7 +377,21 @@ function showLoad(show){
 }
 function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
 
-// ── STORAGE PERÍODOS ─────────────────────────────────────────
+// ── DIAGNÓSTICO FIREBASE ─────────────────────────────────────
+async function diagFirebase(){
+  try{
+    const db=await getDB();
+    const {collection,getDocs}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap=await getDocs(collection(db.fs,'kv'));
+    const keys=[];
+    snap.forEach(d=>keys.push({id:d.id,k:d.data().k,size:JSON.stringify(d.data().v||'').length}));
+    keys.sort((a,b)=>a.id.localeCompare(b.id));
+    const msg=keys.map(k=>`${k.k||k.id} (${k.size} chars)`).join('\n');
+    alert('Claves en Firebase ('+keys.length+'):\n\n'+msg);
+  }catch(e){alert('Error: '+e.message);}
+}
+
+
 async function loadPeriod(p){
   const raw=await sGet('data:'+p,true);
   PD=raw?mergeDef(JSON.parse(raw)):defPD();
@@ -521,7 +535,7 @@ function renderShell(){
   if(CU.role==='admin'){tabs.push({key:'varios',label:'Varios'});tabs.push({key:'resumen',label:'Resumen'});}
   return`<div class="topbar">
     <div class="brand">ACA <span>Recuperos</span></div>
-    <div class="user-info"><span>${esc(CU.name)}</span><button class="btn-ghost" id="logout-btn">Salir</button></div>
+    <div class="user-info"><span>${esc(CU.name)}</span><button onclick="diagFirebase()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-weight:700;margin-right:6px">🔍 Diag</button><button class="btn-ghost" id="logout-btn">Salir</button></div>
   </div>
   <div class="tabs">${tabs.map(t=>`<button class="tab-btn ${AT===t.key?'active':''}" data-tab="${t.key}">${t.label}</button>`).join('')}</div>
   <div id="tab-content"></div>`;
