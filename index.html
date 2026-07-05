@@ -383,7 +383,14 @@ async function loadPeriod(p){
   PD=raw?mergeDef(JSON.parse(raw)):defPD();
   CP=p;
 }
-async function saveP(){await sSet('data:'+CP,JSON.stringify(PD),true);}
+async function saveP(){
+  // Guardar en la clave del período actual
+  await sSet('data:'+CP,JSON.stringify(PD),true);
+}
+async function savePeriod(p,data){
+  // Guardar datos de un período específico (para preservar historial al cambiar de mes)
+  await sSet('data:'+p,JSON.stringify(data),true);
+}
 function saveD(){clearTimeout(stimer);stimer=setTimeout(()=>saveP(),600);}
 
 // ── EXCEL VENTAS ─────────────────────────────────────────────
@@ -486,6 +493,20 @@ function attachLogin(){
       showLoad(true);
       const raw=await sGet('periodos',true);
       APS=raw?JSON.parse(raw):[];
+
+      // Detectar si hay datos guardados del mes anterior que aún no tienen su propia clave
+      // (cuando el mes cambió y los datos quedaron solo en data:CP_viejo)
+      const prevCP=prevMonth(CP);
+      const prevRaw=await sGet('data:'+prevCP,true);
+      if(!prevRaw){
+        // No hay datos guardados para el mes anterior — puede ser que estén en una clave vieja
+        // Buscar en APS si hay un período previo con datos
+        const ultimoPeriodoGuardado=APS.filter(p2=>p2<CP).sort().pop();
+        if(ultimoPeriodoGuardado&&ultimoPeriodoGuardado!==prevCP){
+          // Hay un período guardado distinto — dejar que histData lo encuentre normalmente
+        }
+      }
+
       if(!APS.includes(CP)){APS.push(CP);APS.sort();await sSet('periodos',JSON.stringify(APS),true);}
       await loadPeriod(CP);
       await loadYER();
@@ -717,13 +738,21 @@ async function renderUSExcel(usKey){
 
   const histData={};
   for(const p of sortedPeriods){
-    const localRow=rows.find(r=>r.period===p);
-    if(localRow){histData[p]=localRow;continue;}
-    const raw=await sGet('data:'+p,true);
-    if(raw){
-      const d=mergeDef(JSON.parse(raw));
-      const r=d.us[usKey].find(x=>x.period===p);
-      if(r)histData[p]=r;
+    if(p===CP){
+      // Período actual: usar PD en memoria (puede tener ediciones no guardadas)
+      const localRow=rows.find(r=>r.period===p);
+      if(localRow){histData[p]=localRow;}
+    } else {
+      // Períodos anteriores: leer siempre desde storage para no perder datos del usuario
+      const raw=await sGet('data:'+p,true);
+      if(raw){
+        const d=mergeDef(JSON.parse(raw));
+        const r=d.us[usKey].find(x=>x.period===p);
+        if(r){histData[p]=r;continue;}
+      }
+      // Fallback: buscar en PD actual (por si no hay en storage)
+      const localRow=rows.find(r=>r.period===p);
+      if(localRow)histData[p]=localRow;
     }
   }
 
