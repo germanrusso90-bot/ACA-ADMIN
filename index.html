@@ -396,6 +396,66 @@ async function loadPeriod(p){
   const raw=await sGet('data:'+p,true);
   PD=raw?mergeDef(JSON.parse(raw)):defPD();
   CP=p;
+
+  // Si el PD actual está vacío (mes nuevo), intentar migrar datos históricos del mes anterior
+  // Esto soluciona el problema de cambio de mes: Full, Hotel Canon, YER liqHistory
+  if(!raw){
+    const prevP=prevMonth(p);
+    const prevRaw=await sGet('data:'+prevP,true);
+    if(prevRaw){
+      const prevPD=mergeDef(JSON.parse(prevRaw));
+      // Migrar fullHistory (registros históricos del Full)
+      if(prevPD.fullHistory&&prevPD.fullHistory.length>0){
+        PD.fullHistory=JSON.parse(JSON.stringify(prevPD.fullHistory));
+      }
+      // Migrar el Full del mes anterior al historial si estaba locked
+      if(prevPD.full&&prevPD.full.locked){
+        if(!PD.fullHistory)PD.fullHistory=[];
+        if(!PD.fullHistory.find(r=>r.period===prevP)){
+          const int=prevPD.full.ventas?{montoInt:prevPD.full.importe_interes||0}:{montoInt:0};
+          const subtotal=prevPD.full.ventas?prevPD.full.ventas.recupero12:null;
+          PD.fullHistory.push({
+            period:prevP,
+            importe:prevPD.full.ventas?prevPD.full.ventas.totalVentas:null,
+            cigarrillos:prevPD.full.ventas?prevPD.full.ventas.cigarrillos:null,
+            recuperar:subtotal,
+            nroFacturaACA:prevPD.full.nroFacturaACA||'',
+            fechaCancelacion:prevPD.full.fechaCancelacion||'',
+            importe_interes:int.montoInt||null,
+            totalFinal:(subtotal||0)+int.montoInt,
+            comprobanteTransferencia:prevPD.full.comprobanteTransferencia||null,
+            locked:true
+          });
+        }
+      }
+      // Migrar canonHistory del Hotel
+      if(prevPD.hotel&&prevPD.hotel.canonHistory&&prevPD.hotel.canonHistory.length>0){
+        PD.hotel.canonHistory=JSON.parse(JSON.stringify(prevPD.hotel.canonHistory));
+      }
+      // Migrar telHistory del Hotel
+      if(prevPD.hotel&&prevPD.hotel.telHistory&&prevPD.hotel.telHistory.length>0){
+        PD.hotel.telHistory=JSON.parse(JSON.stringify(prevPD.hotel.telHistory));
+      }
+      // Migrar cancelaciones
+      if(prevPD.cancelaciones&&prevPD.cancelaciones.length>0){
+        PD.cancelaciones=JSON.parse(JSON.stringify(prevPD.cancelaciones));
+      }
+      // Migrar us (datos históricos de Unidad Servicial)
+      // Para cada ítem de US, traer las filas del mes anterior que estén locked
+      const usKeys=['electricidad','aguas','telefono','dpa','canon'];
+      for(const k of usKeys){
+        if(prevPD.us&&prevPD.us[k]){
+          const prevRows=prevPD.us[k].filter(r=>r.locked);
+          if(prevRows.length>0&&PD.us[k]){
+            const existing=new Set(PD.us[k].map(r=>r.period));
+            prevRows.forEach(r=>{if(!existing.has(r.period))PD.us[k].push({...r});});
+          }
+        }
+      }
+      // Guardar el PD migrado para que no tenga que migrar cada vez
+      await saveP();
+    }
+  }
 }
 async function saveP(){
   // Guardar en la clave del período actual
@@ -2367,10 +2427,25 @@ let yerSub = 'diferencias';
 
 async function loadYER(){
   const raw = await sGet('yer:'+CP, true);
-  if(raw){ YER = JSON.parse(raw); }
-  else {
-    const praw = await sGet('yer:pcts', true);
-    if(praw) YER.pcts = JSON.parse(praw);
+  if(raw){
+    YER = JSON.parse(raw);
+  } else {
+    // Mes nuevo: traer liqHistory y pcts del mes anterior
+    const prevP=prevMonth(CP);
+    const prevRaw=await sGet('yer:'+prevP,true);
+    if(prevRaw){
+      const prevYER=JSON.parse(prevRaw);
+      // Migrar historial de liquidaciones y porcentajes, pero NO los datos del mes (rows, evRows)
+      if(prevYER.liqHistory&&prevYER.liqHistory.length>0){
+        YER.liqHistory=JSON.parse(JSON.stringify(prevYER.liqHistory));
+      }
+      if(prevYER.pcts) YER.pcts=JSON.parse(JSON.stringify(prevYER.pcts));
+      // Si el mes anterior tenía una liquidación del mes anterior (la última)
+      // y no está ya en el historial, agregarla
+    } else {
+      const praw = await sGet('yer:pcts', true);
+      if(praw) YER.pcts = JSON.parse(praw);
+    }
   }
   if(!YER.evRows) YER.evRows = [];
   if(!YER.everilioFile) YER.everilioFile = null;
