@@ -531,7 +531,7 @@ function attachLogin(){
 
 // ── SHELL ─────────────────────────────────────────────────────
 function renderShell(){
-  const tabs=[{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'},{key:'cancel',label:'Cancelaciones'}];
+  const tabs=[{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'},{key:'cancel',label:'Cancelaciones'},{key:'checks',label:'✅ Checks'}];
   if(CU.role==='admin'){tabs.push({key:'varios',label:'Varios'});tabs.push({key:'resumen',label:'Resumen'});}
   return`<div class="topbar">
     <div class="brand">ACA <span>Recuperos</span></div>
@@ -2037,6 +2037,7 @@ function renderTab(){
         attachYER();
       });break;
     }
+    case 'checks': el.innerHTML=renderChecks();attachChecks();break;
     case 'cancel': el.innerHTML=renderCancel();attachCancel();break;
     case 'varios': el.innerHTML=renderVarios();attachVarios();break;
     case 'resumen':el.innerHTML=renderResumen();loadHist();break;
@@ -3509,7 +3510,372 @@ function attachCancel(){
   activateSearch('cancel-hist-search','.cancel-hist-row');
 }
 
-// ── INICIO ────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// ── CHECKS DE SEGURIDAD ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+let checksAnio=new Date().getFullYear();
+let checksView=null; // null=grilla, 'YYYY-MM'=vista mes
+
+function parseCheckPDF(text){
+  // Parser automático del Check List MAS Red Propia
+  const lines=text.split('\n');
+  const items=[];
+  // Extraer encabezado
+  let eess='',fecha='',auditor='';
+  for(let i=0;i<Math.min(15,lines.length);i++){
+    const l=lines[i];
+    if(l.includes('EESS:'))eess=l.replace(/.*EESS:\s*/,'').replace(/Fecha:.*/,'').trim();
+    if(l.includes('Fecha:'))fecha=l.replace(/.*Fecha:\s*/,'').trim();
+    if(l.includes('Auditor:'))auditor=l.replace(/.*Auditor:\s*/,'').trim();
+  }
+  let i=0;
+  // Buscar inicio de items (primera línea que es solo un número)
+  while(i<lines.length&&!/^\d+$/.test(lines[i].trim()))i++;
+  while(i<lines.length){
+    const l=lines[i].trim();
+    if(!/^\d+$/.test(l)){i++;continue;}
+    const num=parseInt(l);
+    const pregLines=[];
+    let estado=null;
+    const obsLines=[];
+    let fechaObs='';
+    const sectorLines=[];
+    i++;
+    // Acumular pregunta hasta encontrar estado
+    while(i<lines.length){
+      const ll=lines[i].trim();
+      if(/^(Cumple|No Cumple|N\/A|NO cumple)/i.test(ll)){estado=ll;i++;break;}
+      if(/^N° Pregunta/.test(ll))break; // encabezado de página siguiente
+      pregLines.push(ll);
+      i++;
+    }
+    if(!estado){i++;continue;}
+    // Acumular obs/fecha/sector hasta el próximo número
+    while(i<lines.length){
+      const ll=lines[i].trim();
+      if(/^\d+$/.test(ll)||/^N° Pregunta/.test(ll))break;
+      if(/^\d{2}\/\d{4}$/.test(ll))fechaObs=ll;
+      else if(/^[A-ZÁÉÍÓÚÑ\s\/\-]+$/.test(ll)&&ll.length>3&&ll===ll.toUpperCase())sectorLines.push(ll);
+      else if(ll)obsLines.push(ll);
+      i++;
+    }
+    items.push({
+      n:num,
+      pregunta:pregLines.filter(Boolean).join(' '),
+      estado:estado.trim(),
+      obs:obsLines.filter(Boolean).join(' '),
+      fechaObs,
+      sector:sectorLines.join(' ')
+    });
+  }
+  return{eess,fecha,auditor,items};
+}
+
+function renderChecks(){
+  if(checksView)return renderChecksMes(checksView);
+  return renderChecksGrid();
+}
+
+function renderChecksGrid(){
+  const anios=[];
+  const yn=new Date().getFullYear();
+  for(let y=yn-1;y<=yn+1;y++)anios.push(y);
+  const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">✅ Checks de Seguridad MAS</h3>
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-right:8px;">AÑO</label>
+      <select id="checks-anio-sel" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
+        ${anios.map(y=>`<option value="${y}" ${y===checksAnio?'selected':''}>${y}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">`;
+
+  for(let m=1;m<=12;m++){
+    const period=`${checksAnio}-${String(m).padStart(2,'0')}`;
+    // Buscar si hay check cargado para este período
+    // Lo vamos a detectar desde storage cuando se cargue
+    html+=`<div data-checks-mes="${period}" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
+      onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
+      onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;">${MESES_LABELS[m-1]}</div>
+      <span id="check-badge-${period}" style="background:var(--r);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">Sin check</span>
+    </div>`;
+  }
+  html+=`</div>`;
+  return`<div class="cards"><div class="card"><div class="card-body">${html}</div></div></div>`;
+}
+
+async function loadCheckBadges(el){
+  const yn=checksAnio;
+  for(let m=1;m<=12;m++){
+    const period=`${yn}-${String(m).padStart(2,'0')}`;
+    const raw=await sGet(`check:${period}`,true);
+    if(raw){
+      const data=JSON.parse(raw);
+      const tile=el.querySelector(`#check-tile-${period}`);
+      const badge=el.querySelector(`#check-badge-${period}`);
+      if(tile){
+        tile.style.background='var(--gb)';
+        tile.style.borderColor='var(--gbr)';
+      }
+      if(badge){
+        const nc=data.items?data.items.filter(x=>/no cumple/i.test(x.estado)).length:0;
+        badge.style.background=nc>0?'var(--r)':'var(--g)';
+        badge.textContent=nc>0?`${nc} No Cumple`:'✓ Compliant';
+        badge.style.color='#fff';
+        if(tile){
+          const label=tile.querySelector('div');
+          if(label)label.style.color=nc>0?'var(--r)':'var(--g)';
+        }
+      }
+    }
+  }
+}
+
+async function renderChecksMes(period){
+  const raw=await sGet(`check:${period}`,true);
+  const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const [y,m]=period.split('-');
+  const mesLabel=`${MESES_LABELS[parseInt(m)-1]} ${y}`;
+
+  const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:left;`;
+  const tdBase=`padding:8px 12px;border:1px solid #E8E4F0;font-size:12px;vertical-align:top;`;
+
+  let contenido='';
+  if(!raw){
+    contenido=`<div style="text-align:center;padding:40px;border:2px dashed var(--b);border-radius:10px;margin-bottom:16px;">
+      <div style="font-size:32px;margin-bottom:12px;">📋</div>
+      <div style="font-size:15px;font-weight:700;color:var(--pd);margin-bottom:6px;">No hay check cargado para ${mesLabel}</div>
+      <div style="font-size:13px;color:var(--m2);margin-bottom:16px;">Subí el PDF del Check List MAS para procesarlo automáticamente</div>
+      <label style="background:var(--p);color:#fff;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;display:inline-block;">
+        📄 Subir PDF Check List
+        <input type="file" id="check-upload" accept=".pdf" data-period="${period}" hidden>
+      </label>
+    </div>`;
+  } else {
+    const data=JSON.parse(raw);
+    const items=data.items||[];
+    const nc=items.filter(x=>/no cumple/i.test(x.estado));
+    const cumple=items.filter(x=>x.estado==='Cumple');
+    const na=items.filter(x=>x.estado==='N/A');
+
+    // KPIs
+    contenido+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+      <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">✅ Cumple</div>
+        <div style="font-size:28px;font-weight:900;color:var(--g);">${cumple.length}</div>
+      </div>
+      <div style="background:${nc.length>0?'var(--rb)':'var(--gb)'};border:1px solid ${nc.length>0?'var(--rbr)':'var(--gbr)'};border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;font-weight:700;color:${nc.length>0?'var(--r)':'var(--g)'};text-transform:uppercase;margin-bottom:4px;">❌ No Cumple</div>
+        <div style="font-size:28px;font-weight:900;color:${nc.length>0?'var(--r)':'var(--g)'};">${nc.length}</div>
+      </div>
+      <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N/A</div>
+        <div style="font-size:28px;font-weight:900;color:var(--m2);">${na.length}</div>
+      </div>
+      <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Total</div>
+        <div style="font-size:28px;font-weight:900;color:var(--pd);">${items.length}</div>
+        <div style="font-size:10px;color:var(--m2);">Auditor: ${esc(data.auditor||'—')}</div>
+      </div>
+    </div>`;
+
+    // NO CONFORMIDADES destacadas
+    if(nc.length>0){
+      contenido+=`<div style="background:var(--rb);border:2px solid var(--rbr);border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:800;color:var(--r);margin-bottom:12px;">❌ NO CONFORMIDADES (${nc.length})</div>
+        ${nc.map(x=>`<div style="background:#fff;border:1px solid var(--rbr);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+              <span style="background:var(--r);color:#fff;font-size:11px;font-weight:900;padding:2px 8px;border-radius:4px;flex-shrink:0;">N°${x.n}</span>
+              <span style="font-size:13px;font-weight:700;color:var(--pd)">${esc(x.pregunta)}</span>
+            </div>
+            ${x.sector?`<span style="font-size:10px;font-weight:700;color:var(--m2);background:var(--bg);padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0">${esc(x.sector)}</span>`:''}
+          </div>
+          ${x.obs?`<div style="font-size:12px;color:var(--r);background:var(--rb);border-radius:6px;padding:8px 10px;margin-top:4px;">⚠️ ${esc(x.obs)}</div>`:''}
+          ${x.fechaObs?`<div style="font-size:10px;color:var(--m2);margin-top:4px;">Fecha observación: ${esc(x.fechaObs)}</div>`:''}
+        </div>`).join('')}
+      </div>`;
+    } else {
+      contenido+=`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center;font-size:14px;font-weight:700;color:var(--g);">
+        ✅ Sin no conformidades en este período
+      </div>`;
+    }
+
+    // Tabla completa colapsable
+    contenido+=`<details style="margin-bottom:16px;">
+      <summary style="cursor:pointer;padding:10px 14px;background:var(--card2);border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:700;color:var(--pd);list-style:none;">
+        📋 Ver tabla completa (${items.length} ítems)
+      </summary>
+      <div style="overflow-x:auto;margin-top:8px;">
+        <table style="border-collapse:collapse;width:100%;min-width:800px;">
+          <thead><tr>
+            <th style="${th}width:40px">N°</th>
+            <th style="${th}">Pregunta</th>
+            <th style="${th}width:100px">Estado</th>
+            <th style="${th}">Observaciones</th>
+            <th style="${th}width:80px">Fecha obs.</th>
+            <th style="${th}width:140px">Sector</th>
+          </tr></thead>
+          <tbody>${items.map((x,i)=>{
+            const bg=/no cumple/i.test(x.estado)?'#FFF5F5':x.estado==='N/A'?'#F9FAFB':i%2===0?'#FEFEFE':'#F8F5FB';
+            const estadoColor=/no cumple/i.test(x.estado)?'color:var(--r);font-weight:800':x.estado==='N/A'?'color:var(--m2)':'color:var(--g);font-weight:700';
+            return`<tr style="background:${bg}">
+              <td style="${tdBase}text-align:center;font-weight:700;color:var(--m2)">${x.n}</td>
+              <td style="${tdBase}">${esc(x.pregunta)}</td>
+              <td style="${tdBase}${estadoColor}">${esc(x.estado)}</td>
+              <td style="${tdBase}${/no cumple/i.test(x.estado)?'color:var(--r)':''}">${esc(x.obs||'')}</td>
+              <td style="${tdBase}text-align:center">${esc(x.fechaObs||'')}</td>
+              <td style="${tdBase}font-size:11px">${esc(x.sector||'')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </details>`;
+
+    // Memo PDF adjunto + opción reemplazar
+    contenido+=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      ${data.pdfMeta?`<button data-check-ver-pdf="${period}" style="${BSTYLE_VER}">📄 Ver PDF Check</button>`:''}
+      ${data.memoPdfMeta?`<button data-check-ver-memo="${period}" style="${BSTYLE_VER}">📝 Ver Memo</button>`:''}
+      <label style="background:var(--p);color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
+        🔄 Reemplazar Check PDF
+        <input type="file" id="check-upload" accept=".pdf" data-period="${period}" hidden>
+      </label>
+      <label style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
+        📎 ${data.memoPdfMeta?'Reemplazar':'Subir'} Memo PDF
+        <input type="file" id="memo-upload" accept=".pdf" data-period="${period}" hidden>
+      </label>
+      <button data-check-del="${period}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Eliminar</button>
+    </div>`;
+  }
+
+  return`<div class="cards"><div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:12px;">
+      <button id="checks-back" style="background:none;border:none;color:var(--p);font-size:20px;cursor:pointer;font-weight:700;">←</button>
+      <h3>✅ Check Seguridad — ${mesLabel}</h3>
+    </div>
+    <div class="card-body">${contenido}</div>
+  </div></div>`;
+}
+
+function attachChecks(){
+  const el=document.getElementById('tab-content');
+
+  // Selector año
+  el.querySelector('#checks-anio-sel')?.addEventListener('change',e=>{
+    checksAnio=parseInt(e.target.value);renderTab();
+  });
+
+  // Click en tile de mes
+  el.querySelectorAll('[data-checks-mes]').forEach(tile=>{
+    tile.addEventListener('click',async()=>{
+      checksView=tile.getAttribute('data-checks-mes');
+      el.innerHTML=await renderChecksMes(checksView);
+      attachChecks();
+    });
+  });
+
+  // Cargar badges dinámicamente
+  if(!checksView)loadCheckBadges(el);
+
+  // Volver
+  el.querySelector('#checks-back')?.addEventListener('click',()=>{
+    checksView=null;renderTab();
+  });
+
+  // Subir PDF del check
+  el.querySelector('#check-upload')?.addEventListener('change',async e=>{
+    const file=e.target.files[0];if(!file)return;
+    const period=e.target.getAttribute('data-period');
+    showLoad(true);
+    try{
+      // Leer PDF con pdf.js
+      const ab=await file.arrayBuffer();
+      const pdfjsLib=window['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf=await pdfjsLib.getDocument({data:ab}).promise;
+      let fullText='';
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p);
+        const tc=await page.getTextContent();
+        fullText+=tc.items.map(i=>i.str).join('\n')+'\n';
+      }
+      // Parsear
+      const parsed=parseCheckPDF(fullText);
+      // Guardar datos parseados + metadata del PDF
+      const du=await readDU(file);
+      const stored={
+        ...parsed,
+        pdfMeta:{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()},
+        pdfData:du,
+        periodo:period
+      };
+      await sSet(`check:${period}`,JSON.stringify(stored),true);
+      toast(`Check cargado ✓ — ${parsed.items.length} ítems, ${parsed.items.filter(x=>/no cumple/i.test(x.estado)).length} No Cumple`);
+      checksView=period;
+      el.innerHTML=await renderChecksMes(period);
+      attachChecks();
+    }catch(err){alert('Error al procesar el PDF: '+err.message);}
+    showLoad(false);
+  });
+
+  // Subir memo PDF
+  el.querySelector('#memo-upload')?.addEventListener('change',async e=>{
+    const file=e.target.files[0];if(!file)return;
+    const period=e.target.getAttribute('data-period');
+    showLoad(true);
+    try{
+      const du=await readDU(file);
+      const raw=await sGet(`check:${period}`,true);
+      const data=raw?JSON.parse(raw):{periodo:period,items:[]};
+      data.memoPdfMeta={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
+      data.memoPdfData=du;
+      await sSet(`check:${period}`,JSON.stringify(data),true);
+      toast('Memo adjunto ✓');
+      el.innerHTML=await renderChecksMes(period);
+      attachChecks();
+    }catch(err){alert('Error: '+err.message);}
+    showLoad(false);
+  });
+
+  // Ver PDF check
+  el.querySelectorAll('[data-check-ver-pdf]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-check-ver-pdf');
+      const raw=await sGet(`check:${period}`,true);
+      if(!raw)return;
+      const data=JSON.parse(raw);
+      if(data.pdfData)openFileViewer({fileName:data.pdfMeta?.fileName||'check.pdf',type:'application/pdf',dataUrl:data.pdfData});
+    });
+  });
+
+  // Ver memo
+  el.querySelectorAll('[data-check-ver-memo]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const period=btn.getAttribute('data-check-ver-memo');
+      const raw=await sGet(`check:${period}`,true);
+      if(!raw)return;
+      const data=JSON.parse(raw);
+      if(data.memoPdfData)openFileViewer({fileName:data.memoPdfMeta?.fileName||'memo.pdf',type:'application/pdf',dataUrl:data.memoPdfData});
+    });
+  });
+
+  // Eliminar check
+  el.querySelectorAll('[data-check-del]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('¿Eliminar el check de este período?'))return;
+      const period=btn.getAttribute('data-check-del');
+      showLoad(true);
+      await sDel(`check:${period}`,true);
+      showLoad(false);
+      toast('Eliminado');
+      checksView=null;renderTab();
+    });
+  });
+}
 render();
 </script>
 </body>
