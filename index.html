@@ -2037,7 +2037,17 @@ function renderTab(){
         attachYER();
       });break;
     }
-    case 'checks': el.innerHTML=renderChecks();attachChecks();break;
+    case 'checks': {
+      (async()=>{
+        el.innerHTML=renderChecksGrid();
+        attachChecks();
+        if(checksView){
+          el.innerHTML=await renderChecksMes(checksView);
+          attachChecks();
+        }
+      })();
+      break;
+    }
     case 'cancel': el.innerHTML=renderCancel();attachCancel();break;
     case 'varios': el.innerHTML=renderVarios();attachVarios();break;
     case 'resumen':el.innerHTML=renderResumen();loadHist();break;
@@ -3582,57 +3592,137 @@ function renderChecksGrid(){
   const yn=new Date().getFullYear();
   for(let y=yn-1;y<=yn+1;y++)anios.push(y);
   const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+
+  // Sub-vista: grilla, historial o pendientes
+  const subView=checksView; // null=grilla
+
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">✅ Checks de Seguridad MAS</h3>
-    <div>
-      <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-right:8px;">AÑO</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;">AÑO</label>
       <select id="checks-anio-sel" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
         ${anios.map(y=>`<option value="${y}" ${y===checksAnio?'selected':''}>${y}</option>`).join('')}
       </select>
     </div>
   </div>
+
+  <!-- Sub-tabs -->
+  <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--b);padding-bottom:0;">
+    <button id="checks-sub-grilla" style="padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid var(--p);color:var(--p);margin-bottom:-2px;">📅 Meses</button>
+    <button id="checks-sub-pendientes" style="padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);">🔴 Pendientes</button>
+    <button id="checks-sub-historial" style="padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);">📋 Historial NC</button>
+  </div>
+
+  <div id="checks-sub-content">
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">`;
 
   for(let m=1;m<=12;m++){
     const period=`${checksAnio}-${String(m).padStart(2,'0')}`;
-    // Buscar si hay check cargado para este período
-    // Lo vamos a detectar desde storage cuando se cargue
     html+=`<div data-checks-mes="${period}" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
       onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
       onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;">${MESES_LABELS[m-1]}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;" id="check-tile-label-${period}">${MESES_LABELS[m-1]}</div>
       <span id="check-badge-${period}" style="background:var(--r);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">Sin check</span>
     </div>`;
   }
-  html+=`</div>`;
+  html+=`</div></div>`;
   return`<div class="cards"><div class="card"><div class="card-body">${html}</div></div></div>`;
 }
 
-async function loadCheckBadges(el){
-  const yn=checksAnio;
-  for(let m=1;m<=12;m++){
-    const period=`${yn}-${String(m).padStart(2,'0')}`;
-    const raw=await sGet(`check:${period}`,true);
-    if(raw){
-      const data=JSON.parse(raw);
-      const tile=el.querySelector(`#check-tile-${period}`);
-      const badge=el.querySelector(`#check-badge-${period}`);
-      if(tile){
-        tile.style.background='var(--gb)';
-        tile.style.borderColor='var(--gbr)';
-      }
-      if(badge){
-        const nc=data.items?data.items.filter(x=>/no cumple/i.test(x.estado)).length:0;
-        badge.style.background=nc>0?'var(--r)':'var(--g)';
-        badge.textContent=nc>0?`${nc} No Cumple`:'✓ Compliant';
-        badge.style.color='#fff';
-        if(tile){
-          const label=tile.querySelector('div');
-          if(label)label.style.color=nc>0?'var(--r)':'var(--g)';
-        }
-      }
-    }
+async function renderChecksHistorial(){
+  // Cargar todos los checks disponibles
+  const yn=new Date().getFullYear();
+  const periodos=[];
+  for(let y=yn-2;y<=yn;y++)for(let m=1;m<=12;m++)periodos.push(`${y}-${String(m).padStart(2,'0')}`);
+  const allNC=[];
+  for(const p of periodos){
+    const raw=await sGet(`check:${p}`,true);
+    if(!raw)continue;
+    const data=JSON.parse(raw);
+    const MESES_LABELS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const [y,m]=p.split('-');
+    const mesLabel=`${MESES_LABELS[parseInt(m)-1]}-${y}`;
+    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado));
+    nc.forEach(x=>{
+      allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''});
+    });
   }
+  if(!allNC.length)return`<div class="empty-s"><p>No hay no conformidades registradas en ningún período.</p></div>`;
+  const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
+  const trs=allNC.map((x,i)=>{
+    const cerrada=x.cerrada||false;
+    const rowBg=cerrada?'#F0FFF4':'#FFF5F5';
+    return`<tr style="background:${rowBg}">
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center;font-size:12px;font-weight:700;white-space:nowrap">${x.mesLabel}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center;font-size:11px;font-weight:700;color:var(--p)">N°${x.n}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:12px">${esc(x.pregunta)}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--r)">${esc(x.obs||'')}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px">${esc(x.sector||'')}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center">
+        <span style="background:${cerrada?'var(--g)':'var(--r)'};color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px">${cerrada?'✓ Cerrada':'Abierta'}</span>
+      </td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--m2)">${esc(x.detallecierre||'')}</td>
+    </tr>`;
+  }).join('');
+  return`<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:900px">
+    <thead><tr>
+      <th style="${th}">Período</th><th style="${th}">N°</th><th style="${th}">No Conformidad</th>
+      <th style="${th}">Observación</th><th style="${th}">Sector</th>
+      <th style="${th}">Estado</th><th style="${th}">Detalle cierre</th>
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table></div>`;
+}
+
+async function renderChecksPendientes(){
+  const yn=new Date().getFullYear();
+  const periodos=[];
+  for(let y=yn-2;y<=yn;y++)for(let m=1;m<=12;m++)periodos.push(`${y}-${String(m).padStart(2,'0')}`);
+  const allNC=[];
+  for(const p of periodos){
+    const raw=await sGet(`check:${p}`,true);
+    if(!raw)continue;
+    const data=JSON.parse(raw);
+    const MESES_LABELS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const [y,m]=p.split('-');
+    const mesLabel=`${MESES_LABELS[parseInt(m)-1]}-${y}`;
+    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado)&&!x.cerrada);
+    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''}));
+  }
+  if(!allNC.length)return`<div style="text-align:center;padding:32px;background:var(--gb);border:1px solid var(--gbr);border-radius:10px">
+    <div style="font-size:28px;margin-bottom:8px">✅</div>
+    <div style="font-size:15px;font-weight:700;color:var(--g)">¡Sin no conformidades pendientes!</div>
+  </div>`;
+
+  const cards=allNC.map(x=>`
+    <div style="background:var(--card);border:1.5px solid var(--rbr);border-radius:10px;padding:14px 16px;margin-bottom:10px" id="nc-card-${x.periodo}-${x.n}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="background:var(--p);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;white-space:nowrap">${x.mesLabel}</span>
+          <span style="background:var(--r);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px">N°${x.n}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--m2)">${esc(x.sector||'')}</span>
+        </div>
+        <span style="background:var(--rb);color:var(--r);font-size:10px;font-weight:800;padding:2px 10px;border-radius:4px;white-space:nowrap">⏳ Pendiente</span>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--pd);margin-bottom:6px">${esc(x.pregunta)}</div>
+      ${x.obs?`<div style="font-size:12px;color:var(--r);background:var(--rb);border-radius:6px;padding:7px 10px;margin-bottom:10px">⚠️ ${esc(x.obs)}</div>`:''}
+      <!-- Detalle / Cierre -->
+      <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+        <textarea id="nc-det-${x.periodo}-${x.n}" placeholder="Agregar detalle o acción tomada..." rows="2"
+          style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--b);border-radius:6px;font-size:12px;font-family:inherit;resize:vertical">${esc(x.detalle||'')}</textarea>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button data-nc-guardar="${x.periodo}" data-nc-n="${x.n}"
+            style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 Guardar detalle</button>
+          <button data-nc-cerrar="${x.periodo}" data-nc-n="${x.n}"
+            style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">✅ Marcar cerrada</button>
+        </div>
+      </div>
+    </div>`).join('');
+
+  return`<div>
+    <div style="font-size:13px;font-weight:700;color:var(--r);margin-bottom:14px">🔴 ${allNC.length} no conformidad${allNC.length>1?'es':''} pendiente${allNC.length>1?'s':''}</div>
+    ${cards}
+  </div>`;
 }
 
 async function renderChecksMes(period){
@@ -3761,8 +3851,127 @@ async function renderChecksMes(period){
   </div></div>`;
 }
 
-function attachChecks(){
+async function attachNCHandlers(container){
+  container.querySelectorAll('[data-nc-guardar]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const periodo=btn.getAttribute('data-nc-guardar');
+      const n=parseInt(btn.getAttribute('data-nc-n'));
+      const det=container.querySelector(`#nc-det-${periodo}-${n}`)?.value.trim()||'';
+      showLoad(true);
+      const raw=await sGet(`check:${periodo}`,true);
+      if(raw){
+        const data=JSON.parse(raw);
+        const item=data.items.find(x=>x.n===n);
+        if(item){item.detalle=det;item.detalleAt=new Date().toISOString();}
+        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        toast('Detalle guardado ✓');
+      }
+      showLoad(false);
+    });
+  });
+  container.querySelectorAll('[data-nc-cerrar]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const periodo=btn.getAttribute('data-nc-cerrar');
+      const n=parseInt(btn.getAttribute('data-nc-n'));
+      const det=container.querySelector(`#nc-det-${periodo}-${n}`)?.value.trim()||'';
+      if(!confirm('¿Marcar como cerrada?'))return;
+      showLoad(true);
+      const raw=await sGet(`check:${periodo}`,true);
+      if(raw){
+        const data=JSON.parse(raw);
+        const item=data.items.find(x=>x.n===n);
+        if(item){item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();}
+        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        toast('No conformidad cerrada ✓');
+        const card=container.querySelector(`#nc-card-${periodo}-${n}`);
+        if(card){
+          card.style.background='var(--gb)';card.style.borderColor='var(--gbr)';
+          card.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:4px"><span style="font-size:20px">✅</span><span style="font-size:13px;font-weight:700;color:var(--g)">Cerrada — N°${n}</span></div>`;
+        }
+      }
+      showLoad(false);
+    });
+  });
+}
+
+async function loadCheckBadges(el){
+  const yn=checksAnio;
+  for(let m=1;m<=12;m++){
+    const period=`${yn}-${String(m).padStart(2,'0')}`;
+    const raw=await sGet(`check:${period}`,true);
+    if(!raw)continue;
+    const data=JSON.parse(raw);
+    const tile=el.querySelector(`#check-tile-${period}`);
+    const badge=el.querySelector(`#check-badge-${period}`);
+    const label=el.querySelector(`#check-tile-label-${period}`);
+    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado));
+    const ncAbiertas=nc.filter(x=>!x.cerrada);
+    if(tile){tile.style.background='var(--gb)';tile.style.borderColor='var(--gbr)';}
+    if(label)label.style.color=ncAbiertas.length>0?'var(--r)':'var(--g)';
+    if(badge){
+      badge.style.background=ncAbiertas.length>0?'var(--r)':'var(--g)';
+      badge.textContent=ncAbiertas.length>0?`${ncAbiertas.length} NC abiertas`:`✓ ${nc.length===0?'Compliant':'NC cerradas'}`;
+    }
+  }
+}
+
+async function attachChecks(){
   const el=document.getElementById('tab-content');
+
+  // Sub-solapas Historial / Pendientes
+  el.querySelector('#checks-sub-historial')?.addEventListener('click',async()=>{
+    const cont=el.querySelector('#checks-sub-content');
+    if(cont){cont.innerHTML='<div style="text-align:center;padding:20px;color:var(--m2)">Cargando...</div>';}
+    const html=await renderChecksHistorial();
+    if(cont)cont.innerHTML=html;
+    // Actualizar estilos de tabs
+    el.querySelector('#checks-sub-grilla').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+    el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+    el.querySelector('#checks-sub-historial').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--p);border-bottom:2px solid var(--p);margin-bottom:-2px';
+  });
+
+  el.querySelector('#checks-sub-pendientes')?.addEventListener('click',async()=>{
+    const cont=el.querySelector('#checks-sub-content');
+    if(cont){cont.innerHTML='<div style="text-align:center;padding:20px;color:var(--m2)">Cargando...</div>';}
+    const html=await renderChecksPendientes();
+    if(cont){
+      cont.innerHTML=html;
+      // Adjuntar handlers de guardar/cerrar NC
+      attachNCHandlers(cont);
+    }
+    el.querySelector('#checks-sub-grilla').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+    el.querySelector('#checks-sub-historial').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+    el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--p);border-bottom:2px solid var(--p);margin-bottom:-2px';
+  });
+
+  el.querySelector('#checks-sub-grilla')?.addEventListener('click',async()=>{
+    const cont=el.querySelector('#checks-sub-content');
+    const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    let gridHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
+    for(let m=1;m<=12;m++){
+      const period=`${checksAnio}-${String(m).padStart(2,'0')}`;
+      gridHtml+=`<div data-checks-mes="${period}" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
+        onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
+        onmouseout="this.style.transform='';this.style.boxShadow=''">
+        <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;" id="check-tile-label-${period}">${MESES_LABELS[m-1]}</div>
+        <span id="check-badge-${period}" style="background:var(--r);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">Sin check</span>
+      </div>`;
+    }
+    gridHtml+='</div>';
+    if(cont)cont.innerHTML=gridHtml;
+    loadCheckBadges(el);
+    // Re-adjuntar tiles
+    el.querySelectorAll('[data-checks-mes]').forEach(tile=>{
+      tile.addEventListener('click',async()=>{
+        checksView=tile.getAttribute('data-checks-mes');
+        el.innerHTML=await renderChecksMes(checksView);
+        attachChecks();
+      });
+    });
+    el.querySelector('#checks-sub-grilla').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--p);border-bottom:2px solid var(--p);margin-bottom:-2px';
+    el.querySelector('#checks-sub-historial').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+    el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
+  });
 
   // Selector año
   el.querySelector('#checks-anio-sel')?.addEventListener('change',e=>{
