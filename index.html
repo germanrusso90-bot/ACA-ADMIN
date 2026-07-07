@@ -3630,7 +3630,6 @@ function renderChecksGrid(){
 }
 
 async function renderChecksHistorial(){
-  // Cargar todos los checks disponibles
   const yn=new Date().getFullYear();
   const periodos=[];
   for(let y=yn-2;y<=yn;y++)for(let m=1;m<=12;m++)periodos.push(`${y}-${String(m).padStart(2,'0')}`);
@@ -3643,32 +3642,39 @@ async function renderChecksHistorial(){
     const [y,m]=p.split('-');
     const mesLabel=`${MESES_LABELS[parseInt(m)-1]}-${y}`;
     const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado));
-    nc.forEach(x=>{
-      allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''});
-    });
+    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''}));
   }
   if(!allNC.length)return`<div class="empty-s"><p>No hay no conformidades registradas en ningún período.</p></div>`;
   const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
   const trs=allNC.map((x,i)=>{
     const cerrada=x.cerrada||false;
-    const rowBg=cerrada?'#F0FFF4':'#FFF5F5';
-    return`<tr style="background:${rowBg}">
+    const rowBg=cerrada?(i%2===0?'#F0FFF4':'#E8FFF0'):(i%2===0?'#FFF5F5':'#FFF0F0');
+    return`<tr style="background:${rowBg}" id="hist-row-${x.periodo}-${x.n}">
       <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center;font-size:12px;font-weight:700;white-space:nowrap">${x.mesLabel}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center;font-size:11px;font-weight:700;color:var(--p)">N°${x.n}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:12px">${esc(x.pregunta)}</td>
-      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--r)">${esc(x.obs||'')}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:${cerrada?'var(--m2)':'var(--r)'}">${esc(x.obs||'')}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px">${esc(x.sector||'')}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center">
-        <span style="background:${cerrada?'var(--g)':'var(--r)'};color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px">${cerrada?'✓ Cerrada':'Abierta'}</span>
+        <span style="background:${cerrada?'var(--g)':'var(--r)'};color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px">${cerrada?'✓ Cerrada':'⏳ Abierta'}</span>
       </td>
-      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--m2)">${esc(x.detallecierre||'')}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--m2);max-width:160px">${esc(x.detallecierre||x.detalle||'')}</td>
+      <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center">
+        ${cerrada
+          ?`<button data-nc-reabrir="${x.periodo}" data-nc-n="${x.n}"
+              style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+              ↩ Reabrir
+            </button>`
+          :`<span style="font-size:11px;color:var(--m2)">—</span>`
+        }
+      </td>
     </tr>`;
   }).join('');
-  return`<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:900px">
+  return`<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
     <thead><tr>
       <th style="${th}">Período</th><th style="${th}">N°</th><th style="${th}">No Conformidad</th>
       <th style="${th}">Observación</th><th style="${th}">Sector</th>
-      <th style="${th}">Estado</th><th style="${th}">Detalle cierre</th>
+      <th style="${th}">Estado</th><th style="${th}">Detalle</th><th style="${th}">Acción</th>
     </tr></thead>
     <tbody>${trs}</tbody>
   </table></div>`;
@@ -3852,6 +3858,7 @@ async function renderChecksMes(period){
 }
 
 async function attachNCHandlers(container){
+  // Guardar detalle sin cerrar
   container.querySelectorAll('[data-nc-guardar]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const periodo=btn.getAttribute('data-nc-guardar');
@@ -3869,6 +3876,8 @@ async function attachNCHandlers(container){
       showLoad(false);
     });
   });
+
+  // Cerrar NC
   container.querySelectorAll('[data-nc-cerrar]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const periodo=btn.getAttribute('data-nc-cerrar');
@@ -3887,6 +3896,37 @@ async function attachNCHandlers(container){
         if(card){
           card.style.background='var(--gb)';card.style.borderColor='var(--gbr)';
           card.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:4px"><span style="font-size:20px">✅</span><span style="font-size:13px;font-weight:700;color:var(--g)">Cerrada — N°${n}</span></div>`;
+        }
+      }
+      showLoad(false);
+    });
+  });
+
+  // Reabrir NC (desde historial)
+  container.querySelectorAll('[data-nc-reabrir]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const periodo=btn.getAttribute('data-nc-reabrir');
+      const n=parseInt(btn.getAttribute('data-nc-n'));
+      if(!confirm('¿Reabrir esta no conformidad? Volverá a aparecer en Pendientes.'))return;
+      showLoad(true);
+      const raw=await sGet(`check:${periodo}`,true);
+      if(raw){
+        const data=JSON.parse(raw);
+        const item=data.items.find(x=>x.n===n);
+        if(item){
+          delete item.cerrada;
+          delete item.detallecierre;
+          delete item.fechaCierre;
+        }
+        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        toast('NC reabierta — vuelve a Pendientes ✓');
+        // Actualizar fila visualmente
+        const row=container.querySelector(`#hist-row-${periodo}-${n}`);
+        if(row){
+          row.style.background='#FFF5F5';
+          const badge=row.querySelector('span[style*="background"]');
+          if(badge){badge.style.background='var(--r)';badge.textContent='⏳ Abierta';}
+          btn.remove();
         }
       }
       showLoad(false);
@@ -3923,7 +3963,10 @@ async function attachChecks(){
     const cont=el.querySelector('#checks-sub-content');
     if(cont){cont.innerHTML='<div style="text-align:center;padding:20px;color:var(--m2)">Cargando...</div>';}
     const html=await renderChecksHistorial();
-    if(cont)cont.innerHTML=html;
+    if(cont){
+      cont.innerHTML=html;
+      attachNCHandlers(cont); // para el botón Reabrir
+    }
     // Actualizar estilos de tabs
     el.querySelector('#checks-sub-grilla').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
     el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
