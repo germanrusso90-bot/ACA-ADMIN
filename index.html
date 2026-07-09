@@ -303,7 +303,7 @@ async function getDB(){
   return _db;
 }
 // Cache en memoria para minimizar lecturas a Firestore
-const _cache={};
+let _cache={};
 async function sGet(k,sh=true){
   // Claves globales (sin prefijo CR): periodos globales del sistema
   const globalKeys=['yer:pcts','canon:litros'];
