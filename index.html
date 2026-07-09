@@ -296,16 +296,25 @@ const firebaseConfig={apiKey:"AIzaSyCw8tsg_WaL-Fo2YJGoEgIMpF6Ed6Wcijc",authDomai
 let _db=null;
 async function getDB(){
   if(_db)return _db;
-  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-  const {getFirestore,doc,getDoc,setDoc,deleteDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-  const app=getApps().length?getApps()[0]:initializeApp(firebaseConfig);
-  _db={fs:getFirestore(app),doc,getDoc,setDoc,deleteDoc};
-  return _db;
+  try{
+    // Timeout de 5 segundos para Firebase
+    const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('Firebase timeout')),5000));
+    const connect=async()=>{
+      const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+      const {getFirestore,doc,getDoc,setDoc,deleteDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const app=getApps().length?getApps()[0]:initializeApp(firebaseConfig);
+      _db={fs:getFirestore(app),doc,getDoc,setDoc,deleteDoc};
+      return _db;
+    };
+    return await Promise.race([connect(),timeout]);
+  }catch(e){
+    console.warn('Firebase no disponible:',e.message);
+    throw e;
+  }
 }
 // Cache en memoria para minimizar lecturas a Firestore
 let _cache={};
 async function sGet(k,sh=true){
-  // Claves globales (sin prefijo CR): periodos globales del sistema
   const globalKeys=['yer:pcts','canon:litros'];
   const fullKey=globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
     k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
@@ -317,26 +326,36 @@ async function sGet(k,sh=true){
     const val=snap.exists()?snap.data().v:null;
     _cache[fullKey]=val;
     return val;
-  }catch(e){console.warn('sGet error',fullKey,e);return localStorage.getItem(fullKey);}
+  }catch(e){
+    // Fallback localStorage
+    const lv=localStorage.getItem(fullKey);
+    if(lv!==null){_cache[fullKey]=lv;return lv;}
+    console.warn('sGet error',fullKey,e.message?.slice(0,60));
+    return null;
+  }
 }
 async function sSet(k,v,sh=true){
   const globalKeys=['yer:pcts','canon:litros'];
   const fullKey=globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
     k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
   _cache[fullKey]=v;
+  localStorage.setItem(fullKey,v); // guardar también en localStorage como respaldo
   try{
     const db=await getDB();
     await db.setDoc(db.doc(db.fs,'kv',encodeKey(fullKey)),{v,k:fullKey,updatedAt:Date.now()});
-  }catch(e){console.warn('sSet error',fullKey,e);localStorage.setItem(fullKey,v);}
+  }catch(e){
+    console.warn('sSet error (solo localStorage)',fullKey,e.message?.slice(0,60));
+  }
   return true;
 }
 async function sDel(k,sh=true){
   const fullKey=k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
   delete _cache[fullKey];
+  localStorage.removeItem(fullKey);
   try{
     const db=await getDB();
     await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(fullKey)));
-  }catch(e){console.warn('sDel error',fullKey,e);localStorage.removeItem(fullKey);}
+  }catch(e){console.warn('sDel error',fullKey,e.message?.slice(0,60));}
 }
 function encodeKey(k){
   // Firestore no acepta / en IDs de documento
