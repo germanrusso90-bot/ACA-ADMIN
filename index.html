@@ -312,50 +312,102 @@ async function getDB(){
     throw e;
   }
 }
-// Cache en memoria para minimizar lecturas a Firestore
+// ── CACHÉ EN TRES CAPAS ──────────────────────────────────────
+// 1. Memoria (_cache): instantáneo, se limpia al recargar
+// 2. localStorage: persiste entre sesiones, TTL configurable
+// 3. Firebase: fuente de verdad, se consulta en background
+// ─────────────────────────────────────────────────────────────
 let _cache={};
-async function sGet(k,sh=true){
+const LS_TTL_CORTO=5*60*1000;    // 5 min — datos que cambian seguido (periodos, data:CP)
+const LS_TTL_LARGO=60*60*1000;   // 1 hora — checks, historial (cambian poco)
+
+function lsGet(key){
+  try{
+    const raw=localStorage.getItem('_ttl:'+key);
+    if(!raw)return null;
+    const{v,ts,ttl}=JSON.parse(raw);
+    if(Date.now()-ts>ttl)return null; // expirado
+    return v;
+  }catch(e){return null;}
+}
+function lsSet(key,v,ttl=LS_TTL_CORTO){
+  try{localStorage.setItem('_ttl:'+key,JSON.stringify({v,ts:Date.now(),ttl}));}
+  catch(e){/* localStorage lleno */}
+}
+function lsDel(key){
+  localStorage.removeItem('_ttl:'+key);
+  localStorage.removeItem(key); // limpiar formato viejo también
+}
+
+function getTTL(key){
+  // Checks y archivos cambian poco → TTL largo
+  if(key.includes('check:')||key.includes('file:')||key.includes('periodos'))return LS_TTL_LARGO;
+  return LS_TTL_CORTO;
+}
+
+function fullKey(k){
   const globalKeys=['yer:pcts','canon:litros'];
-  const fullKey=globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
+  return globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
     k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
-  if(_cache[fullKey]!==undefined)return _cache[fullKey];
+}
+
+async function sGet(k,sh=true){
+  const fk=fullKey(k);
+  // 1. Memoria
+  if(_cache[fk]!==undefined)return _cache[fk];
+  // 2. localStorage con TTL
+  const lv=lsGet(fk);
+  if(lv!==null){
+    _cache[fk]=lv;
+    // Refrescar Firebase en background sin bloquear
+    _fbRefresh(fk);
+    return lv;
+  }
+  // 3. Firebase (bloqueante solo si no hay caché)
   try{
     const db=await getDB();
-    const ref=db.doc(db.fs,'kv',encodeKey(fullKey));
-    const snap=await db.getDoc(ref);
+    const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(fk)));
     const val=snap.exists()?snap.data().v:null;
-    _cache[fullKey]=val;
+    _cache[fk]=val;
+    if(val!==null)lsSet(fk,val,getTTL(fk));
     return val;
   }catch(e){
-    // Fallback localStorage
-    const lv=localStorage.getItem(fullKey);
-    if(lv!==null){_cache[fullKey]=lv;return lv;}
-    console.warn('sGet error',fullKey,e.message?.slice(0,60));
+    console.warn('sGet Firebase error',fk,e.message?.slice(0,50));
     return null;
   }
 }
+
+// Refresca Firebase en background (sin await) y actualiza caché si cambió
+function _fbRefresh(fk){
+  getDB().then(db=>db.getDoc(db.doc(db.fs,'kv',encodeKey(fk)))).then(snap=>{
+    const val=snap.exists()?snap.data().v:null;
+    if(val!==null&&val!==_cache[fk]){
+      _cache[fk]=val;
+      lsSet(fk,val,getTTL(fk));
+    }
+  }).catch(()=>{});
+}
+
 async function sSet(k,v,sh=true){
-  const globalKeys=['yer:pcts','canon:litros'];
-  const fullKey=globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
-    k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
-  _cache[fullKey]=v;
-  localStorage.setItem(fullKey,v); // guardar también en localStorage como respaldo
+  const fk=fullKey(k);
+  _cache[fk]=v;
+  lsSet(fk,v,getTTL(fk)); // guardar en localStorage inmediatamente
   try{
     const db=await getDB();
-    await db.setDoc(db.doc(db.fs,'kv',encodeKey(fullKey)),{v,k:fullKey,updatedAt:Date.now()});
+    await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v,k:fk,updatedAt:Date.now()});
   }catch(e){
-    console.warn('sSet error (solo localStorage)',fullKey,e.message?.slice(0,60));
+    console.warn('sSet Firebase error (guardado en localStorage)',fk,e.message?.slice(0,50));
   }
   return true;
 }
 async function sDel(k,sh=true){
-  const fullKey=k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
-  delete _cache[fullKey];
-  localStorage.removeItem(fullKey);
+  const fk=k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
+  delete _cache[fk];
+  lsDel(fk);
   try{
     const db=await getDB();
-    await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(fullKey)));
-  }catch(e){console.warn('sDel error',fullKey,e.message?.slice(0,60));}
+    await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(fk)));
+  }catch(e){console.warn('sDel error',fk);}
 }
 function encodeKey(k){
   // Firestore no acepta / en IDs de documento
@@ -694,7 +746,7 @@ function renderShell(){
   <div id="tab-content"></div>`;
 }
 function attachShell(){
-  document.getElementById('logout-btn').addEventListener('click',()=>{CU=null;PD=null;render();});
+  document.getElementById('logout-btn').addEventListener('click',()=>{CU=null;PD=null;_cache={};render();});
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       AT=btn.getAttribute('data-tab');usView=null;
@@ -3719,57 +3771,143 @@ let checksAnio=new Date().getFullYear();
 let checksView=null; // null=grilla, 'YYYY-MM'=vista mes
 
 function parseCheckPDF(text){
-  // Parser automático del Check List MAS Red Propia
-  const lines=text.split('\n');
-  const items=[];
-  // Extraer encabezado
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+
+  // ── Extraer encabezado (funciona para ambos formatos) ─────
   let eess='',fecha='',auditor='';
-  for(let i=0;i<Math.min(15,lines.length);i++){
+  for(let i=0;i<Math.min(25,lines.length);i++){
     const l=lines[i];
-    if(l.includes('EESS:'))eess=l.replace(/.*EESS:\s*/,'').replace(/Fecha:.*/,'').trim();
-    if(l.includes('Fecha:'))fecha=l.replace(/.*Fecha:\s*/,'').trim();
-    if(l.includes('Auditor:'))auditor=l.replace(/.*Auditor:\s*/,'').trim();
+    if(l.includes('EESS:'))       eess=l.replace(/.*EESS:\s*/,'').replace(/Fecha:.*/,'').trim();
+    if(l.includes('Fecha:'))      fecha=l.replace(/.*Fecha:\s*/,'').trim();
+    if(l.includes('Auditor:'))    auditor=l.replace(/.*Auditor:\s*/,'').trim();
+    if(l==='Auditor'&&lines[i+1]) auditor=lines[i+1]; // Formato 2: label en línea propia
+    if(l==='Establecimiento'&&lines[i+1]) eess=lines[i+1];
+    if(l==='Fecha de la auditoría'&&lines[i+1]) fecha=lines[i+1];
+    if(l==='Auditor'&&lines[i+1]&&!auditor) auditor=lines[i+1];
   }
-  let i=0;
-  // Buscar inicio de items (primera línea que es solo un número)
-  while(i<lines.length&&!/^\d+$/.test(lines[i].trim()))i++;
-  while(i<lines.length){
-    const l=lines[i].trim();
-    if(!/^\d+$/.test(l)){i++;continue;}
-    const num=parseInt(l);
-    const pregLines=[];
-    let estado=null;
-    const obsLines=[];
-    let fechaObs='';
-    const sectorLines=[];
-    i++;
-    // Acumular pregunta hasta encontrar estado
-    while(i<lines.length){
-      const ll=lines[i].trim();
-      if(/^(Cumple|No Cumple|N\/A|NO cumple)/i.test(ll)){estado=ll;i++;break;}
-      if(/^N° Pregunta/.test(ll))break; // encabezado de página siguiente
-      pregLines.push(ll);
-      i++;
+  // Detectar auditor desde firma al final si no está en encabezado
+  if(!auditor){
+    for(let i=lines.length-1;i>lines.length-20;i--){
+      if(lines[i]&&/^[A-ZÁÉÍÓÚ][a-záéíóú]/.test(lines[i])&&lines[i].includes(' ')&&lines[i].length<50){
+        const prev=lines[i-1]||'';
+        if(/LIC\.|ING\.|ANDRES|ALINA|SIERRA/i.test(lines[i])||/LIC\.|MAT\./i.test(prev)){
+          auditor=lines[i];break;
+        }
+      }
     }
-    if(!estado){i++;continue;}
-    // Acumular obs/fecha/sector hasta el próximo número
-    while(i<lines.length){
-      const ll=lines[i].trim();
-      if(/^\d+$/.test(ll)||/^N° Pregunta/.test(ll))break;
-      if(/^\d{2}\/\d{4}$/.test(ll))fechaObs=ll;
-      else if(/^[A-ZÁÉÍÓÚÑ\s\/\-]+$/.test(ll)&&ll.length>3&&ll===ll.toUpperCase())sectorLines.push(ll);
-      else if(ll)obsLines.push(ll);
-      i++;
-    }
-    items.push({
-      n:num,
-      pregunta:pregLines.filter(Boolean).join(' '),
-      estado:estado.trim(),
-      obs:obsLines.filter(Boolean).join(' '),
-      fechaObs,
-      sector:sectorLines.join(' ')
-    });
   }
+
+  // ── Detectar formato ─────────────────────────────────────
+  // Formato 1 (Alina): empieza con número de pregunta (línea = solo dígitos)
+  // Formato 2 (Andrés): empieza con SECTOR en mayúsculas, luego pregunta, luego estado
+  const ESTADOS = new Set(['Cumple','No Cumple','N/A']);
+  const SECTORES_RE = /^(PLAYA Y SURTIDORES|PLAYA|PROTECCION CONTRA INCENDIO|PROTECCION CONTRA|INSTALACIONES ELECTRICAS|INSTALACIONES|BOXES|LAVADERO|DEPOSITOS|TIENDA Y CAJA EDIFICADA|TIENDA|EQUIPAMIENTO|EPP|DOCUMENTACION|OTROS)/i;
+  const PALABRAS_SECTOR = new Set(['PLAYA','SURTIDORES','PROTECCION','INCENDIO','INSTALACIONES',
+    'ELECTRICAS','BOXES','LAVADERO','DEPOSITOS','TIENDA','CAJA','EDIFICADA',
+    'EQUIPAMIENTO','EPP','DOCUMENTACION','OTROS','CONTRA']);
+
+  // ¿Hay una línea que sea solo número antes de los ítems?
+  let esFormato1 = false;
+  for(let i=0;i<Math.min(60,lines.length);i++){
+    if(/^\d+$/.test(lines[i])&&parseInt(lines[i])>=1&&parseInt(lines[i])<=5){
+      esFormato1=true;break;
+    }
+  }
+
+  const items=[];
+
+  if(esFormato1){
+    // ── FORMATO 1: N° | pregunta | estado | obs | fechaObs | sector ──────
+    let i=0;
+    while(i<lines.length&&!/^\d+$/.test(lines[i]))i++;
+    let n=1;
+    while(i<lines.length){
+      const l=lines[i];
+      if(!/^\d+$/.test(l)){i++;continue;}
+      const num=parseInt(l);
+      if(num<1||num>110){i++;continue;}
+      i++;
+      const pregLines=[];
+      let estado=null,fechaObs='';
+      const obsLines=[],sectorLines=[];
+      while(i<lines.length){
+        const ll=lines[i];
+        if(/^(Cumple|No Cumple|N\/A)/i.test(ll)){estado=ll;i++;break;}
+        if(/^N° Pregunta/.test(ll)){i++;break;}
+        pregLines.push(ll);i++;
+      }
+      if(!estado){continue;}
+      while(i<lines.length){
+        const ll=lines[i];
+        if(/^\d+$/.test(ll)&&parseInt(ll)>=1&&parseInt(ll)<=110)break;
+        if(/^N° Pregunta/.test(ll))break;
+        if(/^\d{2}\/\d{4}$/.test(ll))fechaObs=ll;
+        else if(/^[A-ZÁÉÍÓÚÑ\s\/\-Y]+$/.test(ll)&&ll.length>3&&ll===ll.toUpperCase()&&PALABRAS_SECTOR.has(ll.split(' ')[0]))sectorLines.push(ll);
+        else if(ll)obsLines.push(ll);
+        i++;
+      }
+      items.push({n:num,pregunta:pregLines.filter(Boolean).join(' '),
+        estado:estado.trim(),obs:obsLines.filter(Boolean).join(' '),
+        fechaObs,sector:sectorLines.join(' ')});
+    }
+  } else {
+    // ── FORMATO 2: SECTOR | pregunta (multilinea) | estado | [obs] ────────
+    // Buscar inicio del checklist (después de "Observaciones" o primer sector)
+    let start=0;
+    for(let i=0;i<lines.length;i++){
+      if(lines[i]==='Observaciones'&&i>0&&(lines[i-1]==='Resultado'||lines[i-1]==='Pregunta')){
+        start=i+1;break;
+      }
+      if(SECTORES_RE.test(lines[i])&&start===0)start=i;
+    }
+
+    // Fusionar sectores partidos en múltiples líneas (ej: "PROTECCION CONTRA" + "INCENDIO")
+    const fused=[];
+    let i=start;
+    while(i<lines.length){
+      const l=lines[i];
+      if(PALABRAS_SECTOR.has(l.toUpperCase())&&!ESTADOS.has(l)){
+        let merged=l;
+        let j=i+1;
+        while(j<lines.length&&PALABRAS_SECTOR.has(lines[j].toUpperCase())&&!ESTADOS.has(lines[j])&&lines[j].length<25){
+          merged+=' '+lines[j];j++;
+        }
+        fused.push(merged);i=j;
+      } else {
+        fused.push(l);i++;
+      }
+    }
+
+    // Parsear: SECTOR → pregunta(s) → estado → [observaciones]
+    i=0;let n=1;
+    let sector_actual='';
+    while(i<fused.length){
+      const l=fused[i];
+      if(SECTORES_RE.test(l.toUpperCase())){
+        sector_actual=l;i++;
+        // Acumular pregunta hasta estado
+        const preg=[];
+        while(i<fused.length){
+          const ll=fused[i];
+          if(ESTADOS.has(ll)||SECTORES_RE.test(ll.toUpperCase()))break;
+          preg.push(ll);i++;
+        }
+        if(!preg.length){continue;}
+        const pregunta=preg.join(' ');
+        const estado=ESTADOS.has(fused[i])?fused[i++]:'Cumple';
+        // Observaciones hasta próximo sector o estado
+        const obs=[];
+        while(i<fused.length){
+          const ll=fused[i];
+          if(SECTORES_RE.test(ll.toUpperCase())||ESTADOS.has(ll))break;
+          obs.push(ll);i++;
+        }
+        items.push({n,pregunta,estado,obs:obs.join(' '),fechaObs:'',sector:sector_actual});
+        n++;
+      } else {i++;}
+    }
+  }
+
   return{eess,fecha,auditor,items};
 }
 
@@ -4460,12 +4598,20 @@ async function getNcPendientes(cr){
 }
 
 async function sGetCR(cr,k){
-  const fullKey=`cr${cr}:${k}`;
+  const fk=`cr${cr}:${k}`;
+  // 1. Memoria
+  if(_cache[fk]!==undefined)return _cache[fk];
+  // 2. localStorage con TTL
+  const lv=lsGet(fk);
+  if(lv!==null){_cache[fk]=lv;_fbRefresh(fk);return lv;}
+  // 3. Firebase
   try{
     const db=await getDB();
-    const ref=db.doc(db.fs,'kv',encodeKey(fullKey));
-    const snap=await db.getDoc(ref);
-    return snap.exists()?snap.data().v:null;
+    const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(fk)));
+    const val=snap.exists()?snap.data().v:null;
+    _cache[fk]=val;
+    if(val!==null)lsSet(fk,val,getTTL(fk));
+    return val;
   }catch(e){return null;}
 }
 
