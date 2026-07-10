@@ -3772,52 +3772,101 @@ let checksView=null; // null=grilla, 'YYYY-MM'=vista mes
 
 function parseCheckPDF(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-
-  // ── Extraer encabezado (funciona para ambos formatos) ─────
+  const ESTADOS=new Set(['Cumple','No cumple','No Cumple','N/A','Sí','Si','No']);
   let eess='',fecha='',auditor='';
+
+  // ── Detectar formato ──────────────────────────────────────────
+  // Formato SafetyCulture: tiene "Score" y "Flagged items" en encabezado
+  // y sectores seguidos de "X / Y (Z%)"
+  const esSafetyCulture = lines.slice(0,20).some(l=>l==='Score'||l==='Flagged items'||l.includes('safetyculture.com'));
+  // Formato 1 (Alina/MAS tabla): tiene líneas que son solo números (N° de pregunta)
+  const esFormato1 = !esSafetyCulture && lines.slice(0,80).some(l=>/^\d+$/.test(l)&&parseInt(l)>=1&&parseInt(l)<=5);
+
+  // ── Extraer encabezado ────────────────────────────────────────
   for(let i=0;i<Math.min(25,lines.length);i++){
     const l=lines[i];
-    if(l.includes('EESS:'))       eess=l.replace(/.*EESS:\s*/,'').replace(/Fecha:.*/,'').trim();
-    if(l.includes('Fecha:'))      fecha=l.replace(/.*Fecha:\s*/,'').trim();
-    if(l.includes('Auditor:'))    auditor=l.replace(/.*Auditor:\s*/,'').trim();
-    if(l==='Auditor'&&lines[i+1]) auditor=lines[i+1]; // Formato 2: label en línea propia
+    if(l.includes('EESS:'))      eess=l.replace(/.*EESS:\s*/,'').replace(/Fecha:.*/,'').trim();
+    if(l.includes('Fecha:'))     fecha=l.replace(/.*Fecha:\s*/,'').trim();
+    if(l.includes('Auditor:'))   auditor=l.replace(/.*Auditor:\s*/,'').trim();
     if(l==='Establecimiento'&&lines[i+1]) eess=lines[i+1];
     if(l==='Fecha de la auditoría'&&lines[i+1]) fecha=lines[i+1];
     if(l==='Auditor'&&lines[i+1]&&!auditor) auditor=lines[i+1];
-  }
-  // Detectar auditor desde firma al final si no está en encabezado
-  if(!auditor){
-    for(let i=lines.length-1;i>lines.length-20;i--){
-      if(lines[i]&&/^[A-ZÁÉÍÓÚ][a-záéíóú]/.test(lines[i])&&lines[i].includes(' ')&&lines[i].length<50){
-        const prev=lines[i-1]||'';
-        if(/LIC\.|ING\.|ANDRES|ALINA|SIERRA/i.test(lines[i])||/LIC\.|MAT\./i.test(prev)){
-          auditor=lines[i];break;
-        }
-      }
-    }
+    if(l==='Dependencia'&&lines[i+1]&&!eess) eess=lines[i+1];
+    if(l==='Fecha'&&lines[i+1]&&!fecha) fecha=lines[i+1];
   }
 
-  // ── Detectar formato ─────────────────────────────────────
-  // Formato 1 (Alina): empieza con número de pregunta (línea = solo dígitos)
-  // Formato 2 (Andrés): empieza con SECTOR en mayúsculas, luego pregunta, luego estado
-  const ESTADOS = new Set(['Cumple','No Cumple','N/A']);
-  const SECTORES_RE = /^(PLAYA Y SURTIDORES|PLAYA|PROTECCION CONTRA INCENDIO|PROTECCION CONTRA|INSTALACIONES ELECTRICAS|INSTALACIONES|BOXES|LAVADERO|DEPOSITOS|TIENDA Y CAJA EDIFICADA|TIENDA|EQUIPAMIENTO|EPP|DOCUMENTACION|OTROS)/i;
-  const PALABRAS_SECTOR = new Set(['PLAYA','SURTIDORES','PROTECCION','INCENDIO','INSTALACIONES',
+  // ── FORMATO SAFETYCULTURE ─────────────────────────────────────
+  // ── Detectar tipo de auditor automáticamente ─────────────────
+  // SafetyCulture = Gestor de Calidad
+  // Alina Sierra / A. Sierra = Seguridad e Higiene
+  // Andrés Sierra / Andres Sierra = Seguridad e Higiene
+  // Cualquier otro = Otros
+  let auditorTipo='';
+  const auditorNorm=(auditor||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(esSafetyCulture)                           auditorTipo='Gestor Calidad';
+  else if(/sierra|alina|andres/i.test(auditorNorm)) auditorTipo='Seguridad e Higiene';
+  else if(auditor)                              auditorTipo='Otros';
+
+  if(esSafetyCulture){
+    // Filtrar letras sueltas (header visual del PDF) y URLs
+    const filt=lines.filter(l=>l.length>1&&!l.includes('safetyculture.com'));
+    const items=[];
+    let n=1, sectorActual='', i=0;
+    // Buscar inicio del primer sector real
+    while(i<filt.length&&!/^\d+ \/ \d+/.test(filt[i]))i++;
+    if(i>0)i--;
+    while(i<filt.length){
+      const l=filt[i];
+      // Sector: seguido de score
+      if(i+1<filt.length&&/^\d+ \/ \d+/.test(filt[i+1])){sectorActual=l;i+=2;continue;}
+      // Score solo (encabezado global)
+      if(/^\d+ \/ \d+/.test(l)){i++;continue;}
+      // Estado solo sin pregunta
+      if(ESTADOS.has(l)){i++;continue;}
+      // Acumular pregunta hasta estado
+      const preg=[];
+      while(i<filt.length){
+        const ll=filt[i];
+        if(ESTADOS.has(ll)||/^\d+ \/ \d+/.test(ll))break;
+        if(i+1<filt.length&&/^\d+ \/ \d+/.test(filt[i+1]))break;
+        preg.push(ll);i++;
+      }
+      if(!preg.length){i++;continue;}
+      const pregunta=preg.join(' ');
+      // Descartar el item del encabezado global (Score/Flagged/etc.)
+      if(pregunta.includes('Flagged items')||pregunta.includes('Apies')||pregunta.length<5){i++;continue;}
+      let estado='Cumple';
+      const obs=[];
+      if(i<filt.length&&ESTADOS.has(filt[i])){
+        estado=filt[i];i++;
+        // Obs: hasta próxima pregunta larga o sector
+        while(i<filt.length){
+          const nxt=filt[i];
+          if(ESTADOS.has(nxt))break;
+          if(/^\d+ \/ \d+/.test(nxt))break;
+          if(i+1<filt.length&&/^\d+ \/ \d+/.test(filt[i+1])){obs.push(nxt);i++;break;}
+          // Si la observación siguiente es claramente una nueva pregunta (larga, empieza con mayúscula)
+          if(obs.length>0&&nxt.length>40&&/^[A-ZÁÉÍÓÚ]/.test(nxt))break;
+          obs.push(nxt);i++;
+        }
+      }
+      // Ignorar ítems Sí/No (preguntas comerciales)
+      if(!['Sí','Si','No'].includes(estado)){
+        items.push({n:n++,pregunta,estado,obs:obs.join(' '),sector:sectorActual,fechaObs:''});
+      }
+    }
+    return{eess,fecha,auditor,auditorTipo,items};
+  }
+
+  // ── FORMATO MAS TABLA (Alina/Andrés) ─────────────────────────
+  const SECTORES_RE=/^(PLAYA Y SURTIDORES|PLAYA|PROTECCION CONTRA INCENDIO|PROTECCION CONTRA|INSTALACIONES ELECTRICAS|INSTALACIONES|BOXES|LAVADERO|DEPOSITOS|TIENDA Y CAJA EDIFICADA|TIENDA|EQUIPAMIENTO|EPP|DOCUMENTACION|OTROS)/i;
+  const PALABRAS_SECTOR=new Set(['PLAYA','SURTIDORES','PROTECCION','INCENDIO','INSTALACIONES',
     'ELECTRICAS','BOXES','LAVADERO','DEPOSITOS','TIENDA','CAJA','EDIFICADA',
     'EQUIPAMIENTO','EPP','DOCUMENTACION','OTROS','CONTRA']);
 
-  // ¿Hay una línea que sea solo número antes de los ítems?
-  let esFormato1 = false;
-  for(let i=0;i<Math.min(60,lines.length);i++){
-    if(/^\d+$/.test(lines[i])&&parseInt(lines[i])>=1&&parseInt(lines[i])<=5){
-      esFormato1=true;break;
-    }
-  }
-
-  const items=[];
-
   if(esFormato1){
-    // ── FORMATO 1: N° | pregunta | estado | obs | fechaObs | sector ──────
+    // ── FORMATO 1: N° | pregunta | estado | obs | fechaObs | sector ──
+    const items=[];
     let i=0;
     while(i<lines.length&&!/^\d+$/.test(lines[i]))i++;
     let n=1;
@@ -3827,89 +3876,66 @@ function parseCheckPDF(text){
       const num=parseInt(l);
       if(num<1||num>110){i++;continue;}
       i++;
-      const pregLines=[];
+      const preg=[],obs=[],sect=[];
       let estado=null,fechaObs='';
-      const obsLines=[],sectorLines=[];
       while(i<lines.length){
         const ll=lines[i];
         if(/^(Cumple|No Cumple|N\/A)/i.test(ll)){estado=ll;i++;break;}
         if(/^N° Pregunta/.test(ll)){i++;break;}
-        pregLines.push(ll);i++;
+        preg.push(ll);i++;
       }
-      if(!estado){continue;}
+      if(!estado)continue;
       while(i<lines.length){
         const ll=lines[i];
         if(/^\d+$/.test(ll)&&parseInt(ll)>=1&&parseInt(ll)<=110)break;
         if(/^N° Pregunta/.test(ll))break;
         if(/^\d{2}\/\d{4}$/.test(ll))fechaObs=ll;
-        else if(/^[A-ZÁÉÍÓÚÑ\s\/\-Y]+$/.test(ll)&&ll.length>3&&ll===ll.toUpperCase()&&PALABRAS_SECTOR.has(ll.split(' ')[0]))sectorLines.push(ll);
-        else if(ll)obsLines.push(ll);
+        else if(/^[A-ZÁÉÍÓÚÑ\s\/\-Y]+$/.test(ll)&&ll.length>3&&ll===ll.toUpperCase()&&PALABRAS_SECTOR.has(ll.split(' ')[0]))sect.push(ll);
+        else if(ll)obs.push(ll);
         i++;
       }
-      items.push({n:num,pregunta:pregLines.filter(Boolean).join(' '),
-        estado:estado.trim(),obs:obsLines.filter(Boolean).join(' '),
-        fechaObs,sector:sectorLines.join(' ')});
+      items.push({n:num,pregunta:preg.filter(Boolean).join(' '),estado:estado.trim(),
+        obs:obs.filter(Boolean).join(' '),fechaObs,sector:sect.join(' ')});
     }
-  } else {
-    // ── FORMATO 2: SECTOR | pregunta (multilinea) | estado | [obs] ────────
-    // Buscar inicio del checklist (después de "Observaciones" o primer sector)
-    let start=0;
-    for(let i=0;i<lines.length;i++){
-      if(lines[i]==='Observaciones'&&i>0&&(lines[i-1]==='Resultado'||lines[i-1]==='Pregunta')){
-        start=i+1;break;
-      }
-      if(SECTORES_RE.test(lines[i])&&start===0)start=i;
-    }
-
-    // Fusionar sectores partidos en múltiples líneas (ej: "PROTECCION CONTRA" + "INCENDIO")
-    const fused=[];
-    let i=start;
-    while(i<lines.length){
-      const l=lines[i];
-      if(PALABRAS_SECTOR.has(l.toUpperCase())&&!ESTADOS.has(l)){
-        let merged=l;
-        let j=i+1;
-        while(j<lines.length&&PALABRAS_SECTOR.has(lines[j].toUpperCase())&&!ESTADOS.has(lines[j])&&lines[j].length<25){
-          merged+=' '+lines[j];j++;
-        }
-        fused.push(merged);i=j;
-      } else {
-        fused.push(l);i++;
-      }
-    }
-
-    // Parsear: SECTOR → pregunta(s) → estado → [observaciones]
-    i=0;let n=1;
-    let sector_actual='';
-    while(i<fused.length){
-      const l=fused[i];
-      if(SECTORES_RE.test(l.toUpperCase())){
-        sector_actual=l;i++;
-        // Acumular pregunta hasta estado
-        const preg=[];
-        while(i<fused.length){
-          const ll=fused[i];
-          if(ESTADOS.has(ll)||SECTORES_RE.test(ll.toUpperCase()))break;
-          preg.push(ll);i++;
-        }
-        if(!preg.length){continue;}
-        const pregunta=preg.join(' ');
-        const estado=ESTADOS.has(fused[i])?fused[i++]:'Cumple';
-        // Observaciones hasta próximo sector o estado
-        const obs=[];
-        while(i<fused.length){
-          const ll=fused[i];
-          if(SECTORES_RE.test(ll.toUpperCase())||ESTADOS.has(ll))break;
-          obs.push(ll);i++;
-        }
-        items.push({n,pregunta,estado,obs:obs.join(' '),fechaObs:'',sector:sector_actual});
-        n++;
-      } else {i++;}
-    }
+    return{eess,fecha,auditor,auditorTipo,items};
   }
 
-  return{eess,fecha,auditor,items};
+  // ── FORMATO 2 (Andrés): SECTOR | pregunta | estado | [obs] ───
+  const filt=lines.filter(Boolean);
+  let start=0;
+  for(let i=0;i<filt.length;i++){
+    if(filt[i]==='Observaciones'&&i>0&&(filt[i-1]==='Resultado'||filt[i-1]==='Pregunta')){start=i+1;break;}
+    if(SECTORES_RE.test(filt[i])&&start===0)start=i;
+  }
+  // Fusionar sectores partidos
+  const fused=[];
+  let i=start;
+  while(i<filt.length){
+    const l=filt[i];
+    if(PALABRAS_SECTOR.has(l.toUpperCase())&&!ESTADOS.has(l)){
+      let merged=l;let j=i+1;
+      while(j<filt.length&&PALABRAS_SECTOR.has(filt[j].toUpperCase())&&!ESTADOS.has(filt[j])&&filt[j].length<25){merged+=' '+filt[j];j++;}
+      fused.push(merged);i=j;
+    } else {fused.push(l);i++;}
+  }
+  const items=[];
+  let ni=1,sectorActual2='';i=0;
+  while(i<fused.length){
+    const l=fused[i];
+    if(SECTORES_RE.test(l.toUpperCase())){
+      sectorActual2=l;i++;
+      const preg=[];
+      while(i<fused.length){const ll=fused[i];if(ESTADOS.has(ll)||SECTORES_RE.test(ll.toUpperCase()))break;preg.push(ll);i++;}
+      if(!preg.length)continue;
+      const estado=ESTADOS.has(fused[i])?fused[i++]:'Cumple';
+      const obs=[];
+      while(i<fused.length){const ll=fused[i];if(SECTORES_RE.test(ll.toUpperCase())||ESTADOS.has(ll))break;obs.push(ll);i++;}
+      items.push({n:ni++,pregunta:preg.join(' '),estado,obs:obs.join(' '),fechaObs:'',sector:sectorActual2});
+    } else {i++;}
+  }
+  return{eess,fecha,auditor,auditorTipo,items};
 }
+
 
 function renderChecks(){
   if(checksView)return renderChecksMes(checksView);
@@ -4110,12 +4136,24 @@ async function renderChecksMes(period){
         <div style="font-size:28px;font-weight:900;color:var(--m2);">${na.length}</div>
       </div>
       <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Auditor</div>
+        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Auditor</div>
+        ${data.auditor?`<div style="font-size:11px;color:var(--m2);margin-bottom:6px;font-style:italic">${esc(data.auditor)}</div>`:''}
         <select id="check-auditor-sel" data-period="${period}"
-          style="width:100%;font-size:11px;font-weight:700;color:var(--pd);background:var(--card2);border:1px solid var(--b);border-radius:6px;padding:4px 6px;cursor:pointer;margin-top:4px;">
+          style="width:100%;font-size:12px;font-weight:700;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:6px 8px;cursor:pointer;margin-bottom:6px;">
           <option value="">— Seleccionar —</option>
-          ${AUDITORES.map(a=>`<option value="${a}" ${data.auditor===a?'selected':''}>${a}</option>`).join('')}
+          <option value="Seguridad e Higiene" ${data.auditorTipo==='Seguridad e Higiene'?'selected':''}>Seguridad e Higiene</option>
+          <option value="Gestor Calidad" ${data.auditorTipo==='Gestor Calidad'?'selected':''}>Gestor Calidad</option>
+          <option value="Otros" ${data.auditorTipo==='Otros'?'selected':''}>Otros</option>
         </select>
+        <div id="check-auditor-otros-wrap" style="display:${data.auditorTipo==='Otros'?'block':'none'}">
+          <input id="check-auditor-otros" type="text" placeholder="Especificar auditor..."
+            value="${esc(data.auditorTipo==='Otros'?data.auditor:'')}"
+            style="width:100%;font-size:12px;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:6px 8px;box-sizing:border-box;margin-bottom:6px;">
+        </div>
+        <button id="check-auditor-guardar" data-period="${period}"
+          style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;width:100%">
+          💾 Guardar
+        </button>
       </div>
     </div>`;
 
@@ -4364,17 +4402,32 @@ async function attachChecks(){
     el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
   });
 
-  // Guardar auditor al cambiar
-  el.querySelector('#check-auditor-sel')?.addEventListener('change',async e=>{
-    const period=e.target.getAttribute('data-period');
-    const auditor=e.target.value;
+  // Mostrar/ocultar campo "Otros" al cambiar el select
+  el.querySelector('#check-auditor-sel')?.addEventListener('change',e=>{
+    const wrap=el.querySelector('#check-auditor-otros-wrap');
+    if(wrap)wrap.style.display=e.target.value==='Otros'?'block':'none';
+  });
+
+  // Guardar auditor
+  el.querySelector('#check-auditor-guardar')?.addEventListener('click',async()=>{
+    const period=el.querySelector('#check-auditor-guardar').getAttribute('data-period');
+    const tipo=el.querySelector('#check-auditor-sel')?.value||'';
+    const otrosVal=el.querySelector('#check-auditor-otros')?.value.trim()||'';
+    const nombreFinal=tipo==='Otros'?otrosVal:tipo;
+    if(!tipo){toast('Seleccioná un tipo de auditor');return;}
+    if(tipo==='Otros'&&!otrosVal){toast('Especificá el nombre del auditor');return;}
+    showLoad(true);
     const raw=await sGet(`check:${period}`,true);
     if(raw){
       const data=JSON.parse(raw);
-      data.auditor=auditor;
+      data.auditorTipo=tipo;
+      data.auditor=tipo==='Otros'?otrosVal:
+                   tipo==='Seguridad e Higiene'?(data.auditor||tipo):
+                   tipo; // Gestor Calidad mantiene el nombre original del PDF
       await sSet(`check:${period}`,JSON.stringify(data),true);
       toast('Auditor guardado ✓');
     }
+    showLoad(false);
   });
 
   // Modal NC manual
@@ -4504,6 +4557,8 @@ async function attachChecks(){
       const du=await readDU(file);
       const stored={
         ...parsed,
+        auditor: parsed.auditor||'',
+        auditorTipo: parsed.auditorTipo||'',
         pdfMeta:{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()},
         pdfData:du,
         periodo:period
