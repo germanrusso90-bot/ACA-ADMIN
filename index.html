@@ -1331,18 +1331,47 @@ function openFileViewer(f){
   const wrap=document.createElement('div');
   wrap.className='file-viewer-wrap';
   wrap.id='fv-wrap';
-  const content=isImg
-    ?`<img src="${f.dataUrl}" alt="${esc(f.fileName)}" style="max-width:100%;max-height:80vh;display:block;margin:auto;object-fit:contain;">`
-    :`<iframe src="${f.dataUrl}" title="${esc(f.fileName)}"></iframe>`;
+
+  let content='';
+  let blobUrl=null;
+
+  if(isImg){
+    content=`<img src="${f.dataUrl}" alt="${esc(f.fileName)}" style="max-width:100%;max-height:80vh;display:block;margin:auto;object-fit:contain;">`;
+  } else {
+    // Convertir base64 a Blob para que el iframe funcione en todos los browsers
+    try{
+      const b64=f.dataUrl.split(',')[1];
+      const byteChars=atob(b64);
+      const byteNums=new Array(byteChars.length);
+      for(let i=0;i<byteChars.length;i++)byteNums[i]=byteChars.charCodeAt(i);
+      const blob=new Blob([new Uint8Array(byteNums)],{type:'application/pdf'});
+      blobUrl=URL.createObjectURL(blob);
+      content=`<iframe src="${blobUrl}" style="width:100%;height:100%;border:none;" title="${esc(f.fileName)}"></iframe>`;
+    }catch(e){
+      // Fallback a dataUrl
+      content=`<iframe src="${f.dataUrl}" style="width:100%;height:100%;border:none;" title="${esc(f.fileName)}"></iframe>`;
+    }
+  }
+
   wrap.innerHTML=`
     <div class="file-viewer-bar">
       <span>📎 ${esc(f.fileName)}</span>
-      <button id="fv-close" title="Cerrar">✕</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${blobUrl?`<a href="${blobUrl}" download="${esc(f.fileName)}" style="background:rgba(255,255,255,.2);color:#fff;text-decoration:none;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;">⬇ Descargar</a>`:''}
+        <button id="fv-close" title="Cerrar" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:5px;padding:4px 10px;font-size:14px;cursor:pointer;">✕</button>
+      </div>
     </div>
     <div class="file-viewer-content">${content}</div>`;
+
   document.body.appendChild(wrap);
-  document.getElementById('fv-close').addEventListener('click',()=>wrap.remove());
-  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+  document.getElementById('fv-close').addEventListener('click',()=>{
+    if(blobUrl)URL.revokeObjectURL(blobUrl);
+    wrap.remove();
+  });
+  wrap.addEventListener('click',e=>{if(e.target===wrap){
+    if(blobUrl)URL.revokeObjectURL(blobUrl);
+    wrap.remove();
+  }});
 }
 
 // ── FULL: bloque de cancelación (editable o bloqueado) ────────
@@ -4817,10 +4846,14 @@ async function attachChecks(){
   el.querySelectorAll('[data-check-ver-pdf]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-check-ver-pdf');
+      const idx=parseInt(btn.getAttribute('data-idx')||'0');
       const raw=await sGet(`check:${period}`,true);
       if(!raw)return;
-      const data=JSON.parse(raw);
-      if(data.pdfData)openFileViewer({fileName:data.pdfMeta?.fileName||'check.pdf',type:'application/pdf',dataUrl:data.pdfData});
+      const parsed=JSON.parse(raw);
+      const checkArr=Array.isArray(parsed)?parsed:[parsed];
+      const data=checkArr[idx]||checkArr[0];
+      if(data?.pdfData)openFileViewer({fileName:data.pdfMeta?.fileName||'check.pdf',type:'application/pdf',dataUrl:data.pdfData});
+      else toast('PDF no disponible — puede que se haya guardado sin adjunto');
     });
   });
 
@@ -4828,10 +4861,14 @@ async function attachChecks(){
   el.querySelectorAll('[data-check-ver-memo]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-check-ver-memo');
+      const idx=parseInt(btn.getAttribute('data-idx')||'0');
       const raw=await sGet(`check:${period}`,true);
       if(!raw)return;
-      const data=JSON.parse(raw);
-      if(data.memoPdfData)openFileViewer({fileName:data.memoPdfMeta?.fileName||'memo.pdf',type:'application/pdf',dataUrl:data.memoPdfData});
+      const parsed=JSON.parse(raw);
+      const checkArr=Array.isArray(parsed)?parsed:[parsed];
+      const data=checkArr[idx]||checkArr[0];
+      if(data?.memoPdfData)openFileViewer({fileName:data.memoPdfMeta?.fileName||'memo.pdf',type:'application/pdf',dataUrl:data.memoPdfData});
+      else toast('Memo no disponible');
     });
   });
 
