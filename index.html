@@ -3780,7 +3780,20 @@ function parseCheckPDF(text){
   // y sectores seguidos de "X / Y (Z%)"
   const esSafetyCulture = lines.slice(0,20).some(l=>l==='Score'||l==='Flagged items'||l.includes('safetyculture.com'));
   // Formato 1 (Alina/MAS tabla): tiene líneas que son solo números (N° de pregunta)
-  const esFormato1 = !esSafetyCulture && lines.slice(0,80).some(l=>/^\d+$/.test(l)&&parseInt(l)>=1&&parseInt(l)<=5);
+  // PERO el número debe estar seguido de texto de pregunta real, no del resumen ejecutivo
+  const RESUMEN_KW=new Set(['Cumplimiento','Total','Score','Flagged','Indicador','Valor','Hallazgos','Resumen']);
+  const esFormato1 = !esSafetyCulture && lines.slice(0,120).some((l,idx)=>{
+    if(!/^\d+$/.test(l)) return false;
+    const n=parseInt(l);
+    if(n<1||n>110) return false;
+    const next=lines.slice(idx+1).find(x=>x.length>0);
+    if(!next) return false;
+    if(/^\d+$/.test(next)) return false;
+    if(['Cumple','No Cumple','N/A','No cumple'].includes(next)) return false;
+    if([...RESUMEN_KW].some(k=>next.includes(k))) return false;
+    if(next.includes('%')) return false;
+    return next.length > 15;
+  });
 
   // ── Extraer encabezado ────────────────────────────────────────
   for(let i=0;i<Math.min(25,lines.length);i++){
