@@ -4100,159 +4100,247 @@ async function renderChecksPendientes(){
   </div>`;
 }
 
-async function renderChecksMes(period){
+async function renderChecksMes(period, modo='ver'){
+  // modo: 'carga' = pantalla inicial de carga, 'ver' = resumen guardado, 'editar' = edición completa
   const raw=await sGet(`check:${period}`,true);
   const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const [y,m]=period.split('-');
   const mesLabel=`${MESES_LABELS[parseInt(m)-1]} ${y}`;
   const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:left;`;
   const tdBase=`padding:8px 12px;border:1px solid #E8E4F0;font-size:12px;vertical-align:top;`;
-  const AUDITORES=['Seguridad e Higiene','Gestor Calidad','Otros'];
 
-  let contenido='';
+  const header=`<div class="card-header" style="display:flex;align-items:center;gap:12px;">
+    <button id="checks-back" style="background:none;border:none;color:var(--p);font-size:20px;cursor:pointer;font-weight:700;">←</button>
+    <h3>✅ Check Seguridad — ${mesLabel}</h3>
+  </div>`;
+
+  // ── SIN CHECK CARGADO ─────────────────────────────────────────
   if(!raw){
-    contenido=`<div style="text-align:center;padding:40px;border:2px dashed var(--b);border-radius:10px;margin-bottom:16px;">
-      <div style="font-size:32px;margin-bottom:12px;">📋</div>
-      <div style="font-size:15px;font-weight:700;color:var(--pd);margin-bottom:6px;">No hay check cargado para ${mesLabel}</div>
-      <div style="font-size:13px;color:var(--m2);margin-bottom:20px;">Subí el PDF del Check List MAS o registrá una NC manualmente</div>
-      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-        <label style="background:var(--p);color:#fff;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;display:inline-block;">
-          📄 Subir PDF Check List
-          <input type="file" id="check-upload" accept=".pdf" data-period="${period}" hidden>
-        </label>
-        <button id="check-nc-manual-init" data-period="${period}" style="background:var(--rb);color:var(--r);border:2px solid var(--rbr);border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;">
-          ✏️ Agregar NC manual
-        </button>
+    return`<div class="cards"><div class="card">${header}<div class="card-body">
+      <div style="text-align:center;padding:40px;border:2px dashed var(--b);border-radius:10px;margin-bottom:16px;">
+        <div style="font-size:32px;margin-bottom:12px;">📋</div>
+        <div style="font-size:15px;font-weight:700;color:var(--pd);margin-bottom:6px;">No hay check cargado para ${mesLabel}</div>
+        <div style="font-size:13px;color:var(--m2);margin-bottom:20px;">Subí el PDF del Check List MAS o registrá una NC manualmente</div>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <label style="background:var(--p);color:#fff;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;display:inline-block;">
+            📄 Subir PDF Check List
+            <input type="file" id="check-upload" accept=".pdf" data-period="${period}" hidden>
+          </label>
+          <button id="check-nc-manual-init" data-period="${period}" style="background:var(--rb);color:var(--r);border:2px solid var(--rbr);border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;">
+            ✏️ Agregar NC manual
+          </button>
+        </div>
       </div>
+    </div></div></div>`;
+  }
+
+  const checks=JSON.parse(raw); // puede ser array (2 checks) o objeto (1 check)
+  const checkArr=Array.isArray(checks)?checks:[checks];
+
+  // ── VISTA RESUMEN (modo 'ver') ────────────────────────────────
+  if(modo==='ver'){
+    let resumenes='';
+    checkArr.forEach((data,idx)=>{
+      const items=data.items||[];
+      const nc=items.filter(x=>/no cumple/i.test(x.estado));
+      const ncAbiertas=nc.filter(x=>!x.cerrada);
+      const cumple=items.filter(x=>x.estado==='Cumple');
+      const na=items.filter(x=>x.estado==='N/A');
+      const c=ncAbiertas.length>0?'var(--r)':'var(--g)';
+      const cb=ncAbiertas.length>0?'var(--rb)':'var(--gb)';
+      const cbr=ncAbiertas.length>0?'var(--rbr)':'var(--gbr)';
+
+      resumenes+=`<div style="border:2px solid var(--b);border-radius:12px;padding:18px;margin-bottom:14px;background:var(--card2)">
+        <!-- Header check -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:var(--pd)">
+              ${checkArr.length>1?`Check ${idx+1} — `:''}${esc(data.auditorTipo||'Sin tipo')}
+            </div>
+            ${data.auditor?`<div style="font-size:12px;color:var(--m2);margin-top:2px;">Auditor: ${esc(data.auditor)}</div>`:''}
+            ${data.pdfMeta?`<div style="font-size:11px;color:var(--m2);">📄 ${esc(data.pdfMeta.fileName)}</div>`:''}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button data-check-action="ver" data-check-idx="${idx}" data-period="${period}"
+              style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">👁 Ver</button>
+            <button data-check-action="editar" data-check-idx="${idx}" data-period="${period}"
+              style="background:var(--card2);color:var(--pd);border:1.5px solid var(--b);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Editar</button>
+            <button data-check-action="eliminar" data-check-idx="${idx}" data-period="${period}"
+              style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Eliminar</button>
+          </div>
+        </div>
+        <!-- KPIs resumen -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-size:10px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:3px;">✅ Cumple</div>
+            <div style="font-size:24px;font-weight:900;color:var(--g);">${cumple.length}</div>
+          </div>
+          <div style="background:${cb};border:1px solid ${cbr};border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-size:10px;font-weight:700;color:${c};text-transform:uppercase;margin-bottom:3px;">❌ No Cumple</div>
+            <div style="font-size:24px;font-weight:900;color:${c};">${nc.length}</div>
+            ${ncAbiertas.length>0?`<div style="font-size:10px;color:var(--r);font-weight:700">${ncAbiertas.length} abiertas</div>`:''}
+          </div>
+          <div style="background:var(--card2);border:1px solid var(--b);border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:3px;">N/A</div>
+            <div style="font-size:24px;font-weight:900;color:var(--m2);">${na.length}</div>
+          </div>
+          <div style="background:var(--card2);border:1px solid var(--b);border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:3px;">Total</div>
+            <div style="font-size:24px;font-weight:900;color:var(--pd);">${items.length}</div>
+          </div>
+        </div>
+        ${nc.length>0?`
+        <!-- NC preview -->
+        <div style="margin-top:12px;background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:12px;">
+          <div style="font-size:12px;font-weight:800;color:var(--r);margin-bottom:8px;">❌ No Conformidades (${nc.length})</div>
+          ${nc.slice(0,3).map(x=>`<div style="font-size:12px;color:var(--pd);padding:4px 0;border-bottom:1px solid var(--rbr);">
+            ${x.sector?`<span style="font-size:10px;color:var(--m2);background:rgba(0,0,0,.05);padding:1px 6px;border-radius:3px;margin-right:6px">${esc(x.sector)}</span>`:''}
+            ${esc(x.pregunta.slice(0,80))}${x.pregunta.length>80?'…':''}
+            ${x.obs?`<div style="font-size:11px;color:var(--r);margin-top:2px;">⚠️ ${esc(x.obs.slice(0,80))}</div>`:''}
+          </div>`).join('')}
+          ${nc.length>3?`<div style="font-size:11px;color:var(--m2);margin-top:6px;">+${nc.length-3} más...</div>`:''}
+        </div>`:''}
+      </div>`;
+    });
+
+    // Botón agregar segundo check
+    const puedeAgregar=checkArr.length<2;
+
+    return`<div class="cards"><div class="card">${header}<div class="card-body">
+      ${resumenes}
+      ${puedeAgregar?`
+      <div style="border:2px dashed var(--b);border-radius:12px;padding:20px;text-align:center;margin-top:4px;">
+        <div style="font-size:13px;font-weight:700;color:var(--m2);margin-bottom:12px;">¿Hubo una segunda auditoría este mes?</div>
+        <label style="background:var(--p);color:#fff;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">
+          📄 Subir segundo Check PDF
+          <input type="file" id="check-upload-2" accept=".pdf" data-period="${period}" hidden>
+        </label>
+      </div>`:''}
+    </div></div></div>`;
+  }
+
+  // ── MODO EDITAR (idx en la URL simulado con checksEditIdx) ────
+  const editIdx=window._checksEditIdx||0;
+  const data=checkArr[editIdx]||checkArr[0];
+  const items=data.items||[];
+  const nc=items.filter(x=>/no cumple/i.test(x.estado));
+  const ncAbiertas=nc.filter(x=>!x.cerrada);
+  const cumple=items.filter(x=>x.estado==='Cumple');
+  const na=items.filter(x=>x.estado==='N/A');
+
+  let contenido=``;
+
+  // KPIs + auditor (sin botón guardar separado)
+  contenido+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+    <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:11px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">✅ Cumple</div>
+      <div style="font-size:28px;font-weight:900;color:var(--g);">${cumple.length}</div>
+    </div>
+    <div style="background:${ncAbiertas.length>0?'var(--rb)':'var(--gb)'};border:1px solid ${ncAbiertas.length>0?'var(--rbr)':'var(--gbr)'};border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:11px;font-weight:700;color:${ncAbiertas.length>0?'var(--r)':'var(--g)'};text-transform:uppercase;margin-bottom:4px;">❌ No Cumple</div>
+      <div style="font-size:28px;font-weight:900;color:${ncAbiertas.length>0?'var(--r)':'var(--g)'};">${nc.length}</div>
+      ${ncAbiertas.length>0?`<div style="font-size:10px;color:var(--r);font-weight:700">${ncAbiertas.length} abiertas</div>`:''}
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N/A</div>
+      <div style="font-size:28px;font-weight:900;color:var(--m2);">${na.length}</div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:6px;text-align:center;">Auditor</div>
+      ${data.auditor?`<div style="font-size:11px;color:var(--m2);margin-bottom:4px;font-style:italic;text-align:center">${esc(data.auditor)}</div>`:''}
+      <select id="check-auditor-sel" data-period="${period}" data-idx="${editIdx}"
+        style="width:100%;font-size:11px;font-weight:700;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:5px 6px;cursor:pointer;margin-bottom:4px;">
+        <option value="">— Seleccionar —</option>
+        <option value="Seguridad e Higiene" ${data.auditorTipo==='Seguridad e Higiene'?'selected':''}>Seguridad e Higiene</option>
+        <option value="Gestor Calidad" ${data.auditorTipo==='Gestor Calidad'?'selected':''}>Gestor Calidad</option>
+        <option value="Otros" ${data.auditorTipo==='Otros'?'selected':''}>Otros</option>
+      </select>
+      <div id="check-auditor-otros-wrap" style="display:${data.auditorTipo==='Otros'?'block':'none'}">
+        <input id="check-auditor-otros" type="text" placeholder="Especificar..."
+          value="${esc(data.auditorTipo==='Otros'?data.auditor:'')}"
+          style="width:100%;font-size:11px;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:5px 6px;box-sizing:border-box;">
+      </div>
+    </div>
+  </div>`;
+
+  // NC
+  if(nc.length>0){
+    contenido+=`<div style="background:var(--rb);border:2px solid var(--rbr);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:800;color:var(--r);">❌ NO CONFORMIDADES (${nc.length} · ${ncAbiertas.length} abiertas)</div>
+        <button id="check-nc-manual" data-period="${period}" data-idx="${editIdx}" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">✏️ + NC manual</button>
+      </div>
+      ${nc.map(x=>`<div style="background:#fff;border:1px solid var(--rbr);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">
+          <span style="font-size:13px;font-weight:700;color:var(--pd);flex:1">${esc(x.pregunta)}</span>
+          <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+            ${x.sector?`<span style="font-size:10px;font-weight:700;color:var(--m2);background:var(--bg);padding:2px 8px;border-radius:4px">${esc(x.sector)}</span>`:''}
+            ${x.manual?`<span style="font-size:10px;font-weight:700;color:var(--p);background:#E8DEFF;padding:2px 8px;border-radius:4px">Manual</span>`:''}
+            <span style="background:${x.cerrada?'var(--g)':'var(--r)'};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px">${x.cerrada?'✓ Cerrada':'Abierta'}</span>
+          </div>
+        </div>
+        ${x.obs?`<div style="font-size:12px;color:var(--r);background:var(--rb);border-radius:6px;padding:8px 10px;margin-top:4px;">⚠️ ${esc(x.obs)}</div>`:''}
+        ${x.auditor?`<div style="font-size:10px;color:var(--m2);margin-top:4px;">Auditor: ${esc(x.auditor)}</div>`:''}
+      </div>`).join('')}
     </div>`;
   } else {
-    const data=JSON.parse(raw);
-    const items=data.items||[];
-    const nc=items.filter(x=>/no cumple/i.test(x.estado));
-    const ncAbiertas=nc.filter(x=>!x.cerrada);
-    const cumple=items.filter(x=>x.estado==='Cumple');
-    const na=items.filter(x=>x.estado==='N/A');
-
-    // KPIs + campo auditor editable
-    contenido+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
-      <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:11px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">✅ Cumple</div>
-        <div style="font-size:28px;font-weight:900;color:var(--g);">${cumple.length}</div>
+    contenido+=`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:14px;font-weight:700;color:var(--g);">✅ Sin no conformidades</div>
+        <button id="check-nc-manual" data-period="${period}" data-idx="${editIdx}" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">✏️ + NC manual</button>
       </div>
-      <div style="background:${ncAbiertas.length>0?'var(--rb)':'var(--gb)'};border:1px solid ${ncAbiertas.length>0?'var(--rbr)':'var(--gbr)'};border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:11px;font-weight:700;color:${ncAbiertas.length>0?'var(--r)':'var(--g)'};text-transform:uppercase;margin-bottom:4px;">❌ No Cumple</div>
-        <div style="font-size:28px;font-weight:900;color:${ncAbiertas.length>0?'var(--r)':'var(--g)'};">${nc.length}</div>
-        ${ncAbiertas.length>0?`<div style="font-size:10px;color:var(--r);font-weight:700">${ncAbiertas.length} abiertas</div>`:''}
-      </div>
-      <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N/A</div>
-        <div style="font-size:28px;font-weight:900;color:var(--m2);">${na.length}</div>
-      </div>
-      <div style="background:var(--card2);border:1px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Auditor</div>
-        ${data.auditor?`<div style="font-size:11px;color:var(--m2);margin-bottom:6px;font-style:italic">${esc(data.auditor)}</div>`:''}
-        <select id="check-auditor-sel" data-period="${period}"
-          style="width:100%;font-size:12px;font-weight:700;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:6px 8px;cursor:pointer;margin-bottom:6px;">
-          <option value="">— Seleccionar —</option>
-          <option value="Seguridad e Higiene" ${data.auditorTipo==='Seguridad e Higiene'?'selected':''}>Seguridad e Higiene</option>
-          <option value="Gestor Calidad" ${data.auditorTipo==='Gestor Calidad'?'selected':''}>Gestor Calidad</option>
-          <option value="Otros" ${data.auditorTipo==='Otros'?'selected':''}>Otros</option>
-        </select>
-        <div id="check-auditor-otros-wrap" style="display:${data.auditorTipo==='Otros'?'block':'none'}">
-          <input id="check-auditor-otros" type="text" placeholder="Especificar auditor..."
-            value="${esc(data.auditorTipo==='Otros'?data.auditor:'')}"
-            style="width:100%;font-size:12px;color:var(--pd);background:var(--card2);border:1.5px solid var(--b);border-radius:6px;padding:6px 8px;box-sizing:border-box;margin-bottom:6px;">
-        </div>
-        <button id="check-auditor-guardar" data-period="${period}"
-          style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;width:100%">
-          💾 Guardar
-        </button>
-      </div>
-    </div>`;
-
-    // NO CONFORMIDADES
-    if(nc.length>0){
-      contenido+=`<div style="background:var(--rb);border:2px solid var(--rbr);border-radius:10px;padding:16px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="font-size:13px;font-weight:800;color:var(--r);">❌ NO CONFORMIDADES (${nc.length} · ${ncAbiertas.length} abiertas)</div>
-          <button id="check-nc-manual" data-period="${period}" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">✏️ + NC manual</button>
-        </div>
-        ${nc.map(x=>`<div style="background:#fff;border:1px solid var(--rbr);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">
-            <span style="font-size:13px;font-weight:700;color:var(--pd);flex:1">${esc(x.pregunta)}</span>
-            <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
-              ${x.sector?`<span style="font-size:10px;font-weight:700;color:var(--m2);background:var(--bg);padding:2px 8px;border-radius:4px">${esc(x.sector)}</span>`:''}
-              ${x.manual?`<span style="font-size:10px;font-weight:700;color:var(--p);background:var(--lila-claro,#E8DEFF);padding:2px 8px;border-radius:4px">Manual</span>`:''}
-              <span style="background:${x.cerrada?'var(--g)':'var(--r)'};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px">${x.cerrada?'✓ Cerrada':'Abierta'}</span>
-            </div>
-          </div>
-          ${x.obs?`<div style="font-size:12px;color:var(--r);background:var(--rb);border-radius:6px;padding:8px 10px;margin-top:4px;">⚠️ ${esc(x.obs)}</div>`:''}
-          ${x.auditor?`<div style="font-size:10px;color:var(--m2);margin-top:4px;">Auditor: ${esc(x.auditor)}</div>`:''}
-          ${x.fechaObs?`<div style="font-size:10px;color:var(--m2);">Fecha observación: ${esc(x.fechaObs)}</div>`:''}
-        </div>`).join('')}
-      </div>`;
-    } else {
-      contenido+=`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:16px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div style="font-size:14px;font-weight:700;color:var(--g);">✅ Sin no conformidades en este período</div>
-          <button id="check-nc-manual" data-period="${period}" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">✏️ + NC manual</button>
-        </div>
-      </div>`;
-    }
-
-    // Tabla completa colapsable (sin columna N°)
-    contenido+=`<details style="margin-bottom:16px;">
-      <summary style="cursor:pointer;padding:10px 14px;background:var(--card2);border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:700;color:var(--pd);list-style:none;">
-        📋 Ver tabla completa (${items.length} ítems)
-      </summary>
-      <div style="overflow-x:auto;margin-top:8px;">
-        <table style="border-collapse:collapse;width:100%;min-width:760px;">
-          <thead><tr>
-            <th style="${th}">Pregunta</th>
-            <th style="${th}width:100px">Estado</th>
-            <th style="${th}">Observaciones</th>
-            <th style="${th}width:80px">Fecha obs.</th>
-            <th style="${th}width:120px">Sector</th>
-          </tr></thead>
-          <tbody>${items.map((x,i)=>{
-            const bg=/no cumple/i.test(x.estado)?'#FFF5F5':x.estado==='N/A'?'#F9FAFB':i%2===0?'#FEFEFE':'#F8F5FB';
-            const estadoColor=/no cumple/i.test(x.estado)?'color:var(--r);font-weight:800':x.estado==='N/A'?'color:var(--m2)':'color:var(--g);font-weight:700';
-            return`<tr style="background:${bg}">
-              <td style="${tdBase}">${esc(x.pregunta)}</td>
-              <td style="${tdBase}${estadoColor}">${esc(x.estado)}</td>
-              <td style="${tdBase}${/no cumple/i.test(x.estado)?'color:var(--r)':''}">${esc(x.obs||'')}</td>
-              <td style="${tdBase}text-align:center">${esc(x.fechaObs||'')}</td>
-              <td style="${tdBase}font-size:11px">${esc(x.sector||'')}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>
-      </div>
-    </details>`;
-
-    // Acciones
-    contenido+=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      ${data.pdfMeta?`<button data-check-ver-pdf="${period}" style="${BSTYLE_VER}">📄 Ver PDF Check</button>`:''}
-      ${data.memoPdfMeta?`<button data-check-ver-memo="${period}" style="${BSTYLE_VER}">📝 Ver Memo</button>`:''}
-      <button id="check-export-excel" data-period="${period}" style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">📥 Excel NC</button>
-      <label style="background:var(--p);color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
-        🔄 Reemplazar Check PDF
-        <input type="file" id="check-upload" accept=".pdf" data-period="${period}" hidden>
-      </label>
-      <label style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
-        📎 ${data.memoPdfMeta?'Reemplazar':'Subir'} Memo PDF
-        <input type="file" id="memo-upload" accept=".pdf" data-period="${period}" hidden>
-      </label>
-      <button data-check-del="${period}" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Eliminar</button>
     </div>`;
   }
 
-  return`<div class="cards"><div class="card">
-    <div class="card-header" style="display:flex;align-items:center;gap:12px;">
-      <button id="checks-back" style="background:none;border:none;color:var(--p);font-size:20px;cursor:pointer;font-weight:700;">←</button>
-      <h3>✅ Check Seguridad — ${mesLabel}</h3>
+  // Tabla colapsable
+  contenido+=`<details style="margin-bottom:16px;">
+    <summary style="cursor:pointer;padding:10px 14px;background:var(--card2);border:1px solid var(--b);border-radius:8px;font-size:13px;font-weight:700;color:var(--pd);list-style:none;">
+      📋 Ver tabla completa (${items.length} ítems)
+    </summary>
+    <div style="overflow-x:auto;margin-top:8px;">
+      <table style="border-collapse:collapse;width:100%;min-width:700px;">
+        <thead><tr>
+          <th style="${th}">Pregunta</th>
+          <th style="${th}width:90px">Estado</th>
+          <th style="${th}">Observaciones</th>
+          <th style="${th}width:120px">Sector</th>
+        </tr></thead>
+        <tbody>${items.map((x,i)=>{
+          const bg=/no cumple/i.test(x.estado)?'#FFF5F5':x.estado==='N/A'?'#F9FAFB':i%2===0?'#FEFEFE':'#F8F5FB';
+          const ec=/no cumple/i.test(x.estado)?'color:var(--r);font-weight:800':x.estado==='N/A'?'color:var(--m2)':'color:var(--g);font-weight:700';
+          return`<tr style="background:${bg}">
+            <td style="${tdBase}">${esc(x.pregunta)}</td>
+            <td style="${tdBase}${ec}">${esc(x.estado)}</td>
+            <td style="${tdBase}${/no cumple/i.test(x.estado)?'color:var(--r)':''}">${esc(x.obs||'')}</td>
+            <td style="${tdBase}font-size:11px">${esc(x.sector||'')}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
     </div>
-    <div class="card-body">${contenido}</div>
-  </div></div>`;
+  </details>`;
+
+  // Barra inferior: archivos + guardar (abajo a la derecha)
+  contenido+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${data.pdfMeta?`<button data-check-ver-pdf="${period}" data-idx="${editIdx}" style="${BSTYLE_VER}">📄 Ver PDF</button>`:''}
+      ${data.memoPdfMeta?`<button data-check-ver-memo="${period}" data-idx="${editIdx}" style="${BSTYLE_VER}">📝 Ver Memo</button>`:''}
+      <button id="check-export-excel" data-period="${period}" data-idx="${editIdx}" style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">📥 Excel NC</button>
+      <label style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
+        🔄 Reemplazar PDF
+        <input type="file" id="check-upload" accept=".pdf" data-period="${period}" data-idx="${editIdx}" hidden>
+      </label>
+      <label style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">
+        📎 ${data.memoPdfMeta?'Reemplazar':'Subir'} Memo
+        <input type="file" id="memo-upload" accept=".pdf" data-period="${period}" data-idx="${editIdx}" hidden>
+      </label>
+    </div>
+    <button id="check-guardar-btn" data-period="${period}" data-idx="${editIdx}"
+      style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:800;cursor:pointer;">
+      💾 Guardar check
+    </button>
+  </div>`;
+
+  return`<div class="cards"><div class="card">${header}<div class="card-body">${contenido}</div></div></div>`;
 }
 
 
@@ -4415,32 +4503,145 @@ async function attachChecks(){
     el.querySelector('#checks-sub-pendientes').style.cssText='padding:9px 18px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--m2);border-bottom:2px solid transparent;margin-bottom:-2px';
   });
 
-  // Mostrar/ocultar campo "Otros" al cambiar el select
+  // Ver/Editar/Eliminar check individual
+  el.querySelectorAll('[data-check-action]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const action=btn.getAttribute('data-check-action');
+      const period=btn.getAttribute('data-period');
+      const idx=parseInt(btn.getAttribute('data-check-idx')||'0');
+      if(action==='editar'){
+        window._checksEditIdx=idx;
+        el.innerHTML=await renderChecksMes(period,'editar');
+        attachChecks();
+      } else if(action==='ver'){
+        window._checksEditIdx=idx;
+        // Mostrar tabla completa en modal
+        const raw=await sGet(`check:${period}`,true);
+        if(!raw)return;
+        const checks=JSON.parse(raw);
+        const checkArr=Array.isArray(checks)?checks:[checks];
+        const data=checkArr[idx]||checkArr[0];
+        const items=data.items||[];
+        const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
+        const tdBase=`padding:8px 12px;border:1px solid #E8E4F0;font-size:12px;vertical-align:top;`;
+        const modal=document.createElement('div');
+        modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+        modal.innerHTML=`<div style="background:var(--card);border-radius:14px;width:100%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:18px 22px;border-bottom:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:15px;font-weight:800;color:var(--pd)">${esc(data.auditorTipo||'Check')} — ${esc(data.auditor||'')}</div>
+              <div style="font-size:12px;color:var(--m2)">${items.length} ítems · ${items.filter(x=>/no cumple/i.test(x.estado)).length} No Cumple</div>
+            </div>
+            <button id="modal-close" style="background:var(--rb);color:var(--r);border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;">✕ Cerrar</button>
+          </div>
+          <div style="overflow-y:auto;padding:16px;">
+            <table style="border-collapse:collapse;width:100%;min-width:600px;">
+              <thead><tr>
+                <th style="${th}">Pregunta</th>
+                <th style="${th}width:90px">Estado</th>
+                <th style="${th}">Observaciones</th>
+                <th style="${th}width:120px">Sector</th>
+              </tr></thead>
+              <tbody>${items.map((x,i)=>{
+                const bg=/no cumple/i.test(x.estado)?'#FFF5F5':x.estado==='N/A'?'#F9FAFB':i%2===0?'#fff':'#F8F5FB';
+                const ec=/no cumple/i.test(x.estado)?'color:#dc2626;font-weight:800':x.estado==='N/A'?'color:#9ca3af':'color:#16a34a;font-weight:700';
+                return`<tr style="background:${bg}">
+                  <td style="${tdBase}">${esc(x.pregunta)}</td>
+                  <td style="${tdBase}${ec}">${esc(x.estado)}</td>
+                  <td style="${tdBase}color:${/no cumple/i.test(x.estado)?'#dc2626':'inherit'}">${esc(x.obs||'')}</td>
+                  <td style="${tdBase}font-size:11px">${esc(x.sector||'')}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>
+        </div>`;
+        document.body.appendChild(modal);
+        modal.querySelector('#modal-close').addEventListener('click',()=>modal.remove());
+        modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+      } else if(action==='eliminar'){
+        if(!confirm('¿Eliminar este check?'))return;
+        showLoad(true);
+        const raw=await sGet(`check:${period}`,true);
+        if(raw){
+          const checks=JSON.parse(raw);
+          const checkArr=Array.isArray(checks)?checks:[checks];
+          checkArr.splice(idx,1);
+          if(checkArr.length===0){
+            await sDel(`check:${period}`,true);
+          } else {
+            await sSet(`check:${period}`,JSON.stringify(checkArr.length===1?checkArr[0]:checkArr),true);
+          }
+        }
+        showLoad(false);
+        toast('Check eliminado ✓');
+        el.innerHTML=await renderChecksMes(period,'ver');
+        attachChecks();
+      }
+    });
+  });
+
+  // Guardar check → pasar a modo resumen
+  el.querySelector('#check-guardar-btn')?.addEventListener('click',async()=>{
+    const period=el.querySelector('#check-guardar-btn').getAttribute('data-period');
+    const idx=parseInt(el.querySelector('#check-guardar-btn').getAttribute('data-idx')||'0');
+    // Guardar auditor primero
+    const tipo=el.querySelector('#check-auditor-sel')?.value||'';
+    const otrosVal=el.querySelector('#check-auditor-otros')?.value.trim()||'';
+    if(tipo){
+      showLoad(true);
+      const raw=await sGet(`check:${period}`,true);
+      if(raw){
+        const checks=JSON.parse(raw);
+        const checkArr=Array.isArray(checks)?checks:[checks];
+        const data=checkArr[idx]||checkArr[0];
+        data.auditorTipo=tipo;
+        data.auditor=tipo==='Otros'?otrosVal:tipo==='Seguridad e Higiene'?(data.auditor||tipo):tipo;
+        await sSet(`check:${period}`,JSON.stringify(checkArr.length===1?checkArr[0]:checkArr),true);
+      }
+      showLoad(false);
+    }
+    // Ir a modo resumen
+    el.innerHTML=await renderChecksMes(period,'ver');
+    attachChecks();
+  });
+
+  // Subir segundo check PDF
+  el.querySelector('#check-upload-2')?.addEventListener('change',async e=>{
+    const file=e.target.files[0];if(!file)return;
+    const period=e.target.getAttribute('data-period');
+    showLoad(true);
+    try{
+      const ab=await file.arrayBuffer();
+      const pdfjsLib=window['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf=await pdfjsLib.getDocument({data:ab}).promise;
+      let fullText='';
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p);
+        const tc=await page.getTextContent();
+        fullText+=tc.items.map(i=>i.str).join('\n')+'\n';
+      }
+      const parsed=parseCheckPDF(fullText);
+      const du=await readDU(file);
+      const newCheck={...parsed,pdfMeta:{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()},pdfData:du,periodo:period};
+      // Cargar el check existente y agregar el nuevo
+      const raw=await sGet(`check:${period}`,true);
+      const existing=raw?JSON.parse(raw):null;
+      const checkArr=existing?( Array.isArray(existing)?existing:[existing] ):[];
+      checkArr.push(newCheck);
+      await sSet(`check:${period}`,JSON.stringify(checkArr),true);
+      toast(`Segundo check cargado ✓ — ${parsed.items.length} ítems`);
+      window._checksEditIdx=checkArr.length-1;
+      el.innerHTML=await renderChecksMes(period,'editar');
+      attachChecks();
+    }catch(err){alert('Error al procesar PDF: '+err.message);}
+    showLoad(false);
+  });
+
+  // Auditor select → mostrar/ocultar campo otros (sin botón guardar)
   el.querySelector('#check-auditor-sel')?.addEventListener('change',e=>{
     const wrap=el.querySelector('#check-auditor-otros-wrap');
     if(wrap)wrap.style.display=e.target.value==='Otros'?'block':'none';
-  });
-
-  // Guardar auditor
-  el.querySelector('#check-auditor-guardar')?.addEventListener('click',async()=>{
-    const period=el.querySelector('#check-auditor-guardar').getAttribute('data-period');
-    const tipo=el.querySelector('#check-auditor-sel')?.value||'';
-    const otrosVal=el.querySelector('#check-auditor-otros')?.value.trim()||'';
-    const nombreFinal=tipo==='Otros'?otrosVal:tipo;
-    if(!tipo){toast('Seleccioná un tipo de auditor');return;}
-    if(tipo==='Otros'&&!otrosVal){toast('Especificá el nombre del auditor');return;}
-    showLoad(true);
-    const raw=await sGet(`check:${period}`,true);
-    if(raw){
-      const data=JSON.parse(raw);
-      data.auditorTipo=tipo;
-      data.auditor=tipo==='Otros'?otrosVal:
-                   tipo==='Seguridad e Higiene'?(data.auditor||tipo):
-                   tipo; // Gestor Calidad mantiene el nombre original del PDF
-      await sSet(`check:${period}`,JSON.stringify(data),true);
-      toast('Auditor guardado ✓');
-    }
-    showLoad(false);
   });
 
   // Modal NC manual
@@ -4534,7 +4735,11 @@ async function attachChecks(){
   el.querySelectorAll('[data-checks-mes]').forEach(tile=>{
     tile.addEventListener('click',async()=>{
       checksView=tile.getAttribute('data-checks-mes');
-      el.innerHTML=await renderChecksMes(checksView);
+      window._checksEditIdx=0;
+      // Si ya tiene check guardado → modo ver (resumen). Si no → modo carga
+      const raw=await sGet(`check:${checksView}`,true);
+      const modo=raw?'ver':'ver'; // siempre 'ver' — la pantalla sin datos muestra la carga
+      el.innerHTML=await renderChecksMes(checksView,modo);
       attachChecks();
     });
   });
@@ -4547,13 +4752,13 @@ async function attachChecks(){
     checksView=null;renderTab();
   });
 
-  // Subir PDF del check
+  // Subir PDF del check (nuevo o reemplazar)
   el.querySelector('#check-upload')?.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     const period=e.target.getAttribute('data-period');
+    const idx=parseInt(e.target.getAttribute('data-idx')||'0');
     showLoad(true);
     try{
-      // Leer PDF con pdf.js
       const ab=await file.arrayBuffer();
       const pdfjsLib=window['pdfjs-dist/build/pdf'];
       pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -4564,22 +4769,26 @@ async function attachChecks(){
         const tc=await page.getTextContent();
         fullText+=tc.items.map(i=>i.str).join('\n')+'\n';
       }
-      // Parsear
       const parsed=parseCheckPDF(fullText);
-      // Guardar datos parseados + metadata del PDF
       const du=await readDU(file);
-      const stored={
-        ...parsed,
-        auditor: parsed.auditor||'',
-        auditorTipo: parsed.auditorTipo||'',
-        pdfMeta:{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()},
-        pdfData:du,
-        periodo:period
-      };
-      await sSet(`check:${period}`,JSON.stringify(stored),true);
+      const newData={...parsed,pdfMeta:{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()},pdfData:du,periodo:period};
+      // Manejar array de checks
+      const raw=await sGet(`check:${period}`,true);
+      if(raw){
+        const existing=JSON.parse(raw);
+        const checkArr=Array.isArray(existing)?existing:[existing];
+        // Preservar memo y datos de cierre de NC del check anterior
+        const prev=checkArr[idx]||{};
+        if(prev.memoPdfMeta)newData.memoPdfMeta=prev.memoPdfMeta;
+        if(prev.memoPdfData)newData.memoPdfData=prev.memoPdfData;
+        checkArr[idx]=newData;
+        await sSet(`check:${period}`,JSON.stringify(checkArr.length===1?checkArr[0]:checkArr),true);
+      } else {
+        await sSet(`check:${period}`,JSON.stringify(newData),true);
+      }
       toast(`Check cargado ✓ — ${parsed.items.length} ítems, ${parsed.items.filter(x=>/no cumple/i.test(x.estado)).length} No Cumple`);
-      checksView=period;
-      el.innerHTML=await renderChecksMes(period);
+      window._checksEditIdx=idx;
+      el.innerHTML=await renderChecksMes(period,'editar');
       attachChecks();
     }catch(err){alert('Error al procesar el PDF: '+err.message);}
     showLoad(false);
