@@ -4034,12 +4034,12 @@ async function renderChecksHistorial(){
   for(const p of periodos){
     const raw=await sGet(`check:${p}`,true);
     if(!raw)continue;
-    const data=JSON.parse(raw);
     const MESES_LABELS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     const [y,m]=p.split('-');
     const mesLabel=`${MESES_LABELS[parseInt(m)-1]}-${y}`;
-    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado));
-    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''}));
+    const items=getItemsDeCheck(raw);
+    const nc=items.filter(x=>/no cumple/i.test(x.estado));
+    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel}));
   }
   if(!allNC.length)return`<div class="empty-s"><p>No hay no conformidades registradas en ningún período.</p></div>`;
   const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
@@ -4086,12 +4086,12 @@ async function renderChecksPendientes(){
   for(const p of periodos){
     const raw=await sGet(`check:${p}`,true);
     if(!raw)continue;
-    const data=JSON.parse(raw);
     const MESES_LABELS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     const [y,m]=p.split('-');
     const mesLabel=`${MESES_LABELS[parseInt(m)-1]}-${y}`;
-    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado)&&!x.cerrada);
-    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''}));
+    const items=getItemsDeCheck(raw);
+    const nc=items.filter(x=>/no cumple/i.test(x.estado)&&!x.cerrada);
+    nc.forEach(x=>allNC.push({...x,periodo:p,mesLabel}));
   }
   if(!allNC.length)return`<div style="text-align:center;padding:32px;background:var(--gb);border:1px solid var(--gbr);border-radius:10px">
     <div style="font-size:28px;margin-bottom:8px">✅</div>
@@ -4373,6 +4373,18 @@ async function renderChecksMes(period, modo='ver'){
 }
 
 
+// Busca un item por n en todos los checks del período (maneja array o objeto)
+function findAndUpdateNC(raw, n, updateFn){
+  const parsed=JSON.parse(raw);
+  const checkArr=Array.isArray(parsed)?parsed:[parsed];
+  let found=false;
+  for(const chk of checkArr){
+    const item=(chk.items||[]).find(x=>x.n===n);
+    if(item){updateFn(item);found=true;break;}
+  }
+  return{updated:JSON.stringify(checkArr.length===1?checkArr[0]:checkArr),found};
+}
+
 async function attachNCHandlers(container){
   // Guardar detalle sin cerrar
   container.querySelectorAll('[data-nc-guardar]').forEach(btn=>{
@@ -4383,10 +4395,8 @@ async function attachNCHandlers(container){
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const data=JSON.parse(raw);
-        const item=data.items.find(x=>x.n===n);
-        if(item){item.detalle=det;item.detalleAt=new Date().toISOString();}
-        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.detalle=det;item.detalleAt=new Date().toISOString();});
+        if(found)await sSet(`check:${periodo}`,updated,true);
         toast('Detalle guardado ✓');
       }
       showLoad(false);
@@ -4403,10 +4413,8 @@ async function attachNCHandlers(container){
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const data=JSON.parse(raw);
-        const item=data.items.find(x=>x.n===n);
-        if(item){item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();}
-        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();});
+        if(found)await sSet(`check:${periodo}`,updated,true);
         toast('No conformidad cerrada ✓');
         const card=container.querySelector(`#nc-card-${periodo}-${n}`);
         if(card){
@@ -4427,14 +4435,8 @@ async function attachNCHandlers(container){
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const data=JSON.parse(raw);
-        const item=data.items.find(x=>x.n===n);
-        if(item){
-          delete item.cerrada;
-          delete item.detallecierre;
-          delete item.fechaCierre;
-        }
-        await sSet(`check:${periodo}`,JSON.stringify(data),true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{delete item.cerrada;delete item.detallecierre;delete item.fechaCierre;});
+        if(found)await sSet(`check:${periodo}`,updated,true);
         toast('NC reabierta — vuelve a Pendientes ✓');
         // Actualizar fila visualmente
         const row=container.querySelector(`#hist-row-${periodo}-${n}`);
@@ -4450,17 +4452,37 @@ async function attachNCHandlers(container){
   });
 }
 
+// ── Helper: extrae TODOS los items de un check (puede ser objeto o array de checks)
+function getItemsDeCheck(raw){
+  if(!raw) return [];
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const checkArr = Array.isArray(parsed) ? parsed : [parsed];
+  // Concatenar items de todos los checks del mes
+  return checkArr.flatMap(c => (c.items||[]).map(x=>({
+    ...x,
+    auditor: x.auditor || c.auditor || '',
+    auditorTipo: x.auditorTipo || c.auditorTipo || ''
+  })));
+}
+function getUltimoCheckData(raw){
+  // Devuelve el último check cargado del mes (para auditor, pdfMeta, etc.)
+  if(!raw) return null;
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const checkArr = Array.isArray(parsed) ? parsed : [parsed];
+  return checkArr[checkArr.length-1];
+}
+
 async function loadCheckBadges(el){
   const yn=checksAnio;
   for(let m=1;m<=12;m++){
     const period=`${yn}-${String(m).padStart(2,'0')}`;
     const raw=await sGet(`check:${period}`,true);
     if(!raw)continue;
-    const data=JSON.parse(raw);
+    const items=getItemsDeCheck(raw);
     const tile=el.querySelector(`#check-tile-${period}`);
     const badge=el.querySelector(`#check-badge-${period}`);
     const label=el.querySelector(`#check-tile-label-${period}`);
-    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado));
+    const nc=items.filter(x=>/no cumple/i.test(x.estado));
     const ncAbiertas=nc.filter(x=>!x.cerrada);
     if(tile){tile.style.background='var(--gb)';tile.style.borderColor='var(--gbr)';}
     if(label)label.style.color=ncAbiertas.length>0?'var(--r)':'var(--g)';
@@ -4897,18 +4919,22 @@ async function getNcPendientes(cr){
   const periodos=[];
   for(let y=yn-1;y<=yn;y++)for(let m=1;m<=12;m++)periodos.push(`${y}-${String(m).padStart(2,'0')}`);
   const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  let pendientes=0;const ncs=[];
+  let pendientes=0;
+  const todasNC=[];
+  let ultimoCheck=null;
   for(const p of periodos){
     const raw=await sGetCR(cr,'check:'+p);
     if(!raw)continue;
-    const data=JSON.parse(raw);
     const[y,m]=p.split('-');
     const mesLabel=`${MESES[parseInt(m)-1]}-${y}`;
-    const nc=(data.items||[]).filter(x=>/no cumple/i.test(x.estado)&&!x.cerrada);
-    pendientes+=nc.length;
-    nc.forEach(x=>ncs.push({...x,periodo:p,mesLabel}));
+    ultimoCheck=mesLabel;
+    // Usar helper que maneja array o objeto
+    const items=getItemsDeCheck(raw);
+    const nc=items.filter(x=>/no cumple/i.test(x.estado));
+    nc.forEach(x=>todasNC.push({...x,periodo:p,mesLabel,cerrada:!!x.cerrada}));
+    pendientes+=nc.filter(x=>!x.cerrada).length;
   }
-  return{pendientes,ncs};
+  return{pendientes,todasNC,ultimoCheck};
 }
 
 async function sGetCR(cr,k){
@@ -5005,11 +5031,11 @@ async function renderDivisionalNC(cr){
   for(const p of periodos){
     const raw=await sGetCR(cr,'check:'+p);
     if(!raw)continue;
-    const data=JSON.parse(raw);
     const[y,m]=p.split('-');
     const mesLabel=`${MESES[parseInt(m)-1]}-${y}`;
-    (data.items||[]).filter(x=>/no cumple/i.test(x.estado))
-      .forEach(x=>todasNC.push({...x,periodo:p,mesLabel,auditor:data.auditor||''}));
+    const items=getItemsDeCheck(raw);
+    items.filter(x=>/no cumple/i.test(x.estado))
+      .forEach(x=>todasNC.push({...x,periodo:p,mesLabel}));
   }
   const pendientes=todasNC.filter(x=>!x.cerrada).length;
   const c=ncColor(pendientes);
