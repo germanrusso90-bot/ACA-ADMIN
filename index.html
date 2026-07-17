@@ -1018,7 +1018,18 @@ async function renderUSExcel(usKey){
   const rows=PD.us[usKey];
   // Canon y Aguas = mes actual (CP); resto = mes anterior
   const currentPeriod=(usKey==='aguas')?CP:prevMonth(CP);
-  const periodsSet=new Set(rows.map(r=>r.period).filter(p=>p<=currentPeriod));
+
+  // Generar todos los períodos desde 12 meses atrás hasta el actual
+  // Esto asegura que aparezcan meses aunque no estén en APS
+  const periodsSet=new Set();
+  const [cy,cm]=currentPeriod.split('-').map(Number);
+  for(let i=11;i>=0;i--){
+    let y=cy,m=cm-i;
+    while(m<=0){m+=12;y--;}
+    periodsSet.add(`${y}-${String(m).padStart(2,'0')}`);
+  }
+  // Agregar también los que están en APS y los que tienen datos en PD
+  rows.forEach(r=>{if(r.period<=currentPeriod)periodsSet.add(r.period);});
   APS.filter(p=>p<=currentPeriod).forEach(p=>periodsSet.add(p));
   periodsSet.add(currentPeriod);
   const sortedPeriods=[...periodsSet].sort((a,b)=>a.localeCompare(b));
@@ -1536,12 +1547,23 @@ function renderFull(){
   ensureFullHistory();
   const currentPeriod=prevMonth(CP);
   const history=PD.fullHistory||[];
-  // Solo mostrar hasta el mes anterior a CP
-  const rows=history.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
-  // Asegurar que el período actual existe
-  if(!rows.find(r=>r.period===currentPeriod)){
-    rows.push({period:currentPeriod,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null});
+
+  // Generar todos los períodos desde 12 meses atrás hasta el actual
+  const allPeriods=new Set();
+  const[cy,cm]=currentPeriod.split('-').map(Number);
+  for(let i=11;i>=0;i--){
+    let y=cy,m=cm-i;
+    while(m<=0){m+=12;y--;}
+    allPeriods.add(`${y}-${String(m).padStart(2,'0')}`);
   }
+  allPeriods.add(currentPeriod);
+  history.forEach(r=>{if(r.period<=currentPeriod)allPeriods.add(r.period);});
+
+  // Construir filas: usar historial si existe, o fila vacía
+  const rows=[...allPeriods].sort((a,b)=>a.localeCompare(b)).map(p=>{
+    const existing=history.find(r=>r.period===p);
+    return existing||{period:p,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null};
+  });
   const f=PD.full;
   if(!f.interesMensual)f.interesMensual='';
   if(!f.diasAtrasados)f.diasAtrasados='';
@@ -1768,11 +1790,22 @@ function renderHotel(){
   ensureHotelTelHistory();
   ensureCanonHistory();
 
-  // ── CANON ALOJAMIENTO — tabla histórica estilo Full ───────────
-  const canonRows=PD.hotel.canonHistory.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
-  if(!canonRows.find(r=>r.period===currentPeriod)){
-    canonRows.push({period:currentPeriod,factNro:'',factTotal:null,ncNro:'',ncTotal:null,transferencia:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false});
+  // Generar todos los períodos desde 12 meses atrás
+  function buildPeriods(history,current){
+    const all=new Set();
+    const[cy,cm]=current.split('-').map(Number);
+    for(let i=11;i>=0;i--){let y=cy,m=cm-i;while(m<=0){m+=12;y--;}all.add(`${y}-${String(m).padStart(2,'0')}`);}
+    all.add(current);
+    history.forEach(r=>{if(r.period<=current)all.add(r.period);});
+    return [...all].sort((a,b)=>a.localeCompare(b));
   }
+
+  // ── CANON ALOJAMIENTO — tabla histórica estilo Full ───────────
+  const canonPeriods=buildPeriods(PD.hotel.canonHistory||[],currentPeriod);
+  const canonRows=canonPeriods.map(p=>{
+    const ex=(PD.hotel.canonHistory||[]).find(r=>r.period===p);
+    return ex||{period:p,factNro:'',factTotal:null,ncNro:'',ncTotal:null,transferencia:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};
+  });
 
   const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
 
@@ -1911,10 +1944,11 @@ function renderHotel(){
   </div>`;
 
   // ── TELÉFONO — tabla histórica igual que US ───────────────────
-  const telRows=PD.hotel.telHistory.filter(r=>r.period<=currentPeriod).sort((a,b)=>a.period.localeCompare(b.period));
-  if(!telRows.find(r=>r.period===currentPeriod)){
-    telRows.push({period:currentPeriod,importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false});
-  }
+  const telPeriods=buildPeriods(PD.hotel.telHistory||[],currentPeriod);
+  const telRows=telPeriods.map(p=>{
+    const ex=(PD.hotel.telHistory||[]).find(r=>r.period===p);
+    return ex||{period:p,importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false};
+  });
 
   const thTel=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
   const telTrs=telRows.map(row=>{
