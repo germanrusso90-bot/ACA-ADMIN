@@ -373,26 +373,35 @@ async function sGet(k,sh=true){
       return val;
     }
   }catch(e){console.warn('sGet error',fk,e.message?.slice(0,40));}
-  // 4. Fallback: clave VIEJA sin prefijo (datos guardados antes del sistema multi-tenant)
-  // Ej: "data:2026-05" en lugar de "cr3531:data:2026-05"
-  const oldKey=k.startsWith('cr')?null:k;
-  if(oldKey){
+
+  // 4. Fallback: buscar claves VIEJAS (datos antes del sistema multi-tenant)
+  // La clave "cr3531:data:2026-05" puede estar guardada como "data:2026-05"
+  // Construir lista de claves viejas posibles
+  const oldKeys=[];
+  if(fk.startsWith(`cr${CURRENT_CR}:`)){
+    // Quitar el prefijo cr3531:
+    oldKeys.push(fk.slice(`cr${CURRENT_CR}:`.length));
+  }
+  // También probar sin encode (el encodeKey puede haber cambiado)
+  for(const oldKey of oldKeys){
+    if(!oldKey)continue;
     try{
       const db=await getDB();
       const snapOld=await db.getDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
       if(snapOld.exists()){
         const val=snapOld.data().v;
-        console.log(`Migrando clave vieja → nueva: ${oldKey} → ${fk}`);
+        console.log(`✅ Migración automática: "${oldKey}" → "${fk}"`);
         _cache[fk]=val;
         lsSet(fk,val,getTTL(fk));
         // Guardar con clave nueva y borrar la vieja en background
-        getDB().then(db=>Promise.all([
-          db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:val,k:fk,updatedAt:Date.now()}),
-          db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)))
-        ])).catch(()=>{});
+        getDB().then(async db=>{
+          await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:val,k:fk,updatedAt:Date.now()});
+          await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
+          console.log(`✅ Clave migrada y vieja eliminada: ${oldKey}`);
+        }).catch(e=>console.warn('Error migrando clave',e));
         return val;
       }
-    }catch(e){console.warn('sGet fallback viejo error',oldKey);}
+    }catch(e){console.warn('sGet fallback error para',oldKey,e.message?.slice(0,40));}
   }
   return null;
 }
@@ -506,11 +515,50 @@ async function diagFirebase(){
     const {collection,getDocs}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const snap=await getDocs(collection(db.fs,'kv'));
     const keys=[];
-    snap.forEach(d=>keys.push({id:d.id,k:d.data().k,size:JSON.stringify(d.data().v||'').length}));
-    keys.sort((a,b)=>a.id.localeCompare(b.id));
-    const msg=keys.map(k=>`${k.k||k.id} (${k.size} chars)`).join('\n');
-    alert('Claves en Firebase ('+keys.length+'):\n\n'+msg);
+    snap.forEach(d=>{
+      const data=d.data();
+      const k=data.k||d.id;
+      keys.push({id:d.id,k,size:JSON.stringify(data.v||'').length});
+    });
+    keys.sort((a,b)=>a.k.localeCompare(b.k));
+    const viejas=keys.filter(k=>!k.k.startsWith('cr'));
+    const nuevas=keys.filter(k=>k.k.startsWith('cr'));
+    const msg=`CLAVES CON PREFIJO (${nuevas.length}):\n${nuevas.map(k=>`  ✓ ${k.k} (${k.size}ch)`).join('\n')}\n\nCLAVES SIN PREFIJO - VIEJAS (${viejas.length}):\n${viejas.map(k=>`  ⚠️ ${k.k} (${k.size}ch)`).join('\n')||'  (ninguna)'}`;
+    const migrar=viejas.length>0&&confirm(`${msg}\n\n¿Migrar ahora las ${viejas.length} claves viejas al CR ${CURRENT_CR}?`);
+    if(migrar)await migrarClavesViejas(viejas,db);
+    else alert(msg);
   }catch(e){alert('Error: '+e.message);}
+}
+
+async function migrarClavesViejas(viejas,db){
+  let ok=0,err=0;
+  showLoad(true);
+  for(const item of viejas){
+    try{
+      const oldKey=item.k;
+      const newKey=`cr${CURRENT_CR}:${oldKey}`;
+      // Leer valor original
+      const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
+      if(!snap.exists())continue;
+      const val=snap.data().v;
+      // Guardar con clave nueva
+      await db.setDoc(db.doc(db.fs,'kv',encodeKey(newKey)),{v:val,k:newKey,updatedAt:Date.now()});
+      // Borrar clave vieja
+      await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
+      // Actualizar caché
+      _cache[newKey]=val;
+      lsSet(newKey,val,getTTL(newKey));
+      console.log(`Migrado: ${oldKey} → ${newKey}`);
+      ok++;
+    }catch(e){console.warn('Error migrando',item.k,e);err++;}
+  }
+  showLoad(false);
+  // Recargar datos
+  _cache={};
+  await loadPeriod(CP);
+  await loadYER();
+  render();
+  alert(`Migración completa ✓\n${ok} claves migradas${err>0?`\n${err} errores`:''}\n\nLos datos del historial ahora deberían aparecer.`);
 }
 
 
