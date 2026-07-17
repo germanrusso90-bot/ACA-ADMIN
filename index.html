@@ -1347,7 +1347,12 @@ async function renderUSExcel(usKey){
       const key=btn.getAttribute('data-edit-us');
       const period=btn.getAttribute('data-edit-period');
       let idx=PD.us[key].findIndex(r=>r.period===period);
-      if(idx===-1)return;
+      if(idx===-1){
+        // Crear fila vacía si no existe
+        PD.us[key].push({period,importe:null,iva:null,percepciones:null,intereses:null,
+          nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false});
+        idx=PD.us[key].length-1;
+      }
       PD.us[key][idx].locked=false;
       await saveP();
       renderTab();
@@ -2123,8 +2128,16 @@ function attachHotel(){
   el.querySelectorAll('[data-canon-edit]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-canon-edit');
-      const row=PD.hotel.canonHistory.find(r=>r.period===period);
-      if(row){row.locked=false;await saveP();renderTab();}
+      if(!PD.hotel.canonHistory)PD.hotel.canonHistory=[];
+      let row=PD.hotel.canonHistory.find(r=>r.period===period);
+      if(!row){
+        row={period,factNro:'',factTotal:null,ncNro:'',ncTotal:null,transferencia:null,
+             nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};
+        PD.hotel.canonHistory.push(row);
+        PD.hotel.canonHistory.sort((a,b)=>a.period.localeCompare(b.period));
+      }
+      row.locked=false;
+      await saveP();renderTab();
     });
   });
 
@@ -2199,8 +2212,16 @@ function attachHotel(){
   el.querySelectorAll('[data-tel-edit]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-tel-edit');
-      const row=PD.hotel.telHistory.find(r=>r.period===period);
-      if(row){row.locked=false;await saveP();renderTab();}
+      if(!PD.hotel.telHistory)PD.hotel.telHistory=[];
+      let row=PD.hotel.telHistory.find(r=>r.period===period);
+      if(!row){
+        row={period,importe:null,iva:0,percepciones:0,intereses:0,
+             nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false};
+        PD.hotel.telHistory.push(row);
+        PD.hotel.telHistory.sort((a,b)=>a.period.localeCompare(b.period));
+      }
+      row.locked=false;
+      await saveP();renderTab();
     });
   });
 
@@ -2789,6 +2810,18 @@ function normRemito(r){
   return r;
 }
 function yerPeriod(){
+  // Si hay un período anterior seleccionado manualmente, usarlo
+  if(YER._periodoAnterior){
+    const [y,m]=YER._periodoAnterior.split('-').map(Number);
+    const mesLiq=m, anyoLiq=y;
+    const mesAnterior=mesLiq===1?12:mesLiq-1;
+    const anyoAnterior=mesLiq===1?anyoLiq-1:anyoLiq;
+    const lastDayAnterior=new Date(anyoAnterior,mesAnterior,0).getDate();
+    const lastDayLiq=new Date(anyoLiq,mesLiq,0).getDate();
+    const desde=new Date(anyoAnterior,mesAnterior-1,lastDayAnterior,22,0,0);
+    const hasta=new Date(anyoLiq,mesLiq-1,lastDayLiq,22,0,0);
+    return{desde,hasta,mesLiq,anyoLiq};
+  }
   const [y, m] = CP.split('-').map(Number);
   const mesLiq = m === 1 ? 12 : m - 1;
   const anyoLiq = m === 1 ? y - 1 : y;
@@ -3005,7 +3038,10 @@ function renderYER(){
         <div style="font-size:13px;font-weight:800;color:var(--g);">✓ Período ${mesLabel} liquidado</div>
         <div style="font-size:12px;color:var(--m2);margin-top:2px;">Para cargar el nuevo período subí los archivos del mes siguiente.</div>
       </div>
-      <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="yer-cargar-anterior" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
+        <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
+      </div>
     </div>
 
     <div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;">
@@ -3458,10 +3494,13 @@ function attachYER(){
           validaciones: JSON.parse(JSON.stringify(YER.validaciones||{}))
         };
         YER.liqHistory.push(liqData);
-        // Resetear para el próximo mes
+        // Ordenar por período
+        YER.liqHistory.sort((a,b)=>(a.period||'').localeCompare(b.period||''));
+        // Resetear para el próximo mes y limpiar período anterior seleccionado
         YER.rows=[]; YER.evRows=[];
         YER.ventasFile=null; YER.everilioFile=null;
         YER.validaciones={};
+        delete YER._periodoAnterior; // limpiar el modo de período anterior
         modal.style.display='none';
         showLoad(true); await saveYER(); showLoad(false);
         toast('Liquidación guardada ✓'); renderTab();
@@ -3483,11 +3522,61 @@ function attachYER(){
     const detalle=YER_COMBUST.map(c=>{const s=summary[c.key];return {...s,precio:s.litros>0?s.importe/s.litros:0};});
     const totalLt=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.litros,0);
     const totalCom=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.totalCom,0);
-    const liq={mesLabel, period:prevMonth(CP), detalle, totalLt, totalCom, fecha:new Date().toLocaleDateString('es-AR')};
+    const liq={
+      mesLabel,
+      period: YER._periodoAnterior || prevMonth(CP),  // usar período anterior si se seleccionó
+      detalle, totalLt, totalCom,
+      fecha:new Date().toLocaleDateString('es-AR')
+    };
     openLiqModal(liq, true); // canSave=true
   });
 
   // Nuevo período — resetea archivos y datos del período actual
+  el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>{
+    // Generar lista de últimos 12 meses sin liquidación registrada
+    const liquidados=new Set((YER.liqHistory||[]).map(l=>l.period));
+    const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const opciones=[];
+    const hoy=new Date();
+    for(let i=12;i>=1;i--){
+      let y=hoy.getFullYear(),m=hoy.getMonth()+1-i;
+      while(m<=0){m+=12;y--;}
+      const p=`${y}-${String(m).padStart(2,'0')}`;
+      if(!liquidados.has(p)) opciones.push({p,label:`${MESES[m-1]} ${y}`});
+    }
+    if(!opciones.length){toast('Todos los períodos anteriores ya tienen liquidación registrada.');return;}
+
+    // Modal de selección
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <h3 style="font-size:16px;font-weight:800;color:var(--pd);margin-bottom:6px">📅 Cargar período anterior</h3>
+      <p style="font-size:13px;color:var(--m2);margin-bottom:18px">Seleccioná el mes a cargar. Se limpiarán los archivos actuales temporalmente para que puedas subir los de ese período.</p>
+      <select id="yer-sel-periodo" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:8px;font-size:14px;background:var(--card2);color:var(--pd);margin-bottom:18px">
+        ${opciones.map(o=>`<option value="${o.p}">${o.label}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="yer-ant-cancel" style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
+        <button id="yer-ant-ok" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cargar ese período</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#yer-ant-cancel').addEventListener('click',()=>modal.remove());
+    modal.querySelector('#yer-ant-ok').addEventListener('click',async()=>{
+      const periodo=modal.querySelector('#yer-sel-periodo').value;
+      if(!confirm(`¿Cargar YER de ${opciones.find(o=>o.p===periodo)?.label}?\nSe limpiarán los archivos actuales para que subas los de ese mes.`)){return;}
+      modal.remove();
+      // Guardar período objetivo
+      YER._periodoAnterior=periodo;
+      YER.rows=[]; YER.evRows=[];
+      YER.ventasFile=null; YER.everilioFile=null;
+      YER.validaciones={};
+      showLoad(true); await saveYER(); showLoad(false);
+      yerSub='diferencias'; renderTab();
+      toast(`Modo carga: ${opciones.find(o=>o.p===periodo)?.label} — subí los archivos de ese mes`);
+    });
+  });
+
   el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
     if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
     YER.rows=[]; YER.evRows=[];
