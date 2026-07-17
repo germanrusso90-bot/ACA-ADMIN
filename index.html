@@ -2489,8 +2489,31 @@ function attachFull(){
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-period');
       if(!PD.fullHistory)PD.fullHistory=[];
-      const row=PD.fullHistory.find(r=>r.period===period);
-      if(row){row.locked=false; await saveP(); renderTab();}
+      let row=PD.fullHistory.find(r=>r.period===period);
+      if(!row){
+        // Crear fila vacía para el período si no existe
+        row={period,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',
+             fechaCancelacion:'',interesMensual:'',diasAtrasados:'',
+             comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null};
+        PD.fullHistory.push(row);
+        PD.fullHistory.sort((a,b)=>a.period.localeCompare(b.period));
+      }
+      row.locked=false;
+      // Cargar este período como el activo para editar
+      // Copiar datos de la fila al PD.full actual para que el formulario de edición los muestre
+      PD.full={...PD.full,
+        ventas:row.ventas||null,
+        nroFacturaACA:row.nroFacturaACA||'',
+        fechaCancelacion:row.fechaCancelacion||'',
+        interesMensual:row.interesMensual||'',
+        diasAtrasados:row.diasAtrasados||'',
+        comprobanteTransferencia:row.comprobanteTransferencia||null,
+        facturaACA:row.facturaACA||null,
+        locked:false,
+        _editingPeriod:period  // marcar qué período se está editando
+      };
+      await saveP();
+      renderTab();
     });
   });
 
@@ -2598,17 +2621,20 @@ function attachFull(){
     PD.full.fechaCancelacion=fecha;
     PD.full.locked=true;
 
+    // Determinar el período a guardar — puede ser un período histórico editado
+    const targetPeriod=PD.full._editingPeriod||prevMonth(CP);
+
     // Calcular totales para guardar en historial
     const int=calcIntereses(PD.full);
     const subtotal=PD.full.ventas?PD.full.ventas.recupero12:null;
     const montoInt=int?int.montoInt:0;
     const totalFinal=(subtotal||0)+montoInt;
 
-    // Guardar en fullHistory como registro del período actual
+    // Guardar en fullHistory como registro del período
     if(!PD.fullHistory)PD.fullHistory=[];
-    const existIdx=PD.fullHistory.findIndex(r=>r.period===prevMonth(CP));
+    const existIdx=PD.fullHistory.findIndex(r=>r.period===targetPeriod);
     const histRow={
-      period:prevMonth(CP),
+      period:targetPeriod,
       importe:PD.full.ventas?PD.full.ventas.totalVentas:null,
       cigarrillos:PD.full.ventas?PD.full.ventas.cigarrillos:null,
       recuperar:subtotal,
@@ -2619,10 +2645,15 @@ function attachFull(){
       importe_interes:montoInt||null,
       totalFinal,
       comprobanteTransferencia:PD.full.comprobanteTransferencia||null,
+      facturaACA:PD.full.facturaACA||null,
+      ventas:PD.full.ventas||null,
       locked:true
     };
     if(existIdx>=0) PD.fullHistory[existIdx]=histRow;
     else PD.fullHistory.push(histRow);
+
+    // Limpiar el período de edición temporal
+    delete PD.full._editingPeriod;
 
     showLoad(true);await saveP();showLoad(false);
     toast('Registro guardado ✓');renderTab();
