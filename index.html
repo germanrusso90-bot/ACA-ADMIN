@@ -359,22 +359,42 @@ async function sGet(k,sh=true){
   const lv=lsGet(fk);
   if(lv!==null){
     _cache[fk]=lv;
-    // Refrescar Firebase en background sin bloquear
     _fbRefresh(fk);
     return lv;
   }
-  // 3. Firebase (bloqueante solo si no hay caché)
+  // 3. Firebase con clave nueva (con prefijo cr3531:)
   try{
     const db=await getDB();
     const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(fk)));
-    const val=snap.exists()?snap.data().v:null;
-    _cache[fk]=val;
-    if(val!==null)lsSet(fk,val,getTTL(fk));
-    return val;
-  }catch(e){
-    console.warn('sGet Firebase error',fk,e.message?.slice(0,50));
-    return null;
+    if(snap.exists()){
+      const val=snap.data().v;
+      _cache[fk]=val;
+      if(val!==null)lsSet(fk,val,getTTL(fk));
+      return val;
+    }
+  }catch(e){console.warn('sGet error',fk,e.message?.slice(0,40));}
+  // 4. Fallback: clave VIEJA sin prefijo (datos guardados antes del sistema multi-tenant)
+  // Ej: "data:2026-05" en lugar de "cr3531:data:2026-05"
+  const oldKey=k.startsWith('cr')?null:k;
+  if(oldKey){
+    try{
+      const db=await getDB();
+      const snapOld=await db.getDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
+      if(snapOld.exists()){
+        const val=snapOld.data().v;
+        console.log(`Migrando clave vieja → nueva: ${oldKey} → ${fk}`);
+        _cache[fk]=val;
+        lsSet(fk,val,getTTL(fk));
+        // Guardar con clave nueva y borrar la vieja en background
+        getDB().then(db=>Promise.all([
+          db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:val,k:fk,updatedAt:Date.now()}),
+          db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)))
+        ])).catch(()=>{});
+        return val;
+      }
+    }catch(e){console.warn('sGet fallback viejo error',oldKey);}
   }
+  return null;
 }
 
 // Refresca Firebase en background (sin await) y actualiza caché si cambió
