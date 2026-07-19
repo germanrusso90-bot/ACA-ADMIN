@@ -2032,30 +2032,26 @@ function attachHotel(){
   // Extraer N° y total de un PDF de ACA usando pdf.js
   async function extractCanonPDF(file){
     try{
-      // Usar pdf.js sin worker para evitar problemas de seguridad en archivos locales
       const pdfjsLib=window['pdfjs-dist/build/pdf'];
-      if(!pdfjsLib){throw new Error('pdf.js no disponible');}
-      pdfjsLib.GlobalWorkerOptions.workerSrc='';
+      if(!pdfjsLib)throw new Error('pdf.js no disponible');
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const ab=await file.arrayBuffer();
-      const loadingTask=pdfjsLib.getDocument({data:new Uint8Array(ab),disableWorker:true,useSystemFonts:true});
-      const pdf=await loadingTask.promise;
+      const pdf=await pdfjsLib.getDocument({data:new Uint8Array(ab)}).promise;
       let text='';
       for(let i=1;i<=pdf.numPages;i++){
         const page=await pdf.getPage(i);
         const content=await page.getTextContent();
-        text+=content.items.map(it=>it.str).join(' ')+'\n';
+        // Extraer línea por línea (un item por str)
+        text+=content.items.map(it=>it.str).join('\n')+'\n';
       }
-      // N° Factura: "FACTURA N° 0650 00022038"
-      const factMatch=text.match(/FACTURA\s+N[°o]?\s*(\d{4})\s+(\d{8})/i);
-      // N° NC: "N.CREDITO N° 0650 00007679"
-      const ncMatch=text.match(/N\.?CREDITO\s+N[°o]?\s*(\d{4})\s+(\d{8})/i);
-      // TOTAL: buscar el último "TOTAL 9.504.132,01"
-      const totalMatches=[...text.matchAll(/TOTAL\s+([\d.]+,\d{2})/gi)];
-      const lastTotal=totalMatches.length?totalMatches[totalMatches.length-1][1]:null;
-      const total=lastTotal?parseFloat(lastTotal.replace(/\./g,'').replace(',','.')):null;
-      return{nroFactura:factMatch?factMatch[1]+'-'+factMatch[2]:null,nroNC:ncMatch?ncMatch[1]+'-'+ncMatch[2]:null,total};
+      const parsed=parseHotelPDF(text);
+      return{
+        nroFactura: parsed.tipo==='FACTURA' ? parsed.nroCompleto : null,
+        nroNC:      parsed.tipo==='N.CREDITO'? parsed.nroCompleto: null,
+        total:      parsed.total ? Math.abs(parsed.total) : null
+      };
     }catch(err){
-      console.warn('PDF.js falló:',err.message);
+      console.warn('extractCanonPDF error:',err.message);
       return{nroFactura:null,nroNC:null,total:null};
     }
   }
@@ -2077,22 +2073,24 @@ function attachHotel(){
         if(slotKey.endsWith(':fact')){
           row.facturaACA=meta;
           const ex=await extractCanonPDF(file);
-          if(ex.nroFactura)row.factNro=ex.nroFactura;
+          if(ex.nroFactura){row.factNro=ex.nroFactura; toast(`Factura cargada ✓ — N° ${ex.nroFactura}${ex.total?' · $'+fmtArg(ex.total):''}`);}
+          else toast('Factura cargada ✓');
           if(ex.total)row.factTotal=ex.total;
-          toast('Factura cargada ✓');
         } else if(slotKey.endsWith(':nc')){
           row.notaCredito=meta;
           const ex=await extractCanonPDF(file);
-          if(ex.nroNC)row.ncNro=ex.nroNC;
+          if(ex.nroNC){row.ncNro=ex.nroNC; toast(`NC cargada ✓ — N° ${ex.nroNC}${ex.total?' · $'+fmtArg(ex.total):''}`);}
+          else toast('Nota de crédito cargada ✓');
           if(ex.total)row.ncTotal=ex.total;
-          toast('Nota de crédito cargada ✓');
         } else if(slotKey.endsWith(':transf')){
           row.transf=meta;
           toast('Comprobante cargado ✓');
         }
         await saveP();
       }catch(err){alert('Error: '+err.message);}
-      showLoad(false);renderTab();
+      showLoad(false);
+      // Re-render solo la fila afectada sin perder campos manuales no guardados
+      renderTab();
     });
   });
 
@@ -2387,12 +2385,13 @@ function renderTab(){
     case 'full':   el.innerHTML=renderFull();attachFull();break;
     case 'hotel':  el.innerHTML=renderHotel();attachHotel();break;
     case 'yer':    {
-      const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq;
+      const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq, _pa=YER._periodoAnterior;
       loadYER().then(()=>{
         // Restaurar flags de estado (no se persisten en storage)
         if(_vl!=null) YER._viewingLiq=_vl;
         if(_bl!=null) YER._backup=_bl;
         if(_el!=null) YER._editingLiq=_el;
+        if(_pa!=null) YER._periodoAnterior=_pa;
         el.innerHTML=renderYER();
         attachYER();
       });break;
@@ -2673,8 +2672,14 @@ function attachFull(){
     if(existIdx>=0) PD.fullHistory[existIdx]=histRow;
     else PD.fullHistory.push(histRow);
 
-    // Limpiar el período de edición temporal
+    // Limpiar el período de edición temporal y resetear formulario si era período anterior
+    const erasEditingPeriod = PD.full._editingPeriod && PD.full._editingPeriod !== prevMonth(CP);
     delete PD.full._editingPeriod;
+    if(erasEditingPeriod){
+      // Limpiar el formulario para que el mes actual quede vacío
+      PD.full={ventas:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',
+               diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false};
+    }
 
     showLoad(true);await saveP();showLoad(false);
     toast('Registro guardado ✓');renderTab();
@@ -2978,7 +2983,8 @@ function renderYER(){
     :`<button id="yer-pct-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Guardar %</button>`;
 
   // ── Período ya liquidado: solo mostrar historial + porcentajes ──
-  const yaLiquidado=!!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
+  // Si hay un período anterior seleccionado, mostrar pantalla de carga
+  const yaLiquidado=!YER._periodoAnterior && !!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
   if(yaLiquidado){
     const mesLabel=yerMesLabel();
     const liqHistory=YER.liqHistory||[];
@@ -3076,11 +3082,19 @@ function renderYER(){
     <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">Everilio (Excel)</div>
     ${YER.everilioFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-everilio">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-everilio-input" accept=".xlsx,.xls" hidden></label>`}</div>
   </div>`;
-  let subContent='';
+  // Banner informativo si estamos cargando un período anterior
+  const bannerPeriodoAnterior=YER._periodoAnterior?`
+    <div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#7B5800;">📅 Cargando período anterior: <strong>${yerMesLabel()}</strong></div>
+        <div style="font-size:12px;color:#92400E;margin-top:2px;">Subí los archivos de ese mes. Al liquidar se guardará como ${yerMesLabel()}.</div>
+      </div>
+      <button id="yer-cancelar-anterior" style="background:#fff;color:var(--r);border:1px solid var(--r);border-radius:7px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✕ Cancelar</button>
+    </div>`:'';
   if(yerSub==='diferencias') subContent=renderYERDiferencias();
   else if(yerSub==='detalle-ventas') subContent=renderYERDetalleVentas();
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
-  return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${archivos}${renderYERSubTabs()}${subContent}
+  return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${bannerPeriodoAnterior}${archivos}${renderYERSubTabs()}${subContent}
   <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
     <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
       <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
@@ -3532,6 +3546,16 @@ function attachYER(){
   });
 
   // Nuevo período — resetea archivos y datos del período actual
+  // Cancelar modo período anterior
+  el.querySelector('#yer-cancelar-anterior')?.addEventListener('click',async()=>{
+    delete YER._periodoAnterior;
+    YER.rows=[]; YER.evRows=[];
+    YER.ventasFile=null; YER.everilioFile=null;
+    YER.validaciones={};
+    showLoad(true); await saveYER(); showLoad(false);
+    renderTab();
+  });
+
   el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>{
     // Generar lista de últimos 12 meses sin liquidación registrada
     const liquidados=new Set((YER.liqHistory||[]).map(l=>l.period));
@@ -3809,7 +3833,7 @@ function renderCancelMes(period){
           </div>
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Importe $</div>
-            <input id="cancel-importe" type="number" step="0.01" placeholder="0,00" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
+
           </div>
         </div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -4015,7 +4039,44 @@ function exportNCExcel(todasNC, nombre){
   XLSX.writeFile(wb,`NC_${(nombre||'export').replace(/[^a-zA-Z0-9]/g,'_')}.xlsx`);
 }
 
-// ── CHECKS DE SEGURIDAD ────────────────────────────────────────
+// ── PARSER PDF FACTURA / NC HOTEL ────────────────────────────
+function parseHotelPDF(text){
+  // Estructura ACA: líneas clave en posiciones fijas
+  // línea 39: número sin puntos (ej: "00022444")
+  // línea 40: tipo ("FACTURA" o "N.CREDITO")
+  // línea 41: punto de venta ("0650")
+  // línea 42: fecha ("02/06/2026")
+  // línea 65 (aprox): TOTAL
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  
+  let tipo='', puntoVenta='', numero='', fecha='', total=null;
+  
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(l==='FACTURA'||l==='N.CREDITO'||l==='FACTURA X'){
+      tipo=l;
+      // El número está en la línea anterior (solo dígitos largos)
+      if(i>0&&/^\d{8}$/.test(lines[i-1])) numero=lines[i-1];
+      // El punto de venta está en la línea siguiente
+      if(i+1<lines.length&&/^\d{4}$/.test(lines[i+1])) puntoVenta=lines[i+1];
+      // La fecha en i+2
+      if(i+2<lines.length&&/^\d{2}\/\d{2}\/\d{4}$/.test(lines[i+2])) fecha=lines[i+2];
+    }
+    // TOTAL: buscar el valor grande después de "TOTAL"
+    if(l==='TOTAL'&&i+1<lines.length){
+      const sig=lines[i+1].replace(/\./g,'').replace(',','.');
+      const v=parseFloat(sig);
+      if(!isNaN(v)&&v>0) total=v;
+    }
+  }
+  
+  // Formatear número completo: "0650-00022444"
+  const nroCompleto = puntoVenta&&numero ? `${puntoVenta}-${numero}` : '';
+  const esNC = tipo==='N.CREDITO';
+  
+  return { tipo, nroCompleto, fecha, total: esNC ? -(Math.abs(total||0)) : total };
+}
+
 // ══════════════════════════════════════════════════════════════
 
 let checksAnio=new Date().getFullYear();
