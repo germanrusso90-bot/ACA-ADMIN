@@ -3058,6 +3058,12 @@ function renderYER(){
     ?`<button id="yer-pct-edit" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Editar %</button>`
     :`<button id="yer-pct-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Guardar %</button>`;
 
+  // ── Barra superior siempre visible ──────────────────────────
+  const barraTop=`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+    <button id="yer-hist-btn-top" style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:1.5px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📋 Historial${(YER.liqHistory||[]).length>0?' ('+YER.liqHistory.length+')':''}</button>
+    <button id="yer-cargar-anterior-libre" style="background:var(--yl);color:var(--pd);border:1.5px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
+  </div>`;
+
   // ── Período ya liquidado: solo mostrar historial + porcentajes ──
   // Si hay un período anterior seleccionado, mostrar pantalla de carga
   const yaLiquidado=!YER._periodoAnterior && !!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
@@ -3103,7 +3109,7 @@ function renderYER(){
             💰 RE-LIQUIDAR ${yerMesLabel().toUpperCase()}
           </button>
         </div>`:'';
-      return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${bannerVista}${archivosVista}${renderYERSubTabs()}${subVista}${btnLiqEdicion}
+      return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${barraTop}${bannerVista}${yerSub==='historial'?subVista:archivosVista+renderYERSubTabs()+subVista+btnLiqEdicion}
       <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;"><div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;"><div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;"><button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button><button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button><button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button></div></div></div>`;
     }
 
@@ -3159,12 +3165,6 @@ function renderYER(){
     <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">Everilio (Excel)</div>
     ${YER.everilioFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-everilio">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-everilio-input" accept=".xlsx,.xls" hidden></label>`}</div>
   </div>`;
-  // Barra superior fija: siempre visible con Historial y Cargar período anterior
-  const barraTop=`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
-    <button id="yer-hist-btn-top" style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:1.5px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📋 Historial${(YER.liqHistory||[]).length>0?' ('+YER.liqHistory.length+')':''}</button>
-    <button id="yer-cargar-anterior-libre" style="background:var(--yl);color:var(--pd);border:1.5px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
-  </div>`;
-
   // Banner de período anterior activo
   const bannerPeriodoAnterior=YER._periodoAnterior?`
     <div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
