@@ -2997,6 +2997,11 @@ function renderYERSubTabs(){
     {key:'detalle-ventas',label:'Detalle — Ventas'},
     {key:'detalle-everilio',label:'Detalle — Everilio'}
   ];
+  // Si estamos viendo una liquidación, agregar solapa de resumen
+  if(YER._viewingLiq!=null){
+    const liq=(YER.liqHistory||[])[YER._viewingLiq];
+    if(liq) subs.push({key:'liq-resumen',label:`📄 ${liq.mesLabel||'Liquidación'}`});
+  }
   return `<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
     ${subs.map(s=>`<button class="yer-sub-btn" data-sub="${s.key}" style="border:1px solid ${yerSub===s.key?'var(--p)':'var(--b)'};background:${yerSub===s.key?'var(--p)':'#fff'};color:${yerSub===s.key?'#fff':'var(--p)'};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;">${s.label}</button>`).join('')}
   </div>`;
@@ -3059,7 +3064,11 @@ function renderYER(){
     :`<button id="yer-pct-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Guardar %</button>`;
 
   // ── Barra superior siempre visible ──────────────────────────
-  const barraTop=`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+  const enVistaLiq=YER._viewingLiq!=null;
+  const liqLabel=enVistaLiq?(YER.liqHistory||[])[YER._viewingLiq]?.mesLabel||'Liquidación':'';
+  const barraTop=`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    ${enVistaLiq?`<button onclick="YER._viewingLiq=null;YER._editingLiq=null;YER._backup&&(YER.rows=YER._backup.rows,YER.evRows=YER._backup.evRows,YER.ventasFile=YER._backup.ventasFile,YER.everilioFile=YER._backup.everilioFile,YER.validaciones=YER._backup.validaciones);YER._backup=null;yerSub='historial';renderTab();" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">← Volver al Historial</button>
+    <span style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:700;color:#7B5800;">👁 Viendo: ${esc(liqLabel)}</span>`:''}
     <button onclick="yerSub='historial';renderTab();" style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:1.5px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📋 Historial${(YER.liqHistory||[]).length>0?' ('+YER.liqHistory.length+')':''}</button>
     <button onclick="abrirModalPeriodoAnteriorYER();" style="background:var(--yl);color:var(--pd);border:1.5px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
   </div>`;
@@ -3102,6 +3111,7 @@ function renderYER(){
       if(yerSub==='diferencias') subVista=renderYERDiferencias();
       else if(yerSub==='detalle-ventas') subVista=renderYERDetalleVentas();
       else if(yerSub==='detalle-everilio') subVista=renderYERDetalleEverilio();
+      else if(yerSub==='liq-resumen'){const _l=(YER.liqHistory||[])[YER._viewingLiq];subVista=_l?buildLiqContent(_l):'';}
       else if(yerSub==='historial') subVista=renderYERHistorial();
       const btnLiqEdicion=modoEdicion&&(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0?`
         <div style="margin-top:16px;text-align:right;">
@@ -3138,6 +3148,7 @@ function renderYER(){
   if(yerSub==='diferencias') subContent=renderYERDiferencias();
   else if(yerSub==='detalle-ventas') subContent=renderYERDetalleVentas();
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
+  else if(yerSub==='liq-resumen'){const _l=(YER.liqHistory||[])[YER._viewingLiq];subContent=_l?buildLiqContent(_l):'';}
   else if(yerSub==='historial') subContent=renderYERHistorial();
 
   // En modo historial no mostrar archivos ni subtabs (solo la tabla de historial)
@@ -3569,19 +3580,28 @@ function buildLiqContent(liq){
 function yerHistorialVer(idx){
   const liq=(YER.liqHistory||[])[idx];
   if(!liq){toast('No se encontró la liquidación');return;}
-  const existing=document.getElementById('yer-dyn-modal');
-  if(existing)existing.remove();
-  const modal=document.createElement('div');
-  modal.id='yer-dyn-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
-  modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:100%;max-width:660px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-    <div style="overflow-y:auto;flex:1;">${buildLiqContent(liq)}</div>
-    <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #E8E4F0;flex-shrink:0;">
-      <button onclick="document.getElementById('yer-dyn-modal').remove();" style="background:#fff;color:#666;border:1px solid #ddd;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">✕ Cerrar</button>
-    </div>
-  </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  // Guardar estado actual como backup
+  YER._backup={rows:YER.rows,evRows:YER.evRows,
+    ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,
+    validaciones:YER.validaciones};
+  // Restaurar snapshot si existe
+  if(liq.snapshot){
+    YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
+    YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
+    YER.ventasFile=liq.snapshot.ventasFile||null;
+    YER.everilioFile=liq.snapshot.everilioFile||null;
+    YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
+  } else {
+    // Sin snapshot: limpiar para mostrar solo lo que hay en el detalle
+    YER.rows=[]; YER.evRows=[];
+    YER.ventasFile=liq.ventasFile||null;
+    YER.everilioFile=liq.everilioFile||null;
+    YER.validaciones={};
+  }
+  YER._viewingLiq=idx;
+  YER._editingLiq=null;
+  yerSub='diferencias';
+  renderTab();
 }
 
 async function yerHistorialDel(idx){
