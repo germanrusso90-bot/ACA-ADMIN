@@ -3453,6 +3453,119 @@ async function abrirModalPeriodoAnteriorYER(){
   });
 }
 
+function buildLiqContent(liq){
+  const detalle=liq.detalle||[];
+  const diferencias=liq.diferencias||[];
+
+  // El detalle usa "litros" e "importe" (=comisión)
+  const combRows=YER_COMBUST.map(c=>{
+    const s=detalle.find(d=>d.key===c.key)||{litros:0,importe:0,precio:0};
+    const litros=s.litros||s.lt||0;
+    const comision=s.importe||s.comision||0;
+    const precio=s.precio||0;
+    return `<tr style="border-bottom:1px solid var(--b);">
+      <td style="padding:10px 14px;font-weight:700;">${c.label}</td>
+      <td style="padding:10px 14px;text-align:right;color:var(--m2);">${fmtArg(Math.round(litros),0)} Lt</td>
+      <td style="padding:10px 14px;text-align:right;color:var(--m2);">${precio>0?'$'+fmtArg(precio):s.pct?s.pct+'%':'—'}</td>
+      <td style="padding:10px 14px;text-align:right;font-weight:800;color:var(--g);">$ ${fmtArg(comision)}</td>
+    </tr>`;
+  }).join('');
+
+  // Resumen de conciliación guardado
+  let difSection='';
+  const concil=diferencias[0];
+  if(concil){
+    const ok=concil.sinDiferencias||0;
+    const sv=concil.soloVentas||0;
+    const se=concil.soloEverilio||0;
+    const dm=concil.diffMonto||0;
+    difSection=`<div style="margin-top:20px;">
+      <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:10px;text-transform:uppercase;">📊 Conciliación Ventas vs Everilio</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:${sv||se||dm?'8':'0'}px;">
+        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Ventas</div>
+          <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosVentas||0}</div>
+          <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosVentas||0)}</div>
+        </div>
+        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Everilio</div>
+          <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosEverilio||0}</div>
+          <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosEverilio||0)}</div>
+        </div>
+        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">Sin diferencias</div>
+          <div style="font-size:18px;font-weight:800;color:var(--g);">${ok}</div>
+        </div>
+      </div>
+      ${sv>0||se>0||dm>0?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Solo Ventas</div>
+          <div style="font-size:18px;font-weight:800;color:var(--r);">${sv}</div>
+          <div style="font-size:10px;color:var(--r);">$ ${fmtArg(concil.montoSoloVentas||0)}</div>
+        </div>
+        <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:#7B5800;text-transform:uppercase;margin-bottom:4px;">Solo Everilio</div>
+          <div style="font-size:18px;font-weight:800;color:#7B5800;">${se}</div>
+          <div style="font-size:10px;color:#7B5800;">$ ${fmtArg(concil.montoSoloEverilio||0)}</div>
+        </div>
+        <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Dif. monto</div>
+          <div style="font-size:18px;font-weight:800;color:var(--r);">${dm}</div>
+        </div>
+      </div>`:''}
+    </div>`;
+  }
+
+  // Archivos cargados
+  let archivosSection='';
+  if(liq.ventasFile||liq.everilioFile){
+    archivosSection=`<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${liq.ventasFile?`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">📊 Ventas Especiales</div>
+        <div style="font-size:12px;font-weight:600;color:var(--pd);">${esc(liq.ventasFile.fileName||liq.ventasFile.name||'')}</div>
+      </div>`:''}
+      ${liq.everilioFile?`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">📊 Everilio</div>
+        <div style="font-size:12px;font-weight:600;color:var(--pd);">${esc(liq.everilioFile.fileName||liq.everilioFile.name||'')}</div>
+      </div>`:''}
+    </div>`;
+  }
+
+  return `<div id="yer-liq-printable">
+    <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
+      <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US Cipolletti · CR 3531</div>
+      <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACIÓN YER POR PORCENTAJE</div>
+      <div style="font-size:15px;opacity:.9;font-weight:700;">MES: ${esc((liq.mesLabel||liq.period||'').toUpperCase())}</div>
+    </div>
+    <div style="padding:20px 24px;">
+      <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:8px;text-transform:uppercase;">💰 Comisiones por Combustible</div>
+      <div style="border:1px solid var(--b);border-radius:8px;overflow:hidden;margin-bottom:4px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#F8F5FB;">
+            <th style="padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--m2);">Combustible</th>
+            <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Litros</th>
+            <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Precio</th>
+            <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Comisión</th>
+          </tr></thead>
+          <tbody>${combRows}</tbody>
+        </table>
+      </div>
+      <div style="background:var(--p);color:#fff;border-radius:10px;padding:16px 20px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Litros</div>
+          <div style="font-size:20px;font-weight:800;">${fmtArg(Math.round(liq.totalLt||0),0)} Lt</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Comisión</div>
+          <div style="font-size:26px;font-weight:900;color:var(--y);">$ ${fmtArg(liq.totalCom||0)}</div>
+        </div>
+      </div>
+      ${difSection}
+      ${archivosSection}
+    </div>
+  </div>`;
+}
+
 function attachYER(){
   const el=document.getElementById('tab-content');
   el.querySelectorAll('.yer-sub-btn').forEach(btn=>{
@@ -3540,118 +3653,6 @@ function attachYER(){
     });
   });
   // Helper: armar contenido del modal de liquidación
-  function buildLiqContent(liq){
-    const detalle=liq.detalle||[];
-    const diferencias=liq.diferencias||[];
-
-    // El detalle usa "litros" e "importe" (=comisión)
-    const combRows=YER_COMBUST.map(c=>{
-      const s=detalle.find(d=>d.key===c.key)||{litros:0,importe:0,precio:0};
-      const litros=s.litros||s.lt||0;
-      const comision=s.importe||s.comision||0;
-      const precio=s.precio||0;
-      return `<tr style="border-bottom:1px solid var(--b);">
-        <td style="padding:10px 14px;font-weight:700;">${c.label}</td>
-        <td style="padding:10px 14px;text-align:right;color:var(--m2);">${fmtArg(Math.round(litros),0)} Lt</td>
-        <td style="padding:10px 14px;text-align:right;color:var(--m2);">${precio>0?'$'+fmtArg(precio):s.pct?s.pct+'%':'—'}</td>
-        <td style="padding:10px 14px;text-align:right;font-weight:800;color:var(--g);">$ ${fmtArg(comision)}</td>
-      </tr>`;
-    }).join('');
-
-    // Resumen de conciliación guardado
-    let difSection='';
-    const concil=diferencias[0];
-    if(concil){
-      const ok=concil.sinDiferencias||0;
-      const sv=concil.soloVentas||0;
-      const se=concil.soloEverilio||0;
-      const dm=concil.diffMonto||0;
-      difSection=`<div style="margin-top:20px;">
-        <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:10px;text-transform:uppercase;">📊 Conciliación Ventas vs Everilio</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:${sv||se||dm?'8':'0'}px;">
-          <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Ventas</div>
-            <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosVentas||0}</div>
-            <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosVentas||0)}</div>
-          </div>
-          <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Everilio</div>
-            <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosEverilio||0}</div>
-            <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosEverilio||0)}</div>
-          </div>
-          <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">Sin diferencias</div>
-            <div style="font-size:18px;font-weight:800;color:var(--g);">${ok}</div>
-          </div>
-        </div>
-        ${sv>0||se>0||dm>0?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-          <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Solo Ventas</div>
-            <div style="font-size:18px;font-weight:800;color:var(--r);">${sv}</div>
-            <div style="font-size:10px;color:var(--r);">$ ${fmtArg(concil.montoSoloVentas||0)}</div>
-          </div>
-          <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:#7B5800;text-transform:uppercase;margin-bottom:4px;">Solo Everilio</div>
-            <div style="font-size:18px;font-weight:800;color:#7B5800;">${se}</div>
-            <div style="font-size:10px;color:#7B5800;">$ ${fmtArg(concil.montoSoloEverilio||0)}</div>
-          </div>
-          <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Dif. monto</div>
-            <div style="font-size:18px;font-weight:800;color:var(--r);">${dm}</div>
-          </div>
-        </div>`:''}
-      </div>`;
-    }
-
-    // Archivos cargados
-    let archivosSection='';
-    if(liq.ventasFile||liq.everilioFile){
-      archivosSection=`<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        ${liq.ventasFile?`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px 12px;">
-          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">📊 Ventas Especiales</div>
-          <div style="font-size:12px;font-weight:600;color:var(--pd);">${esc(liq.ventasFile.fileName||liq.ventasFile.name||'')}</div>
-        </div>`:''}
-        ${liq.everilioFile?`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px 12px;">
-          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">📊 Everilio</div>
-          <div style="font-size:12px;font-weight:600;color:var(--pd);">${esc(liq.everilioFile.fileName||liq.everilioFile.name||'')}</div>
-        </div>`:''}
-      </div>`;
-    }
-
-    return `<div id="yer-liq-printable">
-      <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
-        <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US Cipolletti · CR 3531</div>
-        <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACIÓN YER POR PORCENTAJE</div>
-        <div style="font-size:15px;opacity:.9;font-weight:700;">MES: ${esc((liq.mesLabel||liq.period||'').toUpperCase())}</div>
-      </div>
-      <div style="padding:20px 24px;">
-        <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:8px;text-transform:uppercase;">💰 Comisiones por Combustible</div>
-        <div style="border:1px solid var(--b);border-radius:8px;overflow:hidden;margin-bottom:4px;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead><tr style="background:#F8F5FB;">
-              <th style="padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--m2);">Combustible</th>
-              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Litros</th>
-              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Precio</th>
-              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Comisión</th>
-            </tr></thead>
-            <tbody>${combRows}</tbody>
-          </table>
-        </div>
-        <div style="background:var(--p);color:#fff;border-radius:10px;padding:16px 20px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Litros</div>
-            <div style="font-size:20px;font-weight:800;">${fmtArg(Math.round(liq.totalLt||0),0)} Lt</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Comisión</div>
-            <div style="font-size:26px;font-weight:900;color:var(--y);">$ ${fmtArg(liq.totalCom||0)}</div>
-          </div>
-        </div>
-        ${difSection}
-        ${archivosSection}
-      </div>
-    </div>`;
-  }
 
     // ── Tabla de comisiones por combustible ──────────────────────
     const combRows=YER_COMBUST.map(c=>{
