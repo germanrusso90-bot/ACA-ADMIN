@@ -3093,15 +3093,15 @@ function renderYER(){
           💰 Liquidación actual
         </button>`:''}
       ${enVistaLiq?`
-        <button onclick="if(YER._backup){YER.rows=YER._backup.rows;YER.evRows=YER._backup.evRows;YER.ventasFile=YER._backup.ventasFile;YER.everilioFile=YER._backup.everilioFile;YER.validaciones=YER._backup.validaciones;}YER._viewingLiq=null;YER._editingLiq=null;YER._backup=null;yerSub='diferencias';renderTab();"
+        <button onclick="YER._viewingLiq=null;YER._editingLiq=null;renderTab();"
           style="background:var(--card2);color:var(--pd);border:2px solid var(--b);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
           💰 Liquidación actual
         </button>
         <span style="background:#FFF8E1;border:2px solid #F5C842;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:700;color:#7B5800;white-space:nowrap;">
           👁 ${esc(liqLabel||'')}
         </span>`:''}
-      <button onclick="YER._viewingLiq=null;YER._editingLiq=null;if(YER._backup){YER.rows=YER._backup.rows;YER.evRows=YER._backup.evRows;YER.ventasFile=YER._backup.ventasFile;YER.everilioFile=YER._backup.everilioFile;YER.validaciones=YER._backup.validaciones;YER._backup=null;}yerSub='historial';renderTab();"
-        style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:2px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
+      <button onclick="YER._viewingLiq=null;YER._editingLiq=null;yerSub='historial';renderTab();"
+        style="background:${yerSub==='historial'&&!enVistaLiq?'var(--p)':'var(--card2)'};color:${yerSub==='historial'&&!enVistaLiq?'#fff':'var(--pd)'};border:2px solid ${yerSub==='historial'&&!enVistaLiq?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
         📋 Historial${(YER.liqHistory||[]).length>0?' ('+(YER.liqHistory||[]).length+')':''}
       </button>
       <button onclick="abrirModalPeriodoAnteriorYER();"
@@ -3129,26 +3129,8 @@ function renderYER(){
   // ── VISTA DE LIQUIDACIÓN HISTÓRICA ──────────────────────────
   if(enVistaLiq){
     const liq=(YER.liqHistory||[])[YER._viewingLiq];
-    // Si no tiene snapshot, mostrar solo el resumen guardado
-    if(!liq?.snapshot){
-      const resumen=liq?buildLiqContent(liq):'<p>No se encontró la liquidación.</p>';
-      return pctBox + barraTop + resumen;
-    }
-    // Tiene snapshot: mostrar pantalla completa con archivos y subtabs
-    const archivosVista=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-      <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Ventas Especiales</div>
-        ${YER.ventasFile?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.ventasFile.fileName)}</span>`:`<span style="font-size:12px;color:var(--m2);">Sin archivo</span>`}
-      </div>
-      <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Everilio</div>
-        ${YER.everilioFile?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span>`:`<span style="font-size:12px;color:var(--m2);">Sin archivo</span>`}
-      </div>
-    </div>`;
-    let subVista='';
-    if(yerSub==='diferencias') subVista=renderYERDiferencias();
-    else if(yerSub==='detalle-ventas') subVista=renderYERDetalleVentas();
-    else if(yerSub==='detalle-everilio') subVista=renderYERDetalleEverilio();
-    else if(yerSub==='liq-resumen') subVista=buildLiqContent(liq);
-    return pctBox + barraTop + archivosVista + renderYERSubTabs() + subVista;
+    const resumen=liq?buildLiqContent(liq):'<p>No se encontró la liquidación.</p>';
+    return pctBox + barraTop + resumen;
   }
 
   // ── PERÍODO YA LIQUIDADO (estado normal) ────────────────────
@@ -3629,31 +3611,9 @@ function buildLiqContent(liq){
 function yerHistorialVer(idx){
   const liq=(YER.liqHistory||[])[idx];
   if(!liq){toast('No se encontró la liquidación');return;}
-
-  if(liq.snapshot){
-    // Tiene snapshot completo — guardar backup y restaurar
-    YER._backup={
-      rows:JSON.parse(JSON.stringify(YER.rows||[])),
-      evRows:JSON.parse(JSON.stringify(YER.evRows||[])),
-      ventasFile:YER.ventasFile||null,
-      everilioFile:YER.everilioFile||null,
-      validaciones:JSON.parse(JSON.stringify(YER.validaciones||{}))
-    };
-    YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
-    YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
-    YER.ventasFile=liq.snapshot.ventasFile||null;
-    YER.everilioFile=liq.snapshot.everilioFile||null;
-    YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
-    YER._viewingLiq=idx;
-    YER._editingLiq=null;
-    yerSub='diferencias'; // abrir en diferencias
-  } else {
-    // Sin snapshot — solo mostrar el resumen de la liquidación guardada
-    // NO tocar los datos actuales
-    YER._viewingLiq=idx;
-    YER._editingLiq=null;
-    yerSub='liq-resumen'; // ir directo al resumen
-  }
+  // Solo marcar qué liquidación se está viendo — NO tocar datos actuales nunca
+  YER._viewingLiq=idx;
+  YER._editingLiq=null;
   renderTab();
 }
 
