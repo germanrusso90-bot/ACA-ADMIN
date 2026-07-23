@@ -3060,8 +3060,8 @@ function renderYER(){
 
   // ── Barra superior siempre visible ──────────────────────────
   const barraTop=`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
-    <button id="yer-hist-btn-top" style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:1.5px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📋 Historial${(YER.liqHistory||[]).length>0?' ('+YER.liqHistory.length+')':''}</button>
-    <button id="yer-cargar-anterior-libre" style="background:var(--yl);color:var(--pd);border:1.5px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
+    <button onclick="yerSub='historial';renderTab();" style="background:${yerSub==='historial'?'var(--p)':'var(--card2)'};color:${yerSub==='historial'?'#fff':'var(--pd)'};border:1.5px solid ${yerSub==='historial'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📋 Historial${(YER.liqHistory||[]).length>0?' ('+YER.liqHistory.length+')':''}</button>
+    <button onclick="abrirModalPeriodoAnteriorYER();" style="background:var(--yl);color:var(--pd);border:1.5px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
   </div>`;
 
   // ── Período ya liquidado: solo mostrar historial + porcentajes ──
@@ -3409,6 +3409,48 @@ function renderYERDetalleEverilio(){
       </table>
     </div>
   </div>`;
+}
+
+async function abrirModalPeriodoAnteriorYER(){
+  const liquidados=new Set((YER.liqHistory||[]).map(l=>l.period));
+  const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const opciones=[];
+  const hoy=new Date();
+  for(let i=12;i>=1;i--){
+    let y=hoy.getFullYear(),m=hoy.getMonth()+1-i;
+    while(m<=0){m+=12;y--;}
+    const p=`${y}-${String(m).padStart(2,'0')}`;
+    if(!liquidados.has(p)) opciones.push({p,label:`${MESES[m-1]} ${y}`});
+  }
+  if(!opciones.length){toast('Todos los períodos anteriores ya tienen liquidación registrada.');return;}
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="font-size:16px;font-weight:800;color:var(--pd);margin-bottom:6px">📅 Cargar período anterior</h3>
+    <p style="font-size:13px;color:var(--m2);margin-bottom:18px">Seleccioná el mes. Se limpiarán los archivos actuales para que subas los de ese período.</p>
+    <select id="yer-sel-periodo" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:8px;font-size:14px;background:var(--card2);color:var(--pd);margin-bottom:18px">
+      ${opciones.map(o=>`<option value="${o.p}">${o.label}</option>`).join('')}
+    </select>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button id="yer-ant-cancel" style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
+      <button id="yer-ant-ok" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cargar ese período</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#yer-ant-cancel').addEventListener('click',()=>modal.remove());
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  modal.querySelector('#yer-ant-ok').addEventListener('click',async()=>{
+    const periodo=modal.querySelector('#yer-sel-periodo').value;
+    if(!confirm(`¿Cargar YER de ${opciones.find(o=>o.p===periodo)?.label}?\nSe limpiarán los archivos actuales para que subas los de ese mes.`)){return;}
+    modal.remove();
+    YER._periodoAnterior=periodo;
+    YER.rows=[]; YER.evRows=[];
+    YER.ventasFile=null; YER.everilioFile=null;
+    YER.validaciones={};
+    showLoad(true); await saveYER(); showLoad(false);
+    yerSub='diferencias'; renderTab();
+    toast(`Modo carga: ${opciones.find(o=>o.p===periodo)?.label} — subí los archivos de ese mes`);
+  });
 }
 
 function attachYER(){
@@ -3832,53 +3874,10 @@ function attachYER(){
 
   // Historial y cargar período anterior — presentes en cualquier estado
   el.querySelector('#yer-hist-btn-top')?.addEventListener('click',()=>{yerSub='historial';renderTab();});
-  el.querySelector('#yer-cargar-anterior-libre')?.addEventListener('click',()=>abrirModalPeriodoAnterior());
-  el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>abrirModalPeriodoAnterior());
+  el.querySelector('#yer-cargar-anterior-libre')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
+  el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
 
-  async function abrirModalPeriodoAnterior(){
-    // Generar lista de últimos 12 meses sin liquidación registrada
-    const liquidados=new Set((YER.liqHistory||[]).map(l=>l.period));
-    const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    const opciones=[];
-    const hoy=new Date();
-    for(let i=12;i>=1;i--){
-      let y=hoy.getFullYear(),m=hoy.getMonth()+1-i;
-      while(m<=0){m+=12;y--;}
-      const p=`${y}-${String(m).padStart(2,'0')}`;
-      if(!liquidados.has(p)) opciones.push({p,label:`${MESES[m-1]} ${y}`});
-    }
-    if(!opciones.length){toast('Todos los períodos anteriores ya tienen liquidación registrada.');return;}
-
-    // Modal de selección
-    const modal=document.createElement('div');
-    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-    modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <h3 style="font-size:16px;font-weight:800;color:var(--pd);margin-bottom:6px">📅 Cargar período anterior</h3>
-      <p style="font-size:13px;color:var(--m2);margin-bottom:18px">Seleccioná el mes a cargar. Se limpiarán los archivos actuales temporalmente para que puedas subir los de ese período.</p>
-      <select id="yer-sel-periodo" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:8px;font-size:14px;background:var(--card2);color:var(--pd);margin-bottom:18px">
-        ${opciones.map(o=>`<option value="${o.p}">${o.label}</option>`).join('')}
-      </select>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button id="yer-ant-cancel" style="background:var(--card2);color:var(--pd);border:1px solid var(--b);border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
-        <button id="yer-ant-ok" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">Cargar ese período</button>
-      </div>
-    </div>`;
-    document.body.appendChild(modal);
-    modal.querySelector('#yer-ant-cancel').addEventListener('click',()=>modal.remove());
-    modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
-    modal.querySelector('#yer-ant-ok').addEventListener('click',async()=>{
-      const periodo=modal.querySelector('#yer-sel-periodo').value;
-      if(!confirm(`¿Cargar YER de ${opciones.find(o=>o.p===periodo)?.label}?\nSe limpiarán los archivos actuales para que subas los de ese mes.`)){return;}
-      modal.remove();
-      YER._periodoAnterior=periodo;
-      YER.rows=[]; YER.evRows=[];
-      YER.ventasFile=null; YER.everilioFile=null;
-      YER.validaciones={};
-      showLoad(true); await saveYER(); showLoad(false);
-      yerSub='diferencias'; renderTab();
-      toast(`Modo carga: ${opciones.find(o=>o.p===periodo)?.label} — subí los archivos de ese mes`);
-    });
-  }
+// función movida afuera de attachYER para que onclick global funcione
 
   el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
     if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
