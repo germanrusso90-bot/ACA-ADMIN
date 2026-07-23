@@ -3113,49 +3113,10 @@ function renderYER(){
       <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;"><div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;"><div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div><div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;"><button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button><button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button><button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button></div></div></div>`;
     }
 
-    return `
-    <div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-        <div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>
-        ${pctBtns}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div>
-    </div>
-
-    <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-      <div>
-        <div style="font-size:13px;font-weight:800;color:var(--g);">✓ Período ${mesLabel} liquidado</div>
-        <div style="font-size:12px;color:var(--m2);margin-top:2px;">Para cargar el nuevo período subí los archivos del mes siguiente.</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button id="yer-cargar-anterior" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button>
-        <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
-      </div>
-    </div>
-
-    <div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;">
-      <div style="background:var(--p);color:#fff;padding:10px 14px;font-size:13px;font-weight:800;">📋 Liquidaciones guardadas</div>
-      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">
-        <thead><tr>
-          <th style="${thL}">MES</th>
-          ${YER_COMBUST.map(c=>`<th style="${thL}">${c.label}</th>`).join('')}
-          <th style="${thL}">TOTAL COMISIÓN</th>
-          <th style="${thL}"></th>
-        </tr></thead>
-        <tbody>${liqRows}</tbody>
-      </table></div>
-    </div>
-
-    <div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
-      <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-        <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
-        <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
-          <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
-          <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
-          <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
-        </div>
-      </div>
-    </div>`;
+    // Estado: período liquidado, mostrar banner + botones
+    const subVistaLiq=yerSub==='historial'?renderYERHistorial():'';
+    return `<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div></div>${barraTop}
+    ${yerSub==='historial'?subVistaLiq:`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;"><div><div style="font-size:13px;font-weight:800;color:var(--g);">✓ Período ${mesLabel} liquidado</div><div style="font-size:12px;color:var(--m2);margin-top:2px;">Para cargar el nuevo período subí los archivos del mes siguiente.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="yer-cargar-anterior" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">📅 Cargar período anterior</button><button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button></div></div>`}`;
   }
 
   // ── Período sin liquidar: mostrar todo ─────────────────────────
