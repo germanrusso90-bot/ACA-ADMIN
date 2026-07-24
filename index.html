@@ -3060,7 +3060,8 @@ function renderYER(){
     return `<div style="background:#fff;border:2px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
       <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">${c.label}</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
-        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" ${ro} style="width:80px;padding:8px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${bgl}">
+        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" ${ro}
+          style="width:80px;padding:8px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${bgl}">
         <span style="font-size:16px;font-weight:700;color:var(--m2);">%</span>
       </div>
     </div>`;
@@ -3071,69 +3072,105 @@ function renderYER(){
 
   const pctBox=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-      <div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>${pctBtns}
+      <div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>
+      ${pctBtns}
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div>
   </div>`;
 
-  // ── BARRA SUPERIOR SIEMPRE FIJA ─────────────────────────────
-  const yaLiquidado=!YER._periodoAnterior && !!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
-  const enVistaLiq=YER._viewingLiq!=null;
-  const liqLabel=enVistaLiq?(YER.liqHistory||[])[YER._viewingLiq]?.mesLabel||'':null;
+  // ── MODO: vista historial, normal, etc. ─────────────────────
+  // _viewingLiq = null → pantalla actual (Liquidación actual)
+  // _viewingLiq = N   → viendo liquidación histórica N
+  // yerSub = 'historial' → tabla de historial
+  const enHistorial = yerSub==='historial' && YER._viewingLiq==null;
+  const enVistaLiq  = YER._viewingLiq!=null;
 
-  // Determinar qué tab está activo para resaltarlo
-  const tabActualLabel=yaLiquidado&&!enVistaLiq&&yerSub!=='historial'?'actual':
-                       yerSub==='historial'?'historial':'otro';
+  // ── BARRA FIJA ───────────────────────────────────────────────
+  const esActual = !enHistorial && !enVistaLiq;
+  const bstyle = (activo)=>activo
+    ?'background:var(--p);color:#fff;border:2px solid var(--p);'
+    :'background:var(--card2);color:var(--pd);border:2px solid var(--b);';
+  const bbase = 'border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;';
 
-  const barraTop=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px;flex-wrap:wrap;border-bottom:2px solid var(--b);padding-bottom:12px;">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${yaLiquidado&&!enVistaLiq?`
-        <button onclick="YER._viewingLiq=null;YER._editingLiq=null;YER._backup=null;yerSub='diferencias';renderTab();"
-          style="background:${tabActualLabel==='actual'?'var(--p)':'var(--card2)'};color:${tabActualLabel==='actual'?'#fff':'var(--pd)'};border:2px solid ${tabActualLabel==='actual'?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
-          💰 Liquidación actual
-        </button>`:''}
-      ${enVistaLiq?`
-        <button onclick="YER._viewingLiq=null;YER._editingLiq=null;renderTab();"
-          style="background:var(--card2);color:var(--pd);border:2px solid var(--b);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
-          💰 Liquidación actual
-        </button>
-        <span style="background:#FFF8E1;border:2px solid #F5C842;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:700;color:#7B5800;white-space:nowrap;">
-          👁 ${esc(liqLabel||'')}
-        </span>`:''}
-      <button onclick="YER._viewingLiq=null;YER._editingLiq=null;yerSub='historial';renderTab();"
-        style="background:${yerSub==='historial'&&!enVistaLiq?'var(--p)':'var(--card2)'};color:${yerSub==='historial'&&!enVistaLiq?'#fff':'var(--pd)'};border:2px solid ${yerSub==='historial'&&!enVistaLiq?'var(--p)':'var(--b)'};border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
-        📋 Historial${(YER.liqHistory||[]).length>0?' ('+(YER.liqHistory||[]).length+')':''}
-      </button>
-      <button onclick="abrirModalPeriodoAnteriorYER();"
-        style="background:var(--yl);color:var(--pd);border:2px solid var(--y2);border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">
-        📅 Cargar período anterior
-      </button>
+  const barraTop=`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;border-bottom:2px solid var(--b);padding-bottom:12px;">
+    <button onclick="YER._viewingLiq=null;YER._editingLiq=null;YER._backup=null;yerSub='diferencias';renderTab();"
+      style="${bstyle(esActual)}${bbase}">💰 Liquidación actual</button>
+    <button onclick="YER._viewingLiq=null;YER._editingLiq=null;YER._backup=null;yerSub='historial';renderTab();"
+      style="${bstyle(enHistorial)}${bbase}">📋 Historial${(YER.liqHistory||[]).length>0?' ('+(YER.liqHistory||[]).length+')':''}</button>
+    <button onclick="abrirModalPeriodoAnteriorYER();"
+      style="background:var(--yl);color:var(--pd);border:2px solid var(--y2);${bbase}">📅 Cargar período anterior</button>
+  </div>`;
+
+  const modal=`<div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+      <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
+      <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
+        <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
+        <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
+        <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
+      </div>
     </div>
   </div>`;
 
-  // ── HISTORIAL ────────────────────────────────────────────────
-  if(yerSub==='historial'){
-    return pctBox + barraTop + renderYERHistorial() +
-      `<div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-          <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
-          <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
-            <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
-            <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
-            <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
-          </div>
-        </div>
-      </div>`;
+  // ── 1. HISTORIAL ─────────────────────────────────────────────
+  if(enHistorial){
+    return pctBox + barraTop + renderYERHistorial() + modal;
   }
 
-  // ── VISTA DE LIQUIDACIÓN HISTÓRICA ──────────────────────────
+  // ── 2. VISTA LIQUIDACIÓN HISTÓRICA ──────────────────────────
   if(enVistaLiq){
     const liq=(YER.liqHistory||[])[YER._viewingLiq];
-    const resumen=liq?buildLiqContent(liq):'<p>No se encontró la liquidación.</p>';
-    return pctBox + barraTop + resumen;
+    if(!liq) return pctBox + barraTop + '<p>Liquidación no encontrada.</p>';
+
+    // Archivos del snapshot (o del objeto guardado)
+    const vf=liq.snapshot?.ventasFile||liq.ventasFile;
+    const ef=liq.snapshot?.everilioFile||liq.everilioFile;
+    const archivos=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Ventas Especiales</div>
+        ${vf?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(vf.fileName||vf.name||'')}</span>`:'<span style="font-size:12px;color:var(--m2);">Sin archivo</span>'}
+      </div>
+      <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:6px;">Everilio</div>
+        ${ef?`<span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(ef.fileName||ef.name||'')}</span>`:'<span style="font-size:12px;color:var(--m2);">Sin archivo</span>'}
+      </div>
+    </div>`;
+
+    // Si tiene snapshot restaurado, mostrar subtabs con diferencias reales
+    // Si no, mostrar solo el resumen
+    const tieneRows=(YER.rows||[]).length>0;
+    let cuerpo='';
+    if(tieneRows){
+      let sub='';
+      if(yerSub==='diferencias'||yerSub==='historial') sub=renderYERDiferencias();
+      else if(yerSub==='detalle-ventas') sub=renderYERDetalleVentas();
+      else if(yerSub==='detalle-everilio') sub=renderYERDetalleEverilio();
+      else if(yerSub==='liq-resumen') sub=buildLiqContent(liq);
+      cuerpo=archivos+renderYERSubTabs()+sub;
+    } else {
+      // Sin datos — mostrar resumen guardado
+      cuerpo=buildLiqContent(liq);
+    }
+    // Banner indicando qué período se está viendo
+    const banner=`<div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:700;color:#7B5800;">👁 Viendo liquidación: <strong>${esc(liq.mesLabel||liq.period||'')}</strong></span>
+      <button onclick="YER._viewingLiq=null;YER._editingLiq=null;if(YER._backup){YER.rows=YER._backup.rows;YER.evRows=YER._backup.evRows;YER.ventasFile=YER._backup.ventasFile;YER.everilioFile=YER._backup.everilioFile;YER.validaciones=YER._backup.validaciones;YER._backup=null;}yerSub='diferencias';renderTab();"
+        style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;">← Volver</button>
+    </div>`;
+    return pctBox + barraTop + banner + cuerpo + modal;
   }
 
-  // ── PERÍODO YA LIQUIDADO (estado normal) ────────────────────
+  // ── 3. PANTALLA PRINCIPAL (Liquidación actual) ───────────────
+  const yaLiquidado=!YER._periodoAnterior && !!(YER.liqHistory||[]).find(l=>l.period===prevMonth(CP));
+
+  // Banner período anterior activo
+  const bannerAnterior=YER._periodoAnterior?`
+    <div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#7B5800;">📅 Cargando período anterior: <strong>${yerMesLabel()}</strong></div>
+        <div style="font-size:12px;color:#92400E;margin-top:2px;">Subí los archivos. Al liquidar se guardará como ${yerMesLabel()}.</div>
+      </div>
+      <button id="yer-cancelar-anterior" style="background:#fff;color:var(--r);border:1px solid var(--r);border-radius:7px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✕ Cancelar</button>
+    </div>`:'';
+
   if(yaLiquidado){
     const mesLabel=yerMesLabel();
     const banner=`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
@@ -3143,20 +3180,10 @@ function renderYER(){
       </div>
       <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
     </div>`;
-    return pctBox + barraTop + banner +
-      `<div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-          <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
-          <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
-            <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
-            <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
-            <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
-          </div>
-        </div>
-      </div>`;
+    return pctBox + barraTop + banner + modal;
   }
 
-  // ── PERÍODO SIN LIQUIDAR / CARGANDO PERÍODO ANTERIOR ────────
+  // Sin liquidar — pantalla de carga
   const archivos=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
     <div><div style="font-size:12px;font-weight:800;color:var(--m2);text-transform:uppercase;margin-bottom:8px;">Ventas Especiales (Excel)</div>
     ${YER.ventasFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.ventasFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-ventas">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-ventas-input" accept=".xlsx,.xls" hidden></label>`}</div>
@@ -3164,20 +3191,10 @@ function renderYER(){
     ${YER.everilioFile?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:var(--pd);">📊 ${esc(YER.everilioFile.fileName)}</span><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;" id="yer-del-everilio">Quitar</button></div>`:`<label style="background:var(--p);color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;display:inline-block;">Subir archivo<input type="file" id="yer-everilio-input" accept=".xlsx,.xls" hidden></label>`}</div>
   </div>`;
 
-  const bannerAnterior=YER._periodoAnterior?`
-    <div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <div>
-        <div style="font-size:13px;font-weight:800;color:#7B5800;">📅 Cargando período anterior: <strong>${yerMesLabel()}</strong></div>
-        <div style="font-size:12px;color:#92400E;margin-top:2px;">Subí los archivos de ese mes. Al liquidar se guardará como ${yerMesLabel()}.</div>
-      </div>
-      <button id="yer-cancelar-anterior" style="background:#fff;color:var(--r);border:1px solid var(--r);border-radius:7px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✕ Cancelar</button>
-    </div>`:'';
-
   let subContent='';
   if(yerSub==='diferencias') subContent=renderYERDiferencias();
   else if(yerSub==='detalle-ventas') subContent=renderYERDetalleVentas();
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
-  else if(yerSub==='liq-resumen'){const _l=(YER.liqHistory||[])[YER._viewingLiq];subContent=_l?buildLiqContent(_l):'';}
 
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
   const btnLiquidar=canLiquidar?`<div style="margin-top:20px;text-align:right;">
@@ -3186,17 +3203,7 @@ function renderYER(){
     </button>
   </div>`:'';
 
-  return pctBox + barraTop + bannerAnterior + archivos + renderYERSubTabs() + subContent + btnLiquidar +
-    `<div id="yer-modal-liq" style="display:none;position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;align-items:center;justify-content:center;padding:20px;">
-      <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-        <div id="yer-liq-content" style="overflow-y:auto;flex:1;"></div>
-        <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--b);flex-shrink:0;">
-          <button id="yer-liq-save" style="display:none;background:var(--g);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar liquidación</button>
-          <button id="yer-liq-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
-          <button id="yer-liq-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
-        </div>
-      </div>
-    </div>`;
+  return pctBox + barraTop + bannerAnterior + archivos + renderYERSubTabs() + subContent + btnLiquidar + modal;
 }
 
 
@@ -3611,9 +3618,30 @@ function buildLiqContent(liq){
 function yerHistorialVer(idx){
   const liq=(YER.liqHistory||[])[idx];
   if(!liq){toast('No se encontró la liquidación');return;}
-  // Solo marcar qué liquidación se está viendo — NO tocar datos actuales nunca
+  // Guardar estado actual de Junio como backup
+  YER._backup={
+    rows:JSON.parse(JSON.stringify(YER.rows||[])),
+    evRows:JSON.parse(JSON.stringify(YER.evRows||[])),
+    ventasFile:YER.ventasFile?{...YER.ventasFile}:null,
+    everilioFile:YER.everilioFile?{...YER.everilioFile}:null,
+    validaciones:JSON.parse(JSON.stringify(YER.validaciones||{}))
+  };
+  // Restaurar datos del período histórico si tiene snapshot
+  if(liq.snapshot){
+    YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
+    YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
+    YER.ventasFile=liq.snapshot.ventasFile?{...liq.snapshot.ventasFile}:null;
+    YER.everilioFile=liq.snapshot.everilioFile?{...liq.snapshot.everilioFile}:null;
+    YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
+  } else {
+    // Sin snapshot — limpiar rows para que renderYER muestre solo el resumen
+    YER.rows=[]; YER.evRows=[]; YER.validaciones={};
+    YER.ventasFile=liq.ventasFile?{...liq.ventasFile}:null;
+    YER.everilioFile=liq.everilioFile?{...liq.everilioFile}:null;
+  }
   YER._viewingLiq=idx;
   YER._editingLiq=null;
+  yerSub='diferencias';
   renderTab();
 }
 
