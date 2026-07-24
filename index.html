@@ -3144,7 +3144,6 @@ function renderYER(){
     const liq=(YER.liqHistory||[])[YER._viewingLiq];
     if(!liq) return pctBox + barraTop + '<p>Liquidación no encontrada.</p>';
 
-    // Archivos del snapshot (o del objeto guardado)
     const vf=liq.snapshot?.ventasFile||liq.ventasFile;
     const ef=liq.snapshot?.everilioFile||liq.everilioFile;
     const archivos=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
@@ -3156,28 +3155,43 @@ function renderYER(){
       </div>
     </div>`;
 
-    // Si tiene snapshot restaurado, mostrar subtabs con diferencias reales
-    // Si no, mostrar solo el resumen
-    const tieneRows=(YER.rows||[]).length>0;
-    let cuerpo='';
-    if(tieneRows){
-      let sub='';
-      if(yerSub==='diferencias'||yerSub==='historial') sub=renderYERDiferencias();
-      else if(yerSub==='detalle-ventas') sub=renderYERDetalleVentas();
-      else if(yerSub==='detalle-everilio') sub=renderYERDetalleEverilio();
-      else if(yerSub==='liq-resumen') sub=buildLiqContent(liq);
-      cuerpo=archivos+renderYERSubTabs()+sub;
-    } else {
-      // Sin datos — mostrar resumen guardado
-      cuerpo=buildLiqContent(liq);
+    // Validar que el snapshot tiene rows del período correcto
+    // Comparar el mes/año de la primera fila con el período de la liquidación
+    const rows=YER.rows||[];
+    const [liqY,liqM]=( liq.period||'').split('-').map(Number);
+    let snapshotEsCorrecto=false;
+    if(rows.length>0 && liqY && liqM){
+      // Buscar una fecha en los rows para verificar el mes
+      const primeraFecha=rows.find(r=>r.fecha||r.date||r.Fecha)?.fecha||
+                         rows.find(r=>r.fecha||r.date||r.Fecha)?.date||
+                         rows.find(r=>r.fecha||r.date||r.Fecha)?.Fecha||'';
+      if(primeraFecha){
+        const d=new Date(primeraFecha);
+        snapshotEsCorrecto=(d.getFullYear()===liqY && d.getMonth()+1===liqM);
+      }
     }
-    // Banner indicando qué período se está viendo
+
     const banner=`<div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
       <span style="font-size:13px;font-weight:700;color:#7B5800;">👁 Viendo liquidación: <strong>${esc(liq.mesLabel||liq.period||'')}</strong></span>
       <button onclick="YER._viewingLiq=null;YER._editingLiq=null;if(YER._backup){YER.rows=YER._backup.rows;YER.evRows=YER._backup.evRows;YER.ventasFile=YER._backup.ventasFile;YER.everilioFile=YER._backup.everilioFile;YER.validaciones=YER._backup.validaciones;YER._backup=null;}yerSub='diferencias';renderTab();"
         style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;">← Volver</button>
     </div>`;
-    return pctBox + barraTop + banner + cuerpo + modal;
+
+    if(snapshotEsCorrecto){
+      // Snapshot válido — mostrar pantalla completa
+      let sub='';
+      if(yerSub==='diferencias'||yerSub==='historial') sub=renderYERDiferencias();
+      else if(yerSub==='detalle-ventas') sub=renderYERDetalleVentas();
+      else if(yerSub==='detalle-everilio') sub=renderYERDetalleEverilio();
+      else if(yerSub==='liq-resumen') sub=buildLiqContent(liq);
+      return pctBox + barraTop + banner + archivos + renderYERSubTabs() + sub + modal;
+    } else {
+      // Sin snapshot válido — mostrar solo el resumen guardado
+      const aviso=rows.length>0?`<div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--r);">
+        ⚠️ Los datos de diferencias de este período no están disponibles (la liquidación fue realizada con un proceso anterior). Se muestra el resumen de comisiones guardado.
+      </div>`:''
+      return pctBox + barraTop + banner + aviso + buildLiqContent(liq) + modal;
+    }
   }
 
   // ── 3. PANTALLA PRINCIPAL (Liquidación actual) ───────────────
@@ -3219,7 +3233,10 @@ function renderYER(){
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
 
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
-  const btnLiquidar=canLiquidar?`<div style="margin-top:20px;text-align:right;">
+  const btnLiquidar=canLiquidar?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">
+    <button id="yer-imprimir-dif" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
+      🖨 Imprimir diferencias
+    </button>
     <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
       💰 LIQUIDAR ${yerMesLabel().toUpperCase()}
     </button>
@@ -3392,7 +3409,10 @@ function renderYERDiferencias(){
   // Botón LIQUIDAR (solo si hay ventas cargadas)
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
   const btnLiquidar=canLiquidar?`
-    <div style="margin-top:16px;text-align:right;">
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px;">
+      <button id="yer-imprimir-dif" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
+        🖨 Imprimir diferencias
+      </button>
       <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
         💰 LIQUIDAR ${yerMesLabel().toUpperCase()}
       </button>
@@ -3838,6 +3858,41 @@ function attachYER(){
       </div>`;
     }
 
+    return `<div id="yer-liq-printable">
+      <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
+        <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US Cipolletti · CR 3531</div>
+        <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACIÓN YER POR PORCENTAJE</div>
+        <div style="font-size:15px;opacity:.9;font-weight:700;">MES: ${esc((liq.mesLabel||liq.period||'').toUpperCase())}</div>
+      </div>
+      <div style="padding:20px 24px;">
+        <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:8px;text-transform:uppercase;">💰 Comisiones por Combustible</div>
+        <div style="border:1px solid var(--b);border-radius:8px;overflow:hidden;margin-bottom:4px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="background:#F8F5FB;">
+              <th style="padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--m2);">Combustible</th>
+              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Litros</th>
+              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Precio</th>
+              <th style="padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--m2);">Comisión</th>
+            </tr></thead>
+            <tbody>${combRows}</tbody>
+          </table>
+        </div>
+        <div style="background:var(--p);color:#fff;border-radius:10px;padding:16px 20px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Litros</div>
+            <div style="font-size:20px;font-weight:800;">${fmtArg(Math.round(liq.totalLt||0),0)} Lt</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;opacity:.75;text-transform:uppercase;">Total Comisión</div>
+            <div style="font-size:26px;font-weight:900;color:var(--y);">$ ${fmtArg(liq.totalCom||0)}</div>
+          </div>
+        </div>
+        ${difSection}
+        ${archivosSection}
+      </div>
+    </div>`;
+  }
+
   function openLiqModal(liqData, canSave){
     document.getElementById('yer-liq-content').innerHTML=buildLiqContent(liqData);
     const modal=document.getElementById('yer-modal-liq');
@@ -3878,7 +3933,6 @@ function attachYER(){
         renderTab();
       };
     }
-  }
 
   // LIQUIDAR — calcula y abre modal con botón Guardar
   el.querySelector('#yer-liquidar')?.addEventListener('click',()=>{
@@ -3990,6 +4044,91 @@ function attachYER(){
   el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
 
 // función movida afuera de attachYER para que onclick global funcione
+
+  // Imprimir diferencias
+  el.querySelector('#yer-imprimir-dif')?.addEventListener('click',()=>{
+    const mesLabel=yerMesLabel();
+    const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    // Recopilar todos los datos de diferencias
+    const soloVentas=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb'&&r.motivo==='SoloVentas');
+    const soloEv=(YER.evRows||[]).filter(r=>!r.matched);
+    const difMonto=(YER.rows||[]).filter(r=>r.motivo==='DifMonto');
+    const validados=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb'&&r.validacion&&r.validacion!=='sinValidar'&&r.validacion!=='');
+
+    function buildTable(title, color, rows, cols){
+      if(!rows.length) return '';
+      const ths=cols.map(c=>`<th>${c.label}</th>`).join('');
+      const trs=rows.map((r,i)=>{
+        const bg=i%2===0?'#fff':'#f9f9f9';
+        const tds=cols.map(c=>`<td>${esc(String(r[c.key]??''))}</td>`).join('');
+        return`<tr style="background:${bg}">${tds}</tr>`;
+      }).join('');
+      return`<div style="margin-bottom:24px;">
+        <h3 style="font-size:13px;font-weight:800;color:${color};text-transform:uppercase;margin:0 0 8px;padding:6px 10px;background:${color}22;border-radius:4px;">${title} (${rows.length})</h3>
+        <table><thead><tr style="background:#F5C842;color:#3D1F6E;">${ths}</tr></thead><tbody>${trs}</tbody></table>
+      </div>`;
+    }
+
+    const fmtMoney=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
+    const fmtDate=s=>{if(!s)return'';try{return new Date(s).toLocaleDateString('es-AR');}catch{return s;}};
+
+    // Preparar rows con formato
+    const svRows=soloVentas.map(r=>({
+      remito:r.remito||r.id||'',
+      fecha:fmtDate(r.fecha),
+      producto:r.producto||r.motivo_combust||'',
+      litros:r.litros??'',
+      total:fmtMoney(r.pvp||r.total),
+      validacion:r.validacion||'',
+      comentario:r.comentario||''
+    }));
+    const dmRows=difMonto.map(r=>({
+      remito:r.remito||r.id||'',
+      fecha:fmtDate(r.fecha),
+      producto:r.producto||'',
+      litros:r.litros??'',
+      totalVentas:fmtMoney(r.pvp||r.total),
+      totalEverilio:fmtMoney(r.pvpEv||r.totalEv),
+      diferencia:fmtMoney(r.diff),
+      validacion:r.validacion||'',
+      comentario:r.comentario||''
+    }));
+
+    const svCols=[
+      {key:'remito',label:'Remito'},{key:'fecha',label:'Fecha'},
+      {key:'producto',label:'Producto'},{key:'litros',label:'Lt'},
+      {key:'total',label:'Total $'},{key:'validacion',label:'Validación'},{key:'comentario',label:'Comentario'}
+    ];
+    const dmCols=[
+      {key:'remito',label:'Remito'},{key:'fecha',label:'Fecha'},
+      {key:'producto',label:'Producto'},{key:'litros',label:'Lt'},
+      {key:'totalVentas',label:'Total Ventas'},{key:'totalEverilio',label:'Total Everilio'},
+      {key:'diferencia',label:'Diferencia'},{key:'validacion',label:'Validación'},{key:'comentario',label:'Comentario'}
+    ];
+
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Diferencias YER — ${mesLabel}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{font-family:Arial,sans-serif;font-size:11px;color:#222;padding:20px;}
+      h1{font-size:16px;font-weight:900;color:#3D1F6E;margin-bottom:4px;}
+      .sub{font-size:12px;color:#666;margin-bottom:20px;}
+      table{border-collapse:collapse;width:100%;margin-bottom:4px;font-size:10px;}
+      th{padding:6px 8px;text-align:left;font-weight:800;font-size:10px;}
+      td{padding:5px 8px;border-bottom:1px solid #eee;}
+      @media print{@page{size:landscape;margin:1cm}body{padding:0}}
+    </style></head><body>
+    <h1>Diferencias YER — ${mesLabel}</h1>
+    <div class="sub">Generado: ${new Date().toLocaleString('es-AR')}</div>
+    ${buildTable('Solo en Ventas','#dc2626',svRows,svCols)}
+    ${buildTable('Diferencias de Monto','#d97706',dmRows,dmCols)}
+    <scr'+'ipt>window.onload=()=>{window.print();}<\/scr'+'ipt></body></html>`;
+
+    const w=window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  });
 
   el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
     if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
