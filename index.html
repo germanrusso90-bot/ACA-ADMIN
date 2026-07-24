@@ -264,12 +264,15 @@ function yerImprimirDiferencias(){
             +mkT('Solo en Everilio','#d97706',['Remito','Fecha','Producto','Lt','Total $'],seR)
             +mkT('Diferencias de Monto','#b45309',['Remito','Fecha','Producto','Lt','Ventas $','Everilio $','Diferencia','Validación','Comentario'],dmR);
   if(!body){alert('No hay diferencias registradas en '+mesLabel);return;}
-  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diferencias YER — '+mesLabel+'<\/title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:10px;color:#222;padding:16px;}h1{font-size:15px;font-weight:900;color:#3D1F6E;margin-bottom:2px;}.sub{font-size:10px;color:#666;margin-bottom:16px;}table{border-collapse:collapse;width:100%;}th{padding:5px 7px;text-align:left;font-weight:800;font-size:9px;}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px;}@media print{@page{size:landscape;margin:8mm}body{padding:0}}<\/style><\/head><body><h1>Diferencias YER — '+mesLabel+'<\/h1><div class="sub">CR 3531 — ACA Cipolletti · '+new Date().toLocaleString('es-AR')+'<\/div>'+body+'<\/body><\/html>';
-  const w=window.open('','_blank','width=900,height=600');
-  if(!w){alert('Habilitá los popups para este sitio.');return;}
-  w.document.write(html);
-  w.document.close();
-  setTimeout(()=>{try{w.focus();w.print();}catch(e){}},600);
+  const css='*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:10px;color:#222;padding:16px;}h1{font-size:15px;font-weight:900;color:#3D1F6E;margin-bottom:2px;}.sub{font-size:10px;color:#666;margin-bottom:16px;}table{border-collapse:collapse;width:100%;}th{padding:5px 7px;text-align:left;font-weight:800;font-size:9px;}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px;}@media print{@page{size:landscape;margin:8mm}body{padding:0}}';
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diferencias YER</title><style>'+css+'</style></head><body><h1>Diferencias YER — '+mesLabel+'</h1><div class="sub">CR 3531 — ACA Cipolletti · '+new Date().toLocaleString('es-AR')+'</div>'+body+'</body></html>';
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.target='_blank';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 
 // ── USUARIOS ──────────────────────────────────────────────────
