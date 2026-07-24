@@ -1537,11 +1537,13 @@ function ensureFullHistory(){
   }
 }
 
-function calcIntereses(f){
+function calcIntereses(f, periodo){
   const tasa=pN(f.interesMensual);
   const diasAtr=pN(f.diasAtrasados);
   if(!tasa||!diasAtr||!f.ventas)return null;
-  const [y,m]=CP.split('-').map(Number);
+  // Usar el período que se está liquidando para calcular días del mes
+  const per=periodo||prevMonth(CP);
+  const [y,m]=per.split('-').map(Number);
   const diasMes=new Date(y,m,0).getDate();
   const tasaDiaria=tasa/diasMes;
   const montoInt=f.ventas.recupero12*(tasaDiaria/100)*diasAtr;
@@ -1609,12 +1611,12 @@ function renderFull(){
     }
 
     // Fila ACTUAL — editable con todo el formulario inline
-    const int=f.ventas?calcIntereses(f):null;
+    const int=f.ventas?calcIntereses(f, PD.full._editingPeriod||prevMonth(CP)):null;
     const subtotal=f.ventas?f.ventas.recupero12:rec;
     // Usar el interés calculado, o el guardado previamente si existe
     const montoInt=int?int.montoInt:(f.importe_interes||0);
     const total=(subtotal||0)+montoInt;
-    const [y,m]=CP.split('-').map(Number);
+    const [y,m]=(PD.full._editingPeriod||prevMonth(CP)).split('-').map(Number);
     const diasMes=new Date(y,m,0).getDate();
 
     return `<tr style="background:#EEF0FF;border-left:4px solid var(--p);" id="full-curr-row">
@@ -2445,6 +2447,17 @@ function attachGenericFiles(){
       const sid=inp.getAttribute('data-upload');
       const file=e.target.files[0];if(!file)return;
       if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      // Si es un archivo de Full, preservar campos manuales
+      if(sid.startsWith('full.')){
+        const nro=el.querySelector('#full-nro-aca')?.value.trim()||'';
+        const fecha=el.querySelector('#full-fecha-cancel')?.value||'';
+        const tasa=el.querySelector('#full-tasa')?.value||'';
+        const dias=el.querySelector('#full-dias')?.value||'';
+        if(nro) PD.full.nroFacturaACA=nro;
+        if(fecha) PD.full.fechaCancelacion=fecha;
+        if(tasa) PD.full.interesMensual=tasa;
+        if(dias) PD.full.diasAtrasados=dias;
+      }
       showLoad(true);
       try{
         const du=await readDU(file);
@@ -2510,6 +2523,15 @@ function attachFull(){
   if(xi)xi.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     if(file.size>MAX_FILE){alert('Archivo muy grande.');return;}
+    // Guardar campos manuales antes de procesar para no perderlos
+    const nro=el.querySelector('#full-nro-aca')?.value.trim()||'';
+    const fecha=el.querySelector('#full-fecha-cancel')?.value||'';
+    const tasa=el.querySelector('#full-tasa')?.value||'';
+    const dias=el.querySelector('#full-dias')?.value||'';
+    if(nro) PD.full.nroFacturaACA=nro;
+    if(fecha) PD.full.fechaCancelacion=fecha;
+    if(tasa) PD.full.interesMensual=tasa;
+    if(dias) PD.full.diasAtrasados=dias;
     showLoad(true);
     try{
       const buf=await file.arrayBuffer();
@@ -2676,7 +2698,7 @@ function attachFull(){
     const targetPeriod=PD.full._editingPeriod||prevMonth(CP);
 
     // Calcular totales para guardar en historial
-    const int=calcIntereses(PD.full);
+    const int=calcIntereses(PD.full, PD.full._editingPeriod||prevMonth(CP));
     const subtotal=PD.full.ventas?PD.full.ventas.recupero12:null;
     const montoInt=int?int.montoInt:0;
     const totalFinal=(subtotal||0)+montoInt;
