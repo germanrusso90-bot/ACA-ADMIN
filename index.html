@@ -3234,7 +3234,7 @@ function renderYER(){
 
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
   const btnLiquidar=canLiquidar?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">
-    <button id="yer-imprimir-dif" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
+    <button onclick="yerImprimirDiferencias()" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
       🖨 Imprimir diferencias
     </button>
     <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
@@ -3392,33 +3392,7 @@ function renderYERDiferencias(){
     </tr>`;
   }).join('');
 
-  const liqHistorialHtml = liqHistory.length ? `
-    <div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-top:14px;">
-      <div style="background:var(--p);color:#fff;padding:10px 14px;font-size:13px;font-weight:800;">📋 Liquidaciones guardadas</div>
-      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:700px;">
-        <thead><tr>
-          <th style="${thL}">MES</th>
-          ${YER_COMBUST.map(c=>`<th style="${thL}">${c.label}</th>`).join('')}
-          <th style="${thL}">TOTAL COMISIÓN</th>
-          <th style="${thL}"></th>
-        </tr></thead>
-        <tbody>${liqRows}</tbody>
-      </table></div>
-    </div>` : '';
-
-  // Botón LIQUIDAR (solo si hay ventas cargadas)
-  const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
-  const btnLiquidar=canLiquidar?`
-    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px;">
-      <button id="yer-imprimir-dif" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
-        🖨 Imprimir diferencias
-      </button>
-      <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
-        💰 LIQUIDAR ${yerMesLabel().toUpperCase()}
-      </button>
-    </div>` : '';
-
-  return cards+tbSV+tbSE+tbDM+liqHistorialHtml+btnLiquidar;
+  return cards+tbSV+tbSE+tbDM;
 }
 
 function renderYERDetalleVentas(){
@@ -4046,7 +4020,7 @@ function attachYER(){
 // función movida afuera de attachYER para que onclick global funcione
 
   // Imprimir diferencias
-  el.querySelector('#yer-imprimir-dif')?.addEventListener('click',()=>{
+function yerImprimirDiferencias(){
     const mesLabel=yerMesLabel();
     const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -4128,7 +4102,7 @@ function attachYER(){
     const w=window.open('','_blank');
     w.document.write(html);
     w.document.close();
-  });
+}
 
   el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
     if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
