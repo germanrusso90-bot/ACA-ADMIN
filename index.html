@@ -3233,16 +3233,13 @@ function renderYER(){
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
 
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
-  const btnLiquidar=canLiquidar?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">
-    <button onclick="yerImprimirDiferencias()" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">
-      🖨 Imprimir diferencias
-    </button>
-    <button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">
-      💰 LIQUIDAR ${yerMesLabel().toUpperCase()}
-    </button>
-  </div>`:'';
+  const tieneArchivos=!!(YER.ventasFile&&YER.everilioFile);
 
-  return pctBox + barraTop + bannerAnterior + archivos + renderYERSubTabs() + subContent + btnLiquidar + modal;
+  const btnImprimir=tieneArchivos?`<button onclick="yerImprimirDiferencias()" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:'';
+  const btnLiq=canLiquidar?`<button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">💰 LIQUIDAR ${yerMesLabel().toUpperCase()}</button>`:'';
+  const btnBar=(btnImprimir||btnLiq)?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">${btnImprimir}${btnLiq}</div>`:'';
+
+  return pctBox + barraTop + bannerAnterior + archivos + renderYERSubTabs() + subContent + btnBar + modal;
 }
 
 
@@ -4023,54 +4020,66 @@ function attachYER(){
 function yerImprimirDiferencias(){
   const mesLabel=yerMesLabel();
 
-  // Construir tabla HTML
-  function mkTable(title, color, headers, rows){
-    if(!rows.length) return `<p style="color:#666;font-style:italic;margin-bottom:16px;">Sin registros en: ${title}</p>`;
-    const ths=headers.map(h=>`<th>${h}</th>`).join('');
-    const trs=rows.map((r,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('');
-    return `<div style="margin-bottom:20px;">
-      <h3 style="font-size:12px;text-transform:uppercase;color:${color};background:${color}18;padding:6px 10px;border-radius:4px;margin-bottom:6px;">${title} (${rows.length})</h3>
-      <table><thead><tr style="background:#F5C842;color:#3D1F6E;">${ths}</tr></thead><tbody>${trs}</tbody></table>
-    </div>`;
-  }
-
   const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
   const fmtD=s=>{try{return s?new Date(s).toLocaleDateString('es-AR'):'';}catch{return s||'';}};
 
   const sv=(YER.rows||[]).filter(r=>r.motivo==='SoloVentas');
   const dm=(YER.rows||[]).filter(r=>r.motivo==='DifMonto');
+  const se=(YER.evRows||[]).filter(r=>!r.matched);
 
-  const svRows=sv.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total),r.validacion||'',r.comentario||'']);
-  const dmRows=dm.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total),fmt(r.pvpEv||r.totalEv),fmt(r.diff),r.validacion||'',r.comentario||'']);
+  function mkTable(title,color,headers,rows){
+    if(!rows.length)return '';
+    const ths=headers.map(h=>`<th>${h}</th>`).join('');
+    const trs=rows.map((r,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('');
+    return`<div style="margin-bottom:20px;">
+      <h3 style="font-size:12px;text-transform:uppercase;color:${color};background:${color}18;padding:6px 10px;border-radius:4px;margin-bottom:6px;">${title} (${rows.length})</h3>
+      <table><thead><tr style="background:#F5C842;color:#3D1F6E;">${ths}</tr></thead><tbody>${trs}</tbody></table>
+    </div>`;
+  }
+
+  const svRows=sv.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),r.validacion||'',r.comentario||'']);
+  const dmRows=dm.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),fmt(r.pvpEv||r.totalEv||0),fmt(r.diff||0),r.validacion||'',r.comentario||'']);
+  const seRows=se.map(r=>[r.remito||r.id||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0)]);
 
   const svH=['Remito','Fecha','Producto','Lt','Total $','Validación','Comentario'];
   const dmH=['Remito','Fecha','Producto','Lt','Ventas $','Everilio $','Diferencia','Validación','Comentario'];
+  const seH=['Remito','Fecha','Producto','Lt','Total $'];
+
+  const body=mkTable('Solo en Ventas','#dc2626',svH,svRows)
+            +mkTable('Solo en Everilio','#d97706',seH,seRows)
+            +mkTable('Diferencias de Monto','#b45309',dmH,dmRows);
+
+  if(!body){
+    alert(`No hay diferencias registradas en ${mesLabel}.\nCargá los archivos de Ventas y Everilio para ver las diferencias.`);
+    return;
+  }
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Diferencias YER — ${mesLabel}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:Arial,sans-serif;font-size:11px;color:#222;padding:20px;}
-h1{font-size:16px;font-weight:900;color:#3D1F6E;margin-bottom:4px;}
-.sub{font-size:11px;color:#666;margin-bottom:20px;}
-table{border-collapse:collapse;width:100%;margin-bottom:4px;}
-th{padding:6px 8px;text-align:left;font-weight:800;font-size:10px;}
-td{padding:5px 8px;border-bottom:1px solid #eee;font-size:10px;}
-@media print{@page{size:landscape;margin:1cm}body{padding:0}}
+body{font-family:Arial,sans-serif;font-size:10px;color:#222;padding:16px;}
+h1{font-size:15px;font-weight:900;color:#3D1F6E;margin-bottom:2px;}
+.sub{font-size:10px;color:#666;margin-bottom:16px;}
+table{border-collapse:collapse;width:100%;}
+th{padding:5px 7px;text-align:left;font-weight:800;font-size:9px;}
+td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px;}
+@media print{@page{size:landscape;margin:8mm}body{padding:0}}
 </style></head><body>
 <h1>Diferencias YER — ${mesLabel}</h1>
 <div class="sub">CR 3531 — ACA Cipolletti · ${new Date().toLocaleString('es-AR')}</div>
-${mkTable('Solo en Ventas','#dc2626',svH,svRows)}
-${mkTable('Diferencias de Monto','#d97706',dmH,dmRows)}
+${body}
 </body></html>`;
 
-  const w=window.open('','_blank');
-  if(!w){alert('El navegador bloqueó la ventana emergente. Habilitá los popups para este sitio.');return;}
+  const w=window.open('','_blank','width=900,height=600');
+  if(!w){
+    alert('El navegador bloqueó la ventana emergente.\nHabilitá los popups para este sitio e intentá de nuevo.');
+    return;
+  }
   w.document.write(html);
   w.document.close();
-  setTimeout(()=>w.print(),500);
+  setTimeout(()=>{try{w.focus();w.print();}catch(e){}},600);
 }
-
 
   el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
     if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
