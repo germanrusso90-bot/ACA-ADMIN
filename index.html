@@ -3271,23 +3271,43 @@ function renderYERDiferencias(){
   const val=YER.validaciones;
 
   // Celda de validación reutilizable
-  const valCell=(key)=>{
+  // Construir lista de remitos de Everilio para el selector cruzado
+  const evRemitoOpts=soloEv.map(r=>`<option value="${esc(r.remitoNorm||r.remito)}">${esc(r.remito)} — $${fmtArg(r.pvp)}</option>`).join('');
+
+  const valCell=(key, tipo='sv')=>{
     const v=val[key]||{};
     const estado=v.estado||'';
     const comentario=v.comentario||'';
-    const validado=estado==='ok'||estado==='error'||estado==='pendiente';
-    const badgeColor={'ok':'#1B6B35','error':'var(--r)','pendiente':'#7B5800'}[estado]||'transparent';
-    const badgeLabel={'ok':'✓ OK','error':'✗ Error','pendiente':'⏳ Pendiente'}[estado]||'';
-    return `<td style="padding:5px 8px;border:1px solid var(--b);min-width:220px;vertical-align:middle;">
+    const evLink=v.evLink||''; // remito de Everilio vinculado
+    const isOK=estado==='ok';
+
+    // Selector de remito Everilio (solo en filas de Ventas)
+    const evSelect=tipo==='sv'?`
+      <select data-val-key="${esc(key)}" data-val-field="evLink"
+        style="padding:4px 6px;border:1px solid ${evLink?'#1B6B35':'var(--b)'};border-radius:5px;font-size:11px;background:${evLink?'#F0FFF4':'#fff'};min-width:140px;max-width:180px;">
+        <option value="">Vincular Everilio...</option>
+        ${evRemitoOpts}
+      </select>`:'';
+
+    // Selector preseleccionado si ya tiene vínculo
+    const evSelectWithVal=tipo==='sv'?`
+      <select data-val-key="${esc(key)}" data-val-field="evLink"
+        style="padding:4px 6px;border:1px solid ${evLink?'#1B6B35':'var(--b)'};border-radius:5px;font-size:11px;background:${evLink?'#F0FFF4':'#fff'};min-width:140px;max-width:180px;">
+        <option value="">Vincular Everilio...</option>
+        ${soloEv.map(r=>`<option value="${esc(r.remitoNorm||r.remito)}" ${evLink===(r.remitoNorm||r.remito)?'selected':''}>${esc(r.remito)} — $${fmtArg(r.pvp)}</option>`).join('')}
+      </select>`:'';
+
+    return `<td style="padding:5px 8px;border:1px solid var(--b);min-width:${tipo==='sv'?'320':'220'}px;vertical-align:middle;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <div style="display:flex;align-items:center;gap:5px;">
-          <select data-val-key="${esc(key)}" data-val-field="estado" style="padding:4px 6px;border:1px solid var(--b);border-radius:5px;font-size:12px;background:#fff;">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+          <select data-val-key="${esc(key)}" data-val-field="estado"
+            style="padding:4px 6px;border:1px solid ${isOK?'#1B6B35':'var(--b)'};border-radius:5px;font-size:12px;background:${isOK?'#F0FFF4':'#fff'};">
             <option value="">— Sin validar</option>
             <option value="ok" ${estado==='ok'?'selected':''}>✓ OK</option>
             <option value="error" ${estado==='error'?'selected':''}>✗ Error</option>
             <option value="pendiente" ${estado==='pendiente'?'selected':''}>⏳ Pendiente</option>
           </select>
-          ${validado?`<span style="font-size:11px;font-weight:700;color:${badgeColor};">${badgeLabel}</span>`:''}
+          ${tipo==='sv'?evSelectWithVal:''}
         </div>
         <input type="text" data-val-key="${esc(key)}" data-val-field="comentario"
           placeholder="Comentario breve..." value="${esc(comentario)}"
@@ -3308,29 +3328,54 @@ function renderYERDiferencias(){
   const th=`padding:8px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;`;
 
   // Filas con validador
-  const svRows=soloVentas.map((r,i)=>{
+  // Ordenar: OK primero, luego el resto
+  const svSorted=[...soloVentas].sort((a,b)=>{
+    const va=val['sv:'+normRemito(a.remito)]||{};
+    const vb=val['sv:'+normRemito(b.remito)]||{};
+    const aOK=va.estado==='ok'?0:1;
+    const bOK=vb.estado==='ok'?0:1;
+    return aOK-bOK;
+  });
+
+  const svRows=svSorted.map((r,i)=>{
     const vKey='sv:'+normRemito(r.remito);
     const v=val[vKey]||{};
-    const rowBg=v.estado==='ok'?'#F0FFF4':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFF8F8';
+    const isOK=v.estado==='ok';
+    const isLinked=!!v.evLink;
+    const rowBg=isOK?'#E8FFF0':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFF8F8';
+    const okBadge=isOK?`<span style="font-size:10px;font-weight:800;color:#1B6B35;background:#C6F6D5;padding:1px 6px;border-radius:4px;margin-left:4px;">✓ OK${isLinked?' → '+v.evLink:''}</span>`:'';
     return `<tr style="background:${rowBg}">
-      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}${okBadge}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;color:var(--m2);">${esc(r.fecha.slice(0,16))}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;">${esc(r.desc)}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;">${fmtArg(Math.round(r.litros),0)}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;font-weight:700;color:var(--r);">$ ${fmtArg(r.total)}</td>
-      ${valCell(vKey)}
+      ${valCell(vKey,'sv')}
     </tr>`;
   }).join('');
 
-  const seRows=soloEv.map((r,i)=>{
+  // Ordenar Everilio: los que están vinculados (OK desde Ventas) primero
+  const linkedEvRemitos=new Set(Object.values(val).map(v=>v.evLink).filter(Boolean));
+  const seSorted=[...soloEv].sort((a,b)=>{
+    const aNorm=a.remitoNorm||normRemito(a.remito);
+    const bNorm=b.remitoNorm||normRemito(b.remito);
+    const aOK=linkedEvRemitos.has(aNorm)?0:1;
+    const bOK=linkedEvRemitos.has(bNorm)?0:1;
+    return aOK-bOK;
+  });
+
+  const seRows=seSorted.map((r,i)=>{
     const vKey='se:'+normRemito(r.remito);
     const v=val[vKey]||{};
-    const rowBg=v.estado==='ok'?'#F0FFF4':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFFCF0';
+    const rNorm=r.remitoNorm||normRemito(r.remito);
+    const isLinkedFromV=linkedEvRemitos.has(rNorm);
+    const rowBg=isLinkedFromV?'#E8FFF0':v.estado==='ok'?'#E8FFF0':v.estado==='error'?'#FFF0F0':v.estado==='pendiente'?'#FFFCF0':i%2===0?'#fff':'#FFFCF0';
+    const okBadge=isLinkedFromV?`<span style="font-size:10px;font-weight:800;color:#1B6B35;background:#C6F6D5;padding:1px 6px;border-radius:4px;margin-left:4px;">✓ OK</span>`:'';
     return `<tr style="background:${rowBg}">
-      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
+      <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;font-family:monospace;">${esc(r.remito)}${okBadge}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;color:var(--m2);">${esc(r.fecha)}</td>
       <td style="padding:6px 10px;border:1px solid var(--b);font-size:12px;text-align:right;font-weight:700;color:#7B5800;">$ ${fmtArg(r.pvp)}</td>
-      ${valCell(vKey)}
+      ${valCell(vKey,'se')}
     </tr>`;
   }).join('');
 
@@ -3804,8 +3849,14 @@ function attachYER(){
     const sv=soloVentas.filter(r=>!esOK(r.validacion));
     const se=soloEv.filter(r=>!esOK(r.validacion));
     const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
-    const fd=s=>{try{return s?new Date(s).toLocaleDateString('es-AR'):'';}catch{return s||'';}};
-    function tbl(t,h,rows){
+    const fd=s=>{
+      if(!s) return '';
+      // Formato Everilio: "dd/mm/yyyy hh:mm"
+      const m=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if(m) return `${m[1]}/${m[2]}/${m[3]}`;
+      // Formato ISO: "2026-06-01T..."
+      try{return new Date(s).toLocaleDateString('es-AR');}catch{return String(s);}
+    };    function tbl(t,h,rows){
       if(!rows.length)return '';
       return`<h3>${t} (${rows.length})</h3><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('')}</table>`;
     }
@@ -3844,13 +3895,30 @@ function attachYER(){
         const key=sel.getAttribute('data-val-key');
         if(!YER.validaciones[key])YER.validaciones[key]={};
         YER.validaciones[key].estado=sel.value;
-        // Cambiar color de fila según estado
-        const tr=sel.closest('tr');
-        if(tr){
-          const bg={'ok':'#F0FFF4','error':'#FFF0F0','pendiente':'#FFFCF0','':''}[sel.value]||'';
-          if(bg)tr.style.background=bg;
+        await saveVal();
+        // Re-renderizar diferencias para reordenar filas y sincronizar colores
+        renderTab();
+      });
+    });
+
+    // Selector de vinculación con Everilio
+    el.querySelectorAll('select[data-val-key][data-val-field=evLink]').forEach(sel=>{
+      sel.addEventListener('change',async()=>{
+        const key=sel.getAttribute('data-val-key');
+        const evLinkVal=sel.value;
+        if(!YER.validaciones[key])YER.validaciones[key]={};
+        YER.validaciones[key].evLink=evLinkVal;
+        // Si se vincula con Everilio, auto-setear estado OK y copiar comentario
+        if(evLinkVal){
+          YER.validaciones[key].estado='ok';
+          // También marcar el comentario si no tiene uno
+          if(!YER.validaciones[key].comentario){
+            YER.validaciones[key].comentario='Error en numeracion, el registro es correcto';
+          }
         }
         await saveVal();
+        // Re-renderizar para sincronizar color en ambas tablas
+        renderTab();
       });
     });
 
