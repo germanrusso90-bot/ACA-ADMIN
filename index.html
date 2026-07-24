@@ -244,54 +244,6 @@ table.ex input.ex-input.inp-date{width:100%;}
 <div id="app"></div>
 <div id="toast"></div>
 <script>
-function yerImprimirDiferencias(){
-  const mesLabel=yerMesLabel();
-  const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
-  const fmtD=s=>{try{return s?new Date(s).toLocaleDateString('es-AR'):'';}catch{return s||'';}};
-  const sv=(YER.rows||[]).filter(r=>r.motivo==='SoloVentas');
-  const dm=(YER.rows||[]).filter(r=>r.motivo==='DifMonto');
-  const se=(YER.evRows||[]).filter(r=>!r.matched);
-  function mkT(title,color,headers,rows){
-    if(!rows.length)return '';
-    const ths=headers.map(h=>`<th>${h}</th>`).join('');
-    const trs=rows.map((r,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('');
-    return`<div style="margin-bottom:16px;"><h3 style="font-size:11px;text-transform:uppercase;color:${color};background:${color}18;padding:5px 8px;border-radius:3px;margin-bottom:4px;">${title} (${rows.length})</h3><table><thead><tr style="background:#F5C842;color:#3D1F6E;">${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
-  }
-  const svR=sv.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),r.validacion||'',r.comentario||'']);
-  const dmR=dm.map(r=>[r.remito||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),fmt(r.pvpEv||r.totalEv||0),fmt(r.diff||0),r.validacion||'',r.comentario||'']);
-  const seR=se.map(r=>[r.remito||r.id||'',fmtD(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0)]);
-  const body=mkT('Solo en Ventas','#dc2626',['Remito','Fecha','Producto','Lt','Total $','Validación','Comentario'],svR)
-            +mkT('Solo en Everilio','#d97706',['Remito','Fecha','Producto','Lt','Total $'],seR)
-            +mkT('Diferencias de Monto','#b45309',['Remito','Fecha','Producto','Lt','Ventas $','Everilio $','Diferencia','Validación','Comentario'],dmR);
-  if(!body){alert('No hay diferencias registradas en '+mesLabel);return;}
-  const css='*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:10px;color:#222;padding:16px;}h1{font-size:15px;font-weight:900;color:#3D1F6E;margin-bottom:2px;}.sub{font-size:10px;color:#666;margin-bottom:16px;}table{border-collapse:collapse;width:100%;}th{padding:5px 7px;text-align:left;font-weight:800;font-size:9px;}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px;}@media print{@page{size:landscape;margin:8mm}body{padding:0}}';
-  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diferencias YER</title><style>'+css+'</style></head><body><h1>Diferencias YER — '+mesLabel+'</h1><div class="sub">CR 3531 — ACA Cipolletti · '+new Date().toLocaleString('es-AR')+'</div>'+body+'</body></html>';
-  // Mostrar en modal interno (evita CSP y popup blockers)
-  const existing=document.getElementById('yer-print-modal');
-  if(existing)existing.remove();
-  const modal=document.createElement('div');
-  modal.id='yer-print-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
-  const printCss='*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;color:#222;padding:16px}h1{font-size:15px;font-weight:900;color:#3D1F6E;margin-bottom:2px}.sub{font-size:10px;color:#666;margin-bottom:16px}table{border-collapse:collapse;width:100%}th{padding:5px 7px;text-align:left;font-weight:800;font-size:9px;background:#F5C842;color:#3D1F6E}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px}';
-  modal.innerHTML=`<div style="background:#fff;border-radius:12px;width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
-    <div style="padding:12px 20px;background:#3D1F6E;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-      <span style="font-weight:800;font-size:14px;">Diferencias YER — ${mesLabel}</span>
-      <div style="display:flex;gap:8px;">
-        <button onclick="window.print()" style="background:#F5C842;color:#3D1F6E;border:none;border-radius:6px;padding:7px 16px;font-size:12px;font-weight:800;cursor:pointer;">🖨 Imprimir</button>
-        <button onclick="document.getElementById('yer-print-modal').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">✕ Cerrar</button>
-      </div>
-    </div>
-    <div id="yer-print-content" style="overflow-y:auto;padding:20px;flex:1;">
-      <style>${printCss}@media print{.no-print{display:none!important}}</style>
-      <h1>Diferencias YER — ${mesLabel}</h1>
-      <div class="sub">CR 3531 — ACA Cipolletti · ${new Date().toLocaleString('es-AR')}</div>
-      ${body}
-    </div>
-  </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
-}
-
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
@@ -3266,7 +3218,7 @@ function renderYER(){
         <div style="font-size:12px;color:var(--m2);margin-top:2px;">Subí los archivos del mes siguiente para cargar el nuevo período.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${hayDatos?`<button id="btn-yer-imprimir" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:''}
+
         <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
       </div>
     </div>`;
@@ -3295,11 +3247,11 @@ function renderYER(){
   else if(yerSub==='detalle-everilio') subContent=renderYERDetalleEverilio();
 
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
-  const tieneArchivos=!!(YER.ventasFile&&YER.everilioFile);
+  const hayDif=(YER.rows||[]).some(r=>r.motivo==='SoloVentas'||r.motivo==='DifMonto')||(YER.evRows||[]).some(r=>!r.matched);
 
-  const btnImprimir=tieneArchivos?`<button id="btn-yer-imprimir" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:'';
   const btnLiq=canLiquidar?`<button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">💰 LIQUIDAR ${yerMesLabel().toUpperCase()}</button>`:'';
-  const btnBar=(btnImprimir||btnLiq)?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">${btnImprimir}${btnLiq}</div>`:'';
+  const btnPrint=hayDif?`<button id="btn-yer-imprimir" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:'';
+  const btnBar=(btnLiq||btnPrint)?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">${btnPrint}${btnLiq}</div>`:'';
 
   return pctBox + barraTop + bannerAnterior + archivos + renderYERSubTabs() + subContent + btnBar + modal;
 }
@@ -3843,6 +3795,34 @@ function buildLiqContent(liq){
 
 function attachYER(){
   const el=document.getElementById('tab-content');
+  // Imprimir diferencias via iframe oculto (evita popup blockers y CSP)
+  el.querySelector('#btn-yer-imprimir')?.addEventListener('click',()=>{
+    const sv=(YER.rows||[]).filter(r=>r.motivo==='SoloVentas');
+    const dm=(YER.rows||[]).filter(r=>r.motivo==='DifMonto');
+    const se=(YER.evRows||[]).filter(r=>!r.matched);
+    const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
+    const fd=s=>{try{return s?new Date(s).toLocaleDateString('es-AR'):'';}catch{return s||'';}};
+    function tbl(t,h,rows){
+      if(!rows.length)return '';
+      return`<h3>${t} (${rows.length})</h3><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('')}</table>`;
+    }
+    const cuerpo=tbl('Solo en Ventas',['Remito','Fecha','Producto','Lt','Total $','Validación','Comentario'],
+      sv.map(r=>[r.remito||'',fd(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),r.validacion||'',r.comentario||'']))
+    +tbl('Solo en Everilio',['Remito','Fecha','Producto','Lt','Total $'],
+      se.map(r=>[r.remito||r.id||'',fd(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0)]))
+    +tbl('Diferencias de Monto',['Remito','Fecha','Producto','Lt','Ventas $','Everilio $','Diferencia','Validación','Comentario'],
+      dm.map(r=>[r.remito||'',fd(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),fmt(r.pvpEv||r.totalEv||0),fmt(r.diff||0),r.validacion||'',r.comentario||'']));
+    if(!cuerpo){toast('No hay diferencias para imprimir');return;}
+    const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:10px;margin:16px}h3{font-size:11px;text-transform:uppercase;color:#3D1F6E;margin:14px 0 4px}table{border-collapse:collapse;width:100%}th{background:#F5C842;color:#3D1F6E;padding:5px 7px;text-align:left;font-size:9px}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px}@media print{@page{size:landscape;margin:8mm}}</style></head><body>${cuerpo}</body></html>`;
+    const f=document.createElement('iframe');
+    f.style.cssText='position:fixed;width:0;height:0;border:0;top:-1000px;left:-1000px;';
+    document.body.appendChild(f);
+    f.contentDocument.open();
+    f.contentDocument.write(html);
+    f.contentDocument.close();
+    setTimeout(()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000);},300);
+  });
+
   el.querySelectorAll('.yer-sub-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{ yerSub=btn.getAttribute('data-sub'); renderTab(); });
   });
