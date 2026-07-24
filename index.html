@@ -3209,14 +3209,27 @@ function renderYER(){
 
   if(yaLiquidado){
     const mesLabel=yerMesLabel();
+    // Ver si hay datos en memoria para imprimir (del período actual liquidado)
+    const hayDatos=(YER.rows||[]).length>0;
     const banner=`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
       <div>
         <div style="font-size:13px;font-weight:800;color:var(--g);">✓ Período ${mesLabel} liquidado</div>
         <div style="font-size:12px;color:var(--m2);margin-top:2px;">Subí los archivos del mes siguiente para cargar el nuevo período.</div>
       </div>
-      <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${hayDatos?`<button onclick="yerImprimirDiferencias()" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:''}
+        <button id="yer-nuevo-periodo" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Nuevo período</button>
+      </div>
     </div>`;
-    return pctBox + barraTop + banner + modal;
+    // Mostrar también las subtabs si hay datos
+    const subLiq=hayDatos?(()=>{
+      let s='';
+      if(yerSub==='diferencias') s=renderYERDiferencias();
+      else if(yerSub==='detalle-ventas') s=renderYERDetalleVentas();
+      else if(yerSub==='detalle-everilio') s=renderYERDetalleEverilio();
+      return renderYERSubTabs()+s;
+    })():'';
+    return pctBox + barraTop + banner + subLiq + modal;
   }
 
   // Sin liquidar — pantalla de carga
