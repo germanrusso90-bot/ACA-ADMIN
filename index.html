@@ -3797,10 +3797,12 @@ function attachYER(){
   const el=document.getElementById('tab-content');
   // Imprimir diferencias via iframe oculto (evita popup blockers y CSP)
   el.querySelector('#btn-yer-imprimir')?.addEventListener('click',()=>{
-    // Solo imprimir Solo en Ventas y Solo en Everilio — sin validación OK
+    // Usar calcConciliacion() igual que la pantalla — mismos datos que se ven
+    const {soloVentas, soloEv} = calcConciliacion();
     const esOK=v=>v&&(v==='ok'||v.toLowerCase().includes('ok'));
-    const sv=(YER.rows||[]).filter(r=>r.motivo==='SoloVentas'&&!esOK(r.validacion));
-    const se=(YER.evRows||[]).filter(r=>!r.matched&&!esOK(r.validacion));
+    // Filtrar los que NO tienen validación OK
+    const sv=soloVentas.filter(r=>!esOK(r.validacion));
+    const se=soloEv.filter(r=>!esOK(r.validacion));
     const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
     const fd=s=>{try{return s?new Date(s).toLocaleDateString('es-AR'):'';}catch{return s||'';}};
     function tbl(t,h,rows){
@@ -3808,9 +3810,9 @@ function attachYER(){
       return`<h3>${t} (${rows.length})</h3><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('')}</table>`;
     }
     const cuerpo=tbl('En Ventas sin respaldo en Everilio',['Remito','Fecha','Producto','Lt','Total $','Validación','Comentario'],
-      sv.map(r=>[r.remito||'',fd(r.fecha),r.producto||'',r.litros??'',fmt(r.pvp||r.total||0),r.validacion||'',r.comentario||'']))
+      sv.map(r=>[r.remito||'',fd(r.fecha),r.producto||r.motivo_combust||'',r.litros??'',fmt(r.pvp||r.total||0),r.validacion||'—',r.comentario||'']))
     +tbl('En Everilio sin respaldo en Ventas',['Remito','Fecha','Total PVP $','Validación'],
-      se.map(r=>[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||r.total||0),r.validacion||'']));
+      se.map(r=>[r.remitoNorm||r.remito||'',fd(r.fecha),fmt(r.pvp||0),r.validacion||'—']));
     if(!cuerpo){toast('No hay diferencias para imprimir');return;}
     const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:10px;margin:16px}h3{font-size:11px;text-transform:uppercase;color:#3D1F6E;margin:14px 0 4px}table{border-collapse:collapse;width:100%}th{background:#F5C842;color:#3D1F6E;padding:5px 7px;text-align:left;font-size:9px}td{padding:4px 7px;border-bottom:1px solid #eee;font-size:9px}@media print{@page{size:landscape;margin:8mm}}</style></head><body>${cuerpo}</body></html>`;
     const f=document.createElement('iframe');
