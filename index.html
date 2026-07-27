@@ -3838,6 +3838,193 @@ function buildLiqContent(liq){
   </div>`;
 }
 
+function openLiqModal(liqData, canSave){
+  document.getElementById('yer-liq-content').innerHTML=buildLiqContent(liqData);
+  const modal=document.getElementById('yer-modal-liq');
+  const btnSave=document.getElementById('yer-liq-save');
+  btnSave.style.display=canSave?'':'none';
+  modal.style.display='flex';
+
+  document.getElementById('yer-liq-close').onclick=()=>{ modal.style.display='none'; };
+  document.getElementById('yer-liq-print').onclick=()=>{
+    const w=window.open('','_blank');
+    w.document.write(`<html><head><title>Liquidacion YER ${liqData.mesLabel}</title><style>body{font-family:Arial,sans-serif;margin:0;}table{width:100%;border-collapse:collapse;}td,th{padding:8px 12px;border-bottom:1px solid #eee;}</style></head><body>${document.getElementById('yer-liq-printable').innerHTML}</body></html>`);
+    w.document.close(); w.focus(); setTimeout(()=>{w.print();w.close();},400);
+  };
+  if(canSave){
+    btnSave.onclick=async()=>{
+      if(!YER.liqHistory) YER.liqHistory=[];
+      YER.liqHistory=YER.liqHistory.filter(l=>l.mesLabel!==liqData.mesLabel);
+      // Guardar snapshot completo del período para Ver/Editar
+      liqData.snapshot={
+        rows: JSON.parse(JSON.stringify(YER.rows||[])),
+        evRows: JSON.parse(JSON.stringify(YER.evRows||[])),
+        ventasFile: YER.ventasFile||null,
+        everilioFile: YER.everilioFile||null,
+        validaciones: JSON.parse(JSON.stringify(YER.validaciones||{}))
+      };
+      YER.liqHistory.push(liqData);
+      // Ordenar por período
+      YER.liqHistory.sort((a,b)=>(a.period||'').localeCompare(b.period||''));
+      // Resetear para el próximo mes y limpiar período anterior seleccionado
+      YER.rows=[]; YER.evRows=[];
+      YER.ventasFile=null; YER.everilioFile=null;
+      YER.validaciones={};
+      delete YER._periodoAnterior;
+      modal.style.display='none';
+      showLoad(true); await saveYER(); showLoad(false);
+      toast('Liquidación guardada ✓');
+      yerSub='historial';
+      renderTab();
+    };
+  }
+
+// LIQUIDAR — calcula y abre modal con botón Guardar
+el.querySelector('#yer-liquidar')?.addEventListener('click', yerLiquidar);
+
+// Nuevo período — resetea archivos y datos del período actual
+// ── Historial: Ver y Eliminar ─────────────────────────────────
+el.querySelectorAll('.yer-hist-ver').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const idx=parseInt(btn.getAttribute('data-liq-idx'));
+    const liq=(YER.liqHistory||[])[idx];
+    if(!liq) return;
+    // Crear modal dinámico (no depende del estado yaLiquidado)
+    const existingModal=document.getElementById('yer-dyn-modal');
+    if(existingModal) existingModal.remove();
+    const modal=document.createElement('div');
+    modal.id='yer-dyn-modal';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:100%;max-width:660px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+      <div id="yer-dyn-content" style="overflow-y:auto;flex:1;">${buildLiqContent(liq)}</div>
+      <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #E8E4F0;flex-shrink:0;">
+        <button id="yer-dyn-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
+        <button id="yer-dyn-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#yer-dyn-close').onclick=()=>modal.remove();
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+    modal.querySelector('#yer-dyn-print').onclick=()=>{
+      const w=window.open('','_blank');
+      w.document.write(`<html><head><title>YER ${liq.mesLabel||liq.period||''}</title>
+        <style>body{font-family:Arial,sans-serif;margin:0;}table{width:100%;border-collapse:collapse;}
+        td,th{padding:8px 12px;border-bottom:1px solid #eee;}</style></head>
+        <body>${modal.querySelector('#yer-liq-printable')?.innerHTML||''}</body></html>`);
+      w.document.close();w.print();w.close();
+    };
+  });
+});
+
+el.querySelectorAll('.yer-hist-del').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    const idx=parseInt(btn.getAttribute('data-liq-idx'));
+    const liq=(YER.liqHistory||[])[idx];
+    if(!liq)return;
+    if(!confirm(`¿Eliminar liquidación de ${liq.mesLabel||liq.period}?`))return;
+    YER.liqHistory.splice(idx,1);
+    showLoad(true);await saveYER();showLoad(false);
+    toast('Liquidación eliminada ✓');
+    renderTab();
+  });
+});
+el.querySelector('#yer-cancelar-anterior')?.addEventListener('click',async()=>{
+  delete YER._periodoAnterior;
+  YER.rows=[]; YER.evRows=[];
+  YER.ventasFile=null; YER.everilioFile=null;
+  YER.validaciones={};
+  showLoad(true); await saveYER(); showLoad(false);
+  renderTab();
+});
+
+// Historial y cargar período anterior — presentes en cualquier estado
+el.querySelector('#yer-hist-btn-top')?.addEventListener('click',()=>{yerSub='historial';renderTab();});
+el.querySelector('#yer-cargar-anterior-libre')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
+el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
+
+// función movida afuera de attachYER para que onclick global funcione
+
+// Imprimir diferencias
+el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
+  if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
+  YER.rows=[]; YER.evRows=[];
+  YER.ventasFile=null; YER.everilioFile=null;
+  YER.validaciones={};
+  showLoad(true); await saveYER(); showLoad(false);
+  yerSub='diferencias'; renderTab();
+});
+
+// Ver liquidación — restaura snapshot y muestra toda la pantalla de trabajo
+el.querySelectorAll('[data-liq-ver]').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    const i=parseInt(btn.getAttribute('data-liq-ver'));
+    const liq=YER.liqHistory?.[i]; if(!liq) return;
+    // Guardar estado actual
+    YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
+    // Restaurar snapshot si existe, sino dejar los datos actuales
+    if(liq.snapshot){
+      YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
+      YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
+      YER.ventasFile=liq.snapshot.ventasFile||null;
+      YER.everilioFile=liq.snapshot.everilioFile||null;
+      YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
+    }
+    YER._viewingLiq=i;
+    YER._editingLiq=null;
+    yerSub='diferencias';
+    // Render directo sin loadYER para preservar los flags
+    document.getElementById('tab-content').innerHTML=renderYER();
+    attachYER();
+  });
+});
+
+// Botón volver desde modo vista
+el.querySelector('#yer-volver-liq')?.addEventListener('click',()=>{
+  if(YER._backup){
+    YER.rows=YER._backup.rows;
+    YER.evRows=YER._backup.evRows;
+    YER.ventasFile=YER._backup.ventasFile;
+    YER.everilioFile=YER._backup.everilioFile;
+    YER.validaciones=YER._backup.validaciones;
+  }
+  YER._backup=null; YER._viewingLiq=null; YER._editingLiq=null;
+  document.getElementById('tab-content').innerHTML=renderYER();
+  attachYER();
+});
+
+// Editar liquidación — restaura snapshot y muestra pantalla completa para re-liquidar
+el.querySelectorAll('[data-liq-edit]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const i=parseInt(btn.getAttribute('data-liq-edit'));
+    const liqOld=YER.liqHistory?.[i]; if(!liqOld) return;
+    YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
+    if(liqOld.snapshot){
+      YER.rows=JSON.parse(JSON.stringify(liqOld.snapshot.rows||[]));
+      YER.evRows=JSON.parse(JSON.stringify(liqOld.snapshot.evRows||[]));
+      YER.ventasFile=liqOld.snapshot.ventasFile||null;
+      YER.everilioFile=liqOld.snapshot.everilioFile||null;
+      YER.validaciones=JSON.parse(JSON.stringify(liqOld.snapshot.validaciones||{}));
+    }
+    YER._viewingLiq=i;
+    YER._editingLiq=true;
+    yerSub='diferencias';
+    document.getElementById('tab-content').innerHTML=renderYER();
+    attachYER();
+  });
+});
+
+// Eliminar liquidación
+el.querySelectorAll('[data-liq-del]').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    const i=parseInt(btn.getAttribute('data-liq-del'));
+    const liq=YER.liqHistory?.[i];
+    if(!liq||!confirm('¿Eliminar la liquidación de '+liq.mesLabel+'?')) return;
+    YER.liqHistory.splice(i,1);
+    showLoad(true); await saveYER(); showLoad(false); toast('Eliminada'); renderTab();
+  });
+});
+}
+
 function yerLiquidar(){
     const mesLabel=yerMesLabel();
     const summary={};
@@ -4034,192 +4221,6 @@ function attachYER(){
   });
   // Helper: armar contenido del modal de liquidación
 
-  function openLiqModal(liqData, canSave){
-    document.getElementById('yer-liq-content').innerHTML=buildLiqContent(liqData);
-    const modal=document.getElementById('yer-modal-liq');
-    const btnSave=document.getElementById('yer-liq-save');
-    btnSave.style.display=canSave?'':'none';
-    modal.style.display='flex';
-
-    document.getElementById('yer-liq-close').onclick=()=>{ modal.style.display='none'; };
-    document.getElementById('yer-liq-print').onclick=()=>{
-      const w=window.open('','_blank');
-      w.document.write(`<html><head><title>Liquidacion YER ${liqData.mesLabel}</title><style>body{font-family:Arial,sans-serif;margin:0;}table{width:100%;border-collapse:collapse;}td,th{padding:8px 12px;border-bottom:1px solid #eee;}</style></head><body>${document.getElementById('yer-liq-printable').innerHTML}</body></html>`);
-      w.document.close(); w.focus(); setTimeout(()=>{w.print();w.close();},400);
-    };
-    if(canSave){
-      btnSave.onclick=async()=>{
-        if(!YER.liqHistory) YER.liqHistory=[];
-        YER.liqHistory=YER.liqHistory.filter(l=>l.mesLabel!==liqData.mesLabel);
-        // Guardar snapshot completo del período para Ver/Editar
-        liqData.snapshot={
-          rows: JSON.parse(JSON.stringify(YER.rows||[])),
-          evRows: JSON.parse(JSON.stringify(YER.evRows||[])),
-          ventasFile: YER.ventasFile||null,
-          everilioFile: YER.everilioFile||null,
-          validaciones: JSON.parse(JSON.stringify(YER.validaciones||{}))
-        };
-        YER.liqHistory.push(liqData);
-        // Ordenar por período
-        YER.liqHistory.sort((a,b)=>(a.period||'').localeCompare(b.period||''));
-        // Resetear para el próximo mes y limpiar período anterior seleccionado
-        YER.rows=[]; YER.evRows=[];
-        YER.ventasFile=null; YER.everilioFile=null;
-        YER.validaciones={};
-        delete YER._periodoAnterior;
-        modal.style.display='none';
-        showLoad(true); await saveYER(); showLoad(false);
-        toast('Liquidación guardada ✓');
-        yerSub='historial';
-        renderTab();
-      };
-    }
-
-  // LIQUIDAR — calcula y abre modal con botón Guardar
-  el.querySelector('#yer-liquidar')?.addEventListener('click', yerLiquidar);
-
-  // Nuevo período — resetea archivos y datos del período actual
-  // ── Historial: Ver y Eliminar ─────────────────────────────────
-  el.querySelectorAll('.yer-hist-ver').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const idx=parseInt(btn.getAttribute('data-liq-idx'));
-      const liq=(YER.liqHistory||[])[idx];
-      if(!liq) return;
-      // Crear modal dinámico (no depende del estado yaLiquidado)
-      const existingModal=document.getElementById('yer-dyn-modal');
-      if(existingModal) existingModal.remove();
-      const modal=document.createElement('div');
-      modal.id='yer-dyn-modal';
-      modal.style.cssText='position:fixed;inset:0;background:rgba(20,10,36,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
-      modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:100%;max-width:660px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-        <div id="yer-dyn-content" style="overflow-y:auto;flex:1;">${buildLiqContent(liq)}</div>
-        <div style="padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #E8E4F0;flex-shrink:0;">
-          <button id="yer-dyn-print" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir</button>
-          <button id="yer-dyn-close" style="background:#fff;color:var(--m2);border:1px solid var(--b);border-radius:7px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">Cerrar</button>
-        </div>
-      </div>`;
-      document.body.appendChild(modal);
-      modal.querySelector('#yer-dyn-close').onclick=()=>modal.remove();
-      modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
-      modal.querySelector('#yer-dyn-print').onclick=()=>{
-        const w=window.open('','_blank');
-        w.document.write(`<html><head><title>YER ${liq.mesLabel||liq.period||''}</title>
-          <style>body{font-family:Arial,sans-serif;margin:0;}table{width:100%;border-collapse:collapse;}
-          td,th{padding:8px 12px;border-bottom:1px solid #eee;}</style></head>
-          <body>${modal.querySelector('#yer-liq-printable')?.innerHTML||''}</body></html>`);
-        w.document.close();w.print();w.close();
-      };
-    });
-  });
-
-  el.querySelectorAll('.yer-hist-del').forEach(btn=>{
-    btn.addEventListener('click',async()=>{
-      const idx=parseInt(btn.getAttribute('data-liq-idx'));
-      const liq=(YER.liqHistory||[])[idx];
-      if(!liq)return;
-      if(!confirm(`¿Eliminar liquidación de ${liq.mesLabel||liq.period}?`))return;
-      YER.liqHistory.splice(idx,1);
-      showLoad(true);await saveYER();showLoad(false);
-      toast('Liquidación eliminada ✓');
-      renderTab();
-    });
-  });
-  el.querySelector('#yer-cancelar-anterior')?.addEventListener('click',async()=>{
-    delete YER._periodoAnterior;
-    YER.rows=[]; YER.evRows=[];
-    YER.ventasFile=null; YER.everilioFile=null;
-    YER.validaciones={};
-    showLoad(true); await saveYER(); showLoad(false);
-    renderTab();
-  });
-
-  // Historial y cargar período anterior — presentes en cualquier estado
-  el.querySelector('#yer-hist-btn-top')?.addEventListener('click',()=>{yerSub='historial';renderTab();});
-  el.querySelector('#yer-cargar-anterior-libre')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
-  el.querySelector('#yer-cargar-anterior')?.addEventListener('click',()=>abrirModalPeriodoAnteriorYER());
-
-// función movida afuera de attachYER para que onclick global funcione
-
-  // Imprimir diferencias
-  el.querySelector('#yer-nuevo-periodo')?.addEventListener('click',async()=>{
-    if(!confirm('¿Limpiar los archivos del período actual para cargar el nuevo mes?')) return;
-    YER.rows=[]; YER.evRows=[];
-    YER.ventasFile=null; YER.everilioFile=null;
-    YER.validaciones={};
-    showLoad(true); await saveYER(); showLoad(false);
-    yerSub='diferencias'; renderTab();
-  });
-
-  // Ver liquidación — restaura snapshot y muestra toda la pantalla de trabajo
-  el.querySelectorAll('[data-liq-ver]').forEach(btn=>{
-    btn.addEventListener('click',async()=>{
-      const i=parseInt(btn.getAttribute('data-liq-ver'));
-      const liq=YER.liqHistory?.[i]; if(!liq) return;
-      // Guardar estado actual
-      YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
-      // Restaurar snapshot si existe, sino dejar los datos actuales
-      if(liq.snapshot){
-        YER.rows=JSON.parse(JSON.stringify(liq.snapshot.rows||[]));
-        YER.evRows=JSON.parse(JSON.stringify(liq.snapshot.evRows||[]));
-        YER.ventasFile=liq.snapshot.ventasFile||null;
-        YER.everilioFile=liq.snapshot.everilioFile||null;
-        YER.validaciones=JSON.parse(JSON.stringify(liq.snapshot.validaciones||{}));
-      }
-      YER._viewingLiq=i;
-      YER._editingLiq=null;
-      yerSub='diferencias';
-      // Render directo sin loadYER para preservar los flags
-      document.getElementById('tab-content').innerHTML=renderYER();
-      attachYER();
-    });
-  });
-
-  // Botón volver desde modo vista
-  el.querySelector('#yer-volver-liq')?.addEventListener('click',()=>{
-    if(YER._backup){
-      YER.rows=YER._backup.rows;
-      YER.evRows=YER._backup.evRows;
-      YER.ventasFile=YER._backup.ventasFile;
-      YER.everilioFile=YER._backup.everilioFile;
-      YER.validaciones=YER._backup.validaciones;
-    }
-    YER._backup=null; YER._viewingLiq=null; YER._editingLiq=null;
-    document.getElementById('tab-content').innerHTML=renderYER();
-    attachYER();
-  });
-
-  // Editar liquidación — restaura snapshot y muestra pantalla completa para re-liquidar
-  el.querySelectorAll('[data-liq-edit]').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const i=parseInt(btn.getAttribute('data-liq-edit'));
-      const liqOld=YER.liqHistory?.[i]; if(!liqOld) return;
-      YER._backup={rows:YER.rows,evRows:YER.evRows,ventasFile:YER.ventasFile,everilioFile:YER.everilioFile,validaciones:YER.validaciones};
-      if(liqOld.snapshot){
-        YER.rows=JSON.parse(JSON.stringify(liqOld.snapshot.rows||[]));
-        YER.evRows=JSON.parse(JSON.stringify(liqOld.snapshot.evRows||[]));
-        YER.ventasFile=liqOld.snapshot.ventasFile||null;
-        YER.everilioFile=liqOld.snapshot.everilioFile||null;
-        YER.validaciones=JSON.parse(JSON.stringify(liqOld.snapshot.validaciones||{}));
-      }
-      YER._viewingLiq=i;
-      YER._editingLiq=true;
-      yerSub='diferencias';
-      document.getElementById('tab-content').innerHTML=renderYER();
-      attachYER();
-    });
-  });
-
-  // Eliminar liquidación
-  el.querySelectorAll('[data-liq-del]').forEach(btn=>{
-    btn.addEventListener('click',async()=>{
-      const i=parseInt(btn.getAttribute('data-liq-del'));
-      const liq=YER.liqHistory?.[i];
-      if(!liq||!confirm('¿Eliminar la liquidación de '+liq.mesLabel+'?')) return;
-      YER.liqHistory.splice(i,1);
-      showLoad(true); await saveYER(); showLoad(false); toast('Eliminada'); renderTab();
-    });
-  });
-}
 
 
 // ══════════════════════════════════════════════════════════════
