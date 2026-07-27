@@ -3249,7 +3249,7 @@ function renderYER(){
   const canLiquidar=(YER.rows||[]).filter(r=>r.motivo!=='YER_NoComb').length>0;
   const hayDif=(YER.rows||[]).some(r=>r.motivo==='SoloVentas'||r.motivo==='DifMonto')||(YER.evRows||[]).some(r=>!r.matched);
 
-  const btnLiq=canLiquidar?`<button id="yer-liquidar" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">💰 LIQUIDAR ${yerMesLabel().toUpperCase()}</button>`:'';
+  const btnLiq=canLiquidar?`<button onclick="yerLiquidar()" style="background:#1B6B35;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,107,53,.35);">💰 LIQUIDAR ${yerMesLabel().toUpperCase()}</button>`:'';
   const btnPrint=hayDif?`<button id="btn-yer-imprimir" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir diferencias</button>`:'';
   const btnBar=(btnLiq||btnPrint)?`<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">${btnPrint}${btnLiq}</div>`:'';
 
@@ -3838,6 +3838,62 @@ function buildLiqContent(liq){
   </div>`;
 }
 
+function yerLiquidar(){
+    const mesLabel=yerMesLabel();
+    const summary={};
+    YER_COMBUST.forEach(c=>{summary[c.key]={key:c.key,label:c.label,litros:0,importe:0,precio:0};});
+    const val2=YER.validaciones||{};
+    // Excluir filas marcadas como ERROR en la validación
+    const rowsParaLiq=YER.rows.filter(r=>{
+      if(r.motivo==='YER_NoComb') return false;
+      const vKey='sv:'+normRemito(r.remito);
+      const v=val2[vKey]||{};
+      return v.estado!=='error'; // ERROR = excluir del cálculo
+    });
+    rowsParaLiq.forEach(r=>{
+      if(r.combustKey&&summary[r.combustKey]){
+        summary[r.combustKey].litros+=r.litros;
+        summary[r.combustKey].importe+=r.totalCom;
+      }
+    });
+    const detalle=YER_COMBUST.map(c=>{const s=summary[c.key];return {...s,precio:s.litros>0?s.importe/s.litros:0};});
+    const totalLt=rowsParaLiq.reduce((a,r)=>a+r.litros,0);
+    const totalCom=rowsParaLiq.reduce((a,r)=>a+r.totalCom,0);
+    // Calcular resumen de diferencias para guardar en el historial
+    function calcDiferencias(vRows, eRows){
+      if(!vRows||!eRows||!vRows.length||!eRows.length) return [];
+      try{
+        const {soloVentas,soloEv,diffMonto,vTotalPesos,vTotalLitros,eTotalPesos,vCount,eCount}=calcConciliacion();
+        return [{
+          registrosVentas:vCount,
+          registrosEverilio:eCount,
+          soloVentas:soloVentas.length,
+          montoSoloVentas:soloVentas.reduce((a,r)=>a+(r.total||0),0),
+          soloEverilio:soloEv.length,
+          montoSoloEverilio:soloEv.reduce((a,r)=>a+(r.pvp||0),0),
+          diffMonto:diffMonto.length,
+          totalPesosVentas:vTotalPesos,
+          totalLitrosVentas:vTotalLitros,
+          totalPesosEverilio:eTotalPesos,
+          sinDiferencias:Math.max(0,vCount-soloVentas.length-diffMonto.length)
+        }];
+      }catch(e){return [];}
+    }
+
+    const liq={
+      mesLabel,
+      period: YER._periodoAnterior || prevMonth(CP),
+      detalle, totalLt, totalCom,
+      fecha:new Date().toLocaleDateString('es-AR'),
+      // Guardar referencia a los archivos cargados
+      ventasFile: YER.ventasFile ? {fileName:YER.ventasFile.fileName,size:YER.ventasFile.size} : null,
+      everilioFile: YER.everilioFile ? {fileName:YER.everilioFile.fileName,size:YER.everilioFile.size} : null,
+      // Guardar resumen de diferencias
+      diferencias: calcDiferencias(YER.rows, YER.evRows)
+    };
+    openLiqModal(liq, true); // canSave=true
+}
+
 function attachYER(){
   const el=document.getElementById('tab-content');
   // Imprimir diferencias via iframe oculto (evita popup blockers y CSP)
@@ -4020,53 +4076,7 @@ function attachYER(){
     }
 
   // LIQUIDAR — calcula y abre modal con botón Guardar
-  el.querySelector('#yer-liquidar')?.addEventListener('click',()=>{
-    const mesLabel=yerMesLabel();
-    const summary={};
-    YER_COMBUST.forEach(c=>{summary[c.key]={key:c.key,label:c.label,litros:0,importe:0,precio:0};});
-    YER.rows.filter(r=>r.motivo!=='YER_NoComb').forEach(r=>{
-      if(r.combustKey&&summary[r.combustKey]){
-        summary[r.combustKey].litros+=r.litros;
-        summary[r.combustKey].importe+=r.totalCom;
-      }
-    });
-    const detalle=YER_COMBUST.map(c=>{const s=summary[c.key];return {...s,precio:s.litros>0?s.importe/s.litros:0};});
-    const totalLt=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.litros,0);
-    const totalCom=YER.rows.filter(r=>r.motivo!=='YER_NoComb').reduce((a,r)=>a+r.totalCom,0);
-    // Calcular resumen de diferencias para guardar en el historial
-    function calcDiferencias(vRows, eRows){
-      if(!vRows||!eRows||!vRows.length||!eRows.length) return [];
-      try{
-        const {soloVentas,soloEv,diffMonto,vTotalPesos,vTotalLitros,eTotalPesos,vCount,eCount}=calcConciliacion();
-        return [{
-          registrosVentas:vCount,
-          registrosEverilio:eCount,
-          soloVentas:soloVentas.length,
-          montoSoloVentas:soloVentas.reduce((a,r)=>a+(r.total||0),0),
-          soloEverilio:soloEv.length,
-          montoSoloEverilio:soloEv.reduce((a,r)=>a+(r.pvp||0),0),
-          diffMonto:diffMonto.length,
-          totalPesosVentas:vTotalPesos,
-          totalLitrosVentas:vTotalLitros,
-          totalPesosEverilio:eTotalPesos,
-          sinDiferencias:Math.max(0,vCount-soloVentas.length-diffMonto.length)
-        }];
-      }catch(e){return [];}
-    }
-
-    const liq={
-      mesLabel,
-      period: YER._periodoAnterior || prevMonth(CP),
-      detalle, totalLt, totalCom,
-      fecha:new Date().toLocaleDateString('es-AR'),
-      // Guardar referencia a los archivos cargados
-      ventasFile: YER.ventasFile ? {fileName:YER.ventasFile.fileName,size:YER.ventasFile.size} : null,
-      everilioFile: YER.everilioFile ? {fileName:YER.everilioFile.fileName,size:YER.everilioFile.size} : null,
-      // Guardar resumen de diferencias
-      diferencias: calcDiferencias(YER.rows, YER.evRows)
-    };
-    openLiqModal(liq, true); // canSave=true
-  });
+  el.querySelector('#yer-liquidar')?.addEventListener('click', yerLiquidar);
 
   // Nuevo período — resetea archivos y datos del período actual
   // ── Historial: Ver y Eliminar ─────────────────────────────────
