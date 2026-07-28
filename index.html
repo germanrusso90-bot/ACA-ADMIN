@@ -3600,38 +3600,60 @@ function buildLiqContent(liq){
     const sv=concil.soloVentas||0;
     const se=concil.soloEverilio||0;
     const dm=concil.diffMonto||0;
+
+    // Función para mostrar modal de detalle al clickear un KPI
+    const kpiClick=(tipo,titulo)=>`onclick="liqDetalleMostrar('${tipo}','${esc(liq.mesLabel||'')}',${JSON.stringify(liq.snapshot||null).replace(/'/g,'&#39;')})"`;
+
+    const kpiStyle=(bg,border,color,clickable)=>
+      `background:${bg};border:1px solid ${border};border-radius:8px;padding:12px;text-align:center;${clickable?'cursor:pointer;transition:transform .1s,box-shadow .1s;':''}`;
+
     difSection=`<div style="margin-top:20px;">
       <div style="font-size:12px;font-weight:800;color:var(--pd);margin-bottom:10px;text-transform:uppercase;">📊 Conciliación Ventas vs Everilio</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:${sv||se||dm?'8':'0'}px;">
-        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Ventas</div>
+        <div style="${kpiStyle('var(--gb)','var(--gbr)','var(--g)',true)}" ${kpiClick('ventas','')}
+          onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'"
+          onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">REG. VENTAS</div>
           <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosVentas||0}</div>
           <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosVentas||0)}</div>
+          <div style="font-size:9px;color:var(--g);margin-top:4px;">▼ ver detalle</div>
         </div>
-        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Reg. Everilio</div>
+        <div style="${kpiStyle('var(--gb)','var(--gbr)','var(--g)',true)}" ${kpiClick('everilio','')}
+          onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'"
+          onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div style="font-size:10px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">REG. EVERILIO</div>
           <div style="font-size:18px;font-weight:800;color:var(--g);">${concil.registrosEverilio||0}</div>
           <div style="font-size:10px;color:var(--m2);">$ ${fmtArg(concil.totalPesosEverilio||0)}</div>
+          <div style="font-size:9px;color:var(--g);margin-top:4px;">▼ ver detalle</div>
         </div>
-        <div style="background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">Sin diferencias</div>
+        <div style="${kpiStyle('var(--gb)','var(--gbr)','var(--g)',false)}">
+          <div style="font-size:10px;font-weight:700;color:var(--g);text-transform:uppercase;margin-bottom:4px;">SIN DIFERENCIAS</div>
           <div style="font-size:18px;font-weight:800;color:var(--g);">${ok}</div>
         </div>
       </div>
       ${sv>0||se>0||dm>0?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-        <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Solo Ventas</div>
+        <div style="${kpiStyle('var(--rb)','var(--rbr)','var(--r)',true)}" ${kpiClick('soloVentas','')}
+          onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'"
+          onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">SOLO VENTAS</div>
           <div style="font-size:18px;font-weight:800;color:var(--r);">${sv}</div>
           <div style="font-size:10px;color:var(--r);">$ ${fmtArg(concil.montoSoloVentas||0)}</div>
+          <div style="font-size:9px;color:var(--r);margin-top:4px;">▼ ver detalle</div>
         </div>
-        <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#7B5800;text-transform:uppercase;margin-bottom:4px;">Solo Everilio</div>
+        <div style="${kpiStyle('#FFF8E1','#FFD54F','#7B5800',true)}" ${kpiClick('soloEverilio','')}
+          onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'"
+          onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div style="font-size:10px;font-weight:700;color:#7B5800;text-transform:uppercase;margin-bottom:4px;">SOLO EVERILIO</div>
           <div style="font-size:18px;font-weight:800;color:#7B5800;">${se}</div>
           <div style="font-size:10px;color:#7B5800;">$ ${fmtArg(concil.montoSoloEverilio||0)}</div>
+          <div style="font-size:9px;color:#7B5800;margin-top:4px;">▼ ver detalle</div>
         </div>
-        <div style="background:var(--rb);border:1px solid var(--rbr);border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">Dif. monto</div>
+        <div style="${kpiStyle('var(--rb)','var(--rbr)','var(--r)',true)}" ${kpiClick('difMonto','')}
+          onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'"
+          onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div style="font-size:10px;font-weight:700;color:var(--r);text-transform:uppercase;margin-bottom:4px;">DIF. MONTO</div>
           <div style="font-size:18px;font-weight:800;color:var(--r);">${dm}</div>
+          <div style="font-size:9px;color:var(--r);margin-top:4px;">▼ ver detalle</div>
         </div>
       </div>`:''}
     </div>`;
@@ -4023,6 +4045,107 @@ el.querySelectorAll('[data-liq-del]').forEach(btn=>{
     showLoad(true); await saveYER(); showLoad(false); toast('Eliminada'); renderTab();
   });
 });
+}
+
+function liqDetalleMostrar(tipo, mesLabel, snapshot){
+  if(!snapshot){
+    alert('Esta liquidación no tiene snapshot disponible. Solo se guardó el resumen.');
+    return;
+  }
+  const rows=snapshot.rows||[];
+  const evRows=snapshot.evRows||[];
+  const val=snapshot.validaciones||{};
+  const fmt=v=>v!=null?'$'+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'';
+  const fd=s=>{
+    if(!s)return '';
+    const m=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m)return `${m[1]}/${m[2]}/${m[3]}`;
+    try{return new Date(s).toLocaleDateString('es-AR');}catch{return String(s);}
+  };
+  const normR=r=>String(r).replace(/^0+/,'').replace(/[-\s]/g,'').toUpperCase();
+  const evMap=new Map();
+  evRows.forEach(r=>{evMap.set(normR(r.remito||r.id||''),r);});
+  const matched=new Set(rows.filter(r=>r.motivo!=='YER_NoComb').map(r=>normR(r.remito)));
+
+  let titulo='',headers=[],data=[];
+  if(tipo==='ventas'){
+    data=rows.filter(r=>r.motivo!=='YER_NoComb');
+    titulo=`Todos los registros de Ventas (${data.length})`;
+    headers=['Remito','Fecha','Producto','Litros','Total $','Estado'];
+  } else if(tipo==='soloVentas'){
+    data=rows.filter(r=>r.motivo==='SoloVentas');
+    titulo=`Solo en Ventas — sin respaldo en Everilio (${data.length})`;
+    headers=['Remito','Fecha','Producto','Litros','Total $','Validación','Comentario'];
+  } else if(tipo==='everilio'){
+    data=evRows;
+    titulo=`Todos los registros de Everilio (${data.length})`;
+    headers=['Remito','Fecha','Total PVP $'];
+  } else if(tipo==='soloEverilio'){
+    data=evRows.filter(r=>!matched.has(normR(r.remito||r.id||'')));
+    titulo=`Solo en Everilio — sin respaldo en Ventas (${data.length})`;
+    headers=['Remito','Fecha','Total PVP $','Validación'];
+  } else if(tipo==='difMonto'){
+    data=rows.filter(r=>r.motivo==='DifMonto');
+    titulo=`Diferencias de monto (${data.length})`;
+    headers=['Remito','Fecha','Producto','Lt','Total Ventas','Total Everilio','Diferencia'];
+  }
+
+  const filas=data.map((r,i)=>{
+    const bg=i%2===0?'#fff':'#f9f9f9';
+    const rn=normR(r.remito||r.id||'');
+    const vSV=val['sv:'+rn]||{};
+    const vSE=val['se:'+rn]||{};
+    let cells=[];
+    if(tipo==='ventas')
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),vSV.estado||'—'];
+    else if(tipo==='soloVentas')
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),vSV.estado||'—',vSV.comentario||''];
+    else if(tipo==='everilio')
+      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0)];
+    else if(tipo==='soloEverilio')
+      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0),vSE.estado||'—'];
+    else if(tipo==='difMonto'){
+      const evR=evMap.get(rn)||{};
+      const dif=(r.total||r.pvp||0)-(evR.pvp||0);
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),fmt(evR.pvp||0),fmt(dif)];
+    }
+    return`<tr style="background:${bg}">${cells.map(c=>`<td style="padding:5px 8px;border-bottom:1px solid #eee;">${esc(String(c??''))}</td>`).join('')}</tr>`;
+  }).join('');
+
+  const th=headers.map(h=>`<th style="padding:7px 8px;background:#F5C842;color:#3D1F6E;text-align:left;font-size:11px;font-weight:800;">${h}</th>`).join('');
+  const tableHtml=`<table style="border-collapse:collapse;width:100%;font-size:11px;"><thead><tr>${th}</tr></thead><tbody>${filas}</tbody></table>`;
+
+  const existing=document.getElementById('liq-det-modal');
+  if(existing)existing.remove();
+  const modal=document.createElement('div');
+  modal.id='liq-det-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML=`<div style="background:#fff;border-radius:12px;width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="padding:14px 20px;background:#3D1F6E;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div>
+        <div style="font-weight:800;font-size:14px;">${esc(titulo)}</div>
+        <div style="font-size:11px;opacity:.7;margin-top:2px;">YER — ${esc(mesLabel)}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="liq-det-print-btn" style="background:#F5C842;color:#3D1F6E;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;">🖨 Imprimir</button>
+        <button onclick="document.getElementById('liq-det-modal').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;">✕ Cerrar</button>
+      </div>
+    </div>
+    <div style="overflow:auto;flex:1;padding:16px;">${tableHtml}</div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  // Handler de imprimir via iframe
+  modal.querySelector('#liq-det-print-btn').addEventListener('click',()=>{
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:10px;padding:16px}h1{font-size:13px;font-weight:900;color:#3D1F6E;margin-bottom:4px}.sub{font-size:10px;color:#666;margin-bottom:14px}table{border-collapse:collapse;width:100%}th{padding:5px 8px;background:#F5C842;color:#3D1F6E;text-align:left;font-size:9px;font-weight:800}td{padding:4px 8px;border-bottom:1px solid #eee;font-size:9px}@media print{@page{size:landscape;margin:8mm}body{padding:0}}</style></head><body>
+      <h1>${esc(titulo)}</h1><div class="sub">YER — ${esc(mesLabel)} · ${new Date().toLocaleString('es-AR')}</div>
+      ${tableHtml}</body></html>`;
+    const f=document.createElement('iframe');
+    f.style.cssText='position:fixed;width:0;height:0;border:0;top:-1000px;';
+    document.body.appendChild(f);
+    f.contentDocument.open();f.contentDocument.write(html);f.contentDocument.close();
+    setTimeout(()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000);},300);
+  });
 }
 
 function yerLiquidar(){
