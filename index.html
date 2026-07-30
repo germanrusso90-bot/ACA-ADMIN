@@ -1321,6 +1321,33 @@ async function renderUSExcel(usKey){
   });
 
   // ── Guardar (bloquea la fila) — excluye canon que tiene handler propio ──
+  // Auto-guardar al escribir (evita perder datos al cambiar de pantalla)
+  let usAutoTimer=null;
+  el.querySelectorAll('tr[data-row-period][data-locked="false"]').forEach(trEl=>{
+    const period=trEl.getAttribute('data-row-period');
+    trEl.querySelectorAll('input[data-field]').forEach(inp=>{
+      inp.addEventListener('input',()=>{
+        clearTimeout(usAutoTimer);
+        usAutoTimer=setTimeout(async()=>{
+          const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():null;};
+          let idx=PD.us[usKey].findIndex(r=>r.period===period);
+          if(idx===-1){PD.us[usKey].push({period});idx=PD.us[usKey].length-1;}
+          const rObj=PD.us[usKey][idx];
+          const imp=g('importe'),iva=g('iva'),per=g('percepciones'),int2=g('intereses');
+          const nro=g('nroFacturaACA'),fecha=g('fecha');
+          if(imp!==null)rObj.importe=pN(imp)||null;
+          if(iva!==null)rObj.iva=pN(iva)||null;
+          if(per!==null)rObj.percepciones=pN(per)||null;
+          if(int2!==null)rObj.intereses=pN(int2)||null;
+          if(nro!==null)rObj.nroFacturaACA=nro;
+          if(fecha!==null)rObj.fecha=fecha;
+          await saveP();
+        },800);
+      });
+    });
+  });
+
+  // Guardar al presionar el botón Guardar
   el.querySelectorAll('[data-save-us]:not([data-save-us="canon"])').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const key=btn.getAttribute('data-save-us');
@@ -1367,6 +1394,22 @@ async function renderUSExcel(usKey){
       if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
       const key=inp.getAttribute('data-upload-us');
       const period=inp.getAttribute('data-upload-period');
+      // Guardar campos manuales antes de renderizar para no perderlos
+      const trEl=el.querySelector(`tr[data-row-period="${period}"]`);
+      if(trEl){
+        const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():'';};
+        let rowIdx=PD.us[key].findIndex(r=>r.period===period);
+        if(rowIdx===-1){PD.us[key].push({period});rowIdx=PD.us[key].length-1;}
+        const rObj=PD.us[key][rowIdx];
+        const imp=g('importe'),iva=g('iva'),per=g('percepciones'),int2=g('intereses');
+        const nro=g('nroFacturaACA'),fecha=g('fecha');
+        if(imp)rObj.importe=pN(imp);
+        if(iva)rObj.iva=pN(iva);
+        if(per)rObj.percepciones=pN(per);
+        if(int2)rObj.intereses=pN(int2);
+        if(nro)rObj.nroFacturaACA=nro;
+        if(fecha)rObj.fecha=fecha;
+      }
       showLoad(true);
       try{
         const dataUrl=await readDU(file);
@@ -1375,7 +1418,7 @@ async function renderUSExcel(usKey){
         let rowIdx=PD.us[key].findIndex(r=>r.period===period);
         if(rowIdx===-1){PD.us[key].push({period});rowIdx=PD.us[key].length-1;}
         PD.us[key][rowIdx].facturaServicio={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
-        await saveP();toast('Factura subida ✓');
+        await saveP();toast('Factura subida ✓ — '+file.name);
       }catch(err){alert('Error: '+err.message);}
       showLoad(false);renderTab();
     });
@@ -4195,11 +4238,17 @@ function yerLiquidar(){
       period: YER._periodoAnterior || prevMonth(CP),
       detalle, totalLt, totalCom,
       fecha:new Date().toLocaleDateString('es-AR'),
-      // Guardar referencia a los archivos cargados
       ventasFile: YER.ventasFile ? {fileName:YER.ventasFile.fileName,size:YER.ventasFile.size} : null,
       everilioFile: YER.everilioFile ? {fileName:YER.everilioFile.fileName,size:YER.everilioFile.size} : null,
-      // Guardar resumen de diferencias
-      diferencias: calcDiferencias(YER.rows, YER.evRows)
+      diferencias: calcDiferencias(YER.rows, YER.evRows),
+      // Guardar snapshot completo SIEMPRE para poder ver el detalle después
+      snapshot:{
+        rows: JSON.parse(JSON.stringify(YER.rows||[])),
+        evRows: JSON.parse(JSON.stringify(YER.evRows||[])),
+        ventasFile: YER.ventasFile||null,
+        everilioFile: YER.everilioFile||null,
+        validaciones: JSON.parse(JSON.stringify(YER.validaciones||{}))
+      }
     };
     openLiqModal(liq, true); // canSave=true
 }
