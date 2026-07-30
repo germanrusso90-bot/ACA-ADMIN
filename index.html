@@ -2467,16 +2467,21 @@ function renderTab(){
     }
     case 'checks': {
       (async()=>{
-        el.innerHTML=renderChecksGrid();
-        attachChecks();
-        if(checksView){
-          el.innerHTML=await renderChecksMes(checksView);
+        try{
+          el.innerHTML=renderChecksGrid();
           attachChecks();
-        }
+          if(checksView){
+            el.innerHTML=await renderChecksMes(checksView);
+            attachChecks();
+          }
+        }catch(e){el.innerHTML=`<div style="padding:20px;color:red"><b>Error Checks:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,500)}</pre></div>`;}
       })();
       break;
     }
-    case 'cancel': el.innerHTML=renderCancel();attachCancel();break;
+    case 'cancel':
+      try{el.innerHTML=renderCancel();attachCancel();}
+      catch(e){el.innerHTML=`<div style="padding:20px;color:red"><b>Error Cancelaciones:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,500)}</pre></div>`;}
+      break;
     case 'varios': el.innerHTML=renderVarios();attachVarios();break;
     case 'resumen':el.innerHTML=renderResumen();loadHist();break;
   }
