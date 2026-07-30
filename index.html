@@ -1037,21 +1037,21 @@ async function renderUSExcel(usKey){
 
   const histData={};
   for(const p of sortedPeriods){
-    if(p===CP){
-      // Período actual: usar PD en memoria (puede tener ediciones no guardadas)
-      const localRow=rows.find(r=>r.period===p);
-      if(localRow){histData[p]=localRow;}
-    } else {
-      // Períodos anteriores: leer siempre desde storage para no perder datos del usuario
+    // Primero buscar en PD (memoria) — tiene los datos más recientes incluyendo ediciones no guardadas
+    const localRow=rows.find(r=>r.period===p);
+    if(localRow){histData[p]=localRow;continue;}
+    // Si no está en memoria, buscar en Firebase (períodos anteriores no cargados)
+    if(p!==CP){
       const raw=await sGet('data:'+p,true);
       if(raw){
         const d=mergeDef(JSON.parse(raw));
         const r=d.us[usKey].find(x=>x.period===p);
-        if(r){histData[p]=r;continue;}
+        if(r){
+          // Cargar en PD para que esté disponible en memoria también
+          PD.us[usKey].push(r);
+          histData[p]=r;
+        }
       }
-      // Fallback: buscar en PD actual (por si no hay en storage)
-      const localRow=rows.find(r=>r.period===p);
-      if(localRow)histData[p]=localRow;
     }
   }
 
@@ -1246,7 +1246,7 @@ async function renderUSExcel(usKey){
         <td class="td-recuperar-calc" id="rec-${p}">${recDisp}</td>
         <td><input class="ex-input" type="text" placeholder="654-xxx" data-field="nroFacturaACA" value="${esc(nro)}" ${ro}></td>
         <td><input class="ex-input inp-date" type="date" data-field="fecha" value="${esc(fecha)}" ${ro}></td>
-        <td class="td-center"><div style="display:flex;gap:4px;flex-wrap:nowrap;justify-content:center;">${isLocked?'':(fsBtn)}</div>${isLocked&&fs?`<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>`:''}</td>
+        <td class="td-center"><div style="display:flex;gap:4px;flex-wrap:nowrap;justify-content:center;">${isLocked?'':(fsBtn)}</div>${fs?`<button class="btn-factura btn-f-ver" data-ver-file="${fileKey}">👁 Ver</button>`:''}</td>
         <td class="td-center">${accion}</td>
       </tr>`;
     } else {
