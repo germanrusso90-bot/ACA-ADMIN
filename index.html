@@ -4418,8 +4418,6 @@ const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO'
 const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio',
   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
-
 function cancelPeriodLabel(period){
   const [y,m]=period.split('-');
   return MESES_LABELS[parseInt(m)-1]+' '+y;
@@ -4427,9 +4425,9 @@ function cancelPeriodLabel(period){
 
 } // fin attachYER
 
+let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
+
 function renderCancel(){
-  if(cancelView==='historial') return renderCancelHistorial();
-  if(cancelView) return renderCancelMes(cancelView);
   return renderCancelGrid();
 }
 
