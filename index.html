@@ -4426,6 +4426,8 @@ function cancelPeriodLabel(period){
 let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
 
 function renderCancel(){
+  if(cancelView==='historial') return renderCancelHistorial();
+  if(cancelView) return renderCancelMes(cancelView);
   return renderCancelGrid();
 }
 
