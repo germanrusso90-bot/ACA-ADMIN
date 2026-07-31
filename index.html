@@ -4425,6 +4425,8 @@ function cancelPeriodLabel(period){
   return MESES_LABELS[parseInt(m)-1]+' '+y;
 }
 
+} // fin attachYER
+
 function renderCancel(){
   if(cancelView==='historial') return renderCancelHistorial();
   if(cancelView) return renderCancelMes(cancelView);
@@ -6265,8 +6267,6 @@ async function renderDivisionalNC(cr){
   });
 }
 
-
-} // cierre attachYER
 
 render();
 </script>
