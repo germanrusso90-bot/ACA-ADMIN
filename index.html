@@ -4489,16 +4489,16 @@ function renderCancelMes(period){
 
   const trs=regs.map((r,i)=>{
     const locked=!!r.locked;
-    const esRetencion=r.tipo==='RETENCIONES';
-    const rowBg=esRetencion?(i%2===0?'#FFF0F0':'#FFE8E8'):locked?(i%2===0?'#F8FFF8':'#F0FFF4'):(i%2===0?'#FFFFF0':'#FFFDE0');
-    const importeDisplay=r.importe
-      ? (esRetencion
+    const esNegativo=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo);
+    const rowBg=esNegativo?(i%2===0?'#FFF0F0':'#FFE8E8'):locked?(i%2===0?'#F8FFF8':'#F0FFF4'):(i%2===0?'#FFFFF0':'#FFFDE0');
+    const importeDisplay=r.importe!=null
+      ? (esNegativo
           ? `<span style="color:var(--r);font-weight:800;">− $ ${fmtArg(r.importe)}</span>`
           : `<span style="color:var(--g);font-weight:700;">$ ${fmtArg(r.importe)}</span>`)
       : '—';
     return `<tr style="background:${rowBg}" data-cancel-id="${r.id}">
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esRetencion?'color:var(--r);':''}">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(r.tipo)}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
         <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
       </td>
@@ -4582,11 +4582,11 @@ function renderCancelMes(period){
         </div>
         <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
           <div style="font-size:13px;color:var(--m2);">
-            Total positivo: <strong style="color:var(--g);">$ ${fmtArg(regs.filter(r=>r.tipo!=='RETENCIONES').reduce((a,r)=>a+(r.importe||0),0))}</strong>
+            Total ingresos: <strong style="color:var(--g);">$ ${fmtArg(regs.filter(r=>!['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
             &nbsp;|&nbsp;
-            Retenciones: <strong style="color:var(--r);">− $ ${fmtArg(regs.filter(r=>r.tipo==='RETENCIONES').reduce((a,r)=>a+(r.importe||0),0))}</strong>
+            Descuentos: <strong style="color:var(--r);">− $ ${fmtArg(regs.filter(r=>['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
             &nbsp;|&nbsp;
-            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>a+(r.tipo==='RETENCIONES'?-(r.importe||0):(r.importe||0)),0))}</strong>
+            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>(['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)?-(r.importe||0):(r.importe||0)),0))}</strong>
           </div>
           <button id="cancel-imprimir-btn" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir resumen</button>
         </div>`
@@ -4601,17 +4601,17 @@ function renderCancelHistorial(){
     b.periodo?.localeCompare(a.periodo)||b.fechaReg?.localeCompare(a.fechaReg)||0);
   const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
   const trs=todos.map((r,i)=>{
-    const esRetencion=r.tipo==='RETENCIONES';
-    const rowBg=esRetencion?(i%2===0?'#FFF0F0':'#FFE8E8'):(i%2===0?'#FFFFF0':'#FFFDE0');
-    const importeDisplay=r.importe
-      ? (esRetencion
+    const esNegativo=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo);
+    const rowBg=esNegativo?(i%2===0?'#FFF0F0':'#FFE8E8'):(i%2===0?'#FFFFF0':'#FFFDE0');
+    const importeDisplay=r.importe!=null
+      ? (esNegativo
           ? `<span style="color:var(--r);font-weight:800;">− $ ${fmtArg(r.importe)}</span>`
           : `<span style="color:var(--g);font-weight:700;">$ ${fmtArg(r.importe)}</span>`)
       : '—';
     return `<tr class="cancel-hist-row" style="background:${rowBg}">
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;white-space:nowrap;">${r.periodo?cancelPeriodLabel(r.periodo):'—'}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esRetencion?'color:var(--r);':''}">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(r.tipo)}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
         <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
       </td>
@@ -4663,11 +4663,12 @@ function attachCancel(){
       .sort((a,b)=>(a.fechaReg||'').localeCompare(b.fechaReg||''));
     const titulo=`Cancelaciones — ${cancelPeriodLabel(period)}`;
     const fmt=v=>v!=null?'$ '+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'—';
-    const totalPos=regs.filter(r=>r.tipo!=='RETENCIONES').reduce((a,r)=>a+(r.importe||0),0);
-    const totalRet=regs.filter(r=>r.tipo==='RETENCIONES').reduce((a,r)=>a+(r.importe||0),0);
+    const TIPOS_NEG=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'];
+    const totalPos=regs.filter(r=>!TIPOS_NEG.includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
+    const totalRet=regs.filter(r=>TIPOS_NEG.includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
     const neto=totalPos-totalRet;
     const rows=regs.map((r,i)=>{
-      const esRet=r.tipo==='RETENCIONES';
+      const esRet=TIPOS_NEG.includes(r.tipo);
       const bg=i%2===0?'#fff':'#f9f9f9';
       const color=esRet?'color:#dc2626;font-weight:700':'color:#1B6B35;font-weight:700';
       const imp=esRet?`<span style="${color}">− ${fmt(r.importe)}</span>`:`<span style="${color}">${fmt(r.importe)}</span>`;
