@@ -4258,6 +4258,13 @@ function yerLiquidar(){
     openLiqModal(liq, true); // canSave=true
 }
 
+const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO','OTROS'];
+
+function cancelPeriodLabel(period){
+  const [y,m]=period.split('-');
+  return MESES_LABELS[parseInt(m)-1]+' '+y;
+}
+
 function attachYER(){
   const el=document.getElementById('tab-content');
   // Imprimir diferencias via iframe oculto (evita popup blockers y CSP)
@@ -4413,14 +4420,6 @@ const CANCEL_TIPOS=[
   'CUOCAM','REINTEGRO PROMO 20% BOXES','YER NO LUBRICANTE','LUBRICANTES POR COMBO',
   'OBJETIVO PLUS','YER','INCÓGNITO 100%','CANON SERVICIOS','SERVICIOS','VARIOS'
 ];
-const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO','OTROS'];
-
-
-function cancelPeriodLabel(period){
-  const [y,m]=period.split('-');
-  return MESES_LABELS[parseInt(m)-1]+' '+y;
-}
-
 } // fin attachYER
 
 let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
