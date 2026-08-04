@@ -1616,6 +1616,13 @@ function renderFull(){
     return existing||{period:p,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null};
   });
   const f=PD.full;
+  // Si el período actual YA está guardado en el historial como locked,
+  // usar PD.full normalmente. Si NO, mostrar vacío para evitar datos de otro mes.
+  const fullEstaEnHistorial=!!history.find(r=>r.period===currentPeriod&&r.locked);
+  const fActual=fullEstaEnHistorial?f:{
+    ventas:null,nroFacturaACA:'',facturaACA:null,fechaCancelacion:'',
+    comprobanteTransferencia:null,interesMensual:'',diasAtrasados:'',locked:false
+  };
   if(!f.interesMensual)f.interesMensual='';
   if(!f.diasAtrasados)f.diasAtrasados='';
 
@@ -1655,10 +1662,9 @@ function renderFull(){
     }
 
     // Fila ACTUAL — editable con todo el formulario inline
-    const int=f.ventas?calcIntereses(f, PD.full._editingPeriod||prevMonth(CP)):null;
-    const subtotal=f.ventas?f.ventas.recupero12:rec;
-    // Usar el interés calculado, o el guardado previamente si existe
-    const montoInt=int?int.montoInt:(f.importe_interes||0);
+    const int=fActual.ventas?calcIntereses(fActual, PD.full._editingPeriod||prevMonth(CP)):null;
+    const subtotal=fActual.ventas?fActual.ventas.recupero12:rec;
+    const montoInt=int?int.montoInt:(fActual.importe_interes||0);
     const total=(subtotal||0)+montoInt;
     const [y,m]=(PD.full._editingPeriod||prevMonth(CP)).split('-').map(Number);
     const diasMes=new Date(y,m,0).getDate();
@@ -2742,6 +2748,7 @@ function attachFull(){
     PD.full.nroFacturaACA=nro;
     PD.full.fechaCancelacion=fecha;
     PD.full.locked=true;
+    PD.full._period=PD.full._editingPeriod||prevMonth(CP); // marcar período
 
     // Determinar el período a guardar — puede ser un período histórico editado
     const targetPeriod=PD.full._editingPeriod||prevMonth(CP);
