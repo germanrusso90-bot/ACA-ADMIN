@@ -4586,7 +4586,7 @@ function renderCancelMes(period){
             &nbsp;|&nbsp;
             Descuentos: <strong style="color:var(--r);">− $ ${fmtArg(regs.filter(r=>['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
             &nbsp;|&nbsp;
-            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>(['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)?-(r.importe||0):(r.importe||0)),0))}</strong>
+            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>a+(['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)?-(r.importe||0):(r.importe||0)),0))}</strong>
           </div>
           <button id="cancel-imprimir-btn" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir resumen</button>
         </div>`
