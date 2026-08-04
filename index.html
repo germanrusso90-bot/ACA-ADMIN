@@ -4258,6 +4258,13 @@ function yerLiquidar(){
     openLiqModal(liq, true); // canSave=true
 }
 
+const CANCEL_TIPOS=[
+  'SERVICLUB','PELOTAS','CAMISETAS','REINTEGRO PROMO FULL + COSMÉTICA',
+  'CUOCAM','REINTEGRO PROMO 20% BOXES','YER NO LUBRICANTE','LUBRICANTES POR COMBO',
+  'OBJETIVO PLUS','YER','INCÓGNITO 100%','CANON SERVICIOS','SERVICIOS','VARIOS'
+];
+const CANCEL_ESTADOS=['Pendiente','Pagada','Parcial','Impugnada'];
+
 const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO','OTROS'];
 
 function cancelPeriodLabel(period){
@@ -4415,11 +4422,6 @@ function attachYER(){
 // ── CANCELACIONES ─────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
-const CANCEL_TIPOS=[
-  'SERVICLUB','PELOTAS','CAMISETAS','REINTEGRO PROMO FULL + COSMÉTICA',
-  'CUOCAM','REINTEGRO PROMO 20% BOXES','YER NO LUBRICANTE','LUBRICANTES POR COMBO',
-  'OBJETIVO PLUS','YER','INCÓGNITO 100%','CANON SERVICIOS','SERVICIOS','VARIOS'
-];
 } // fin attachYER
 
 let cancelView=null; // null=grilla, 'YYYY-MM'=vista mes, 'historial'=historial
