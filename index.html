@@ -1540,24 +1540,24 @@ function renderFullRegistro(f){
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N° Factura ACA</div>
-        <input id="full-nro-aca" type="text" placeholder="Ej: 0001-00001" value="${esc(fActual.nroFacturaACA||'')}" ${ro}
+        <input id="full-nro-aca" type="text" placeholder="Ej: 0001-00001" value="${esc(f.nroFacturaACA||'')}" ${ro}
           style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;${roStyle}">
       </div>
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Factura ACA</div>
-        ${renderFullFileBtn('full.facturaACA', fActual.facturaACA, locked)}
+        ${renderFullFileBtn('full.facturaACA', f.facturaACA, locked)}
       </div>
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Fecha cancelación</div>
-        <input id="full-fecha-cancel" type="date" value="${esc(fActual.fechaCancelacion||'')}" ${ro}
+        <input id="full-fecha-cancel" type="date" value="${esc(f.fechaCancelacion||'')}" ${ro}
           style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;${roStyle}">
       </div>
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Comprobante de transferencia</div>
-        ${renderFullFileBtn('full.comprobanteTransferencia', fActual.comprobanteTransferencia, locked)}
+        ${renderFullFileBtn('full.comprobanteTransferencia', f.comprobanteTransferencia, locked)}
       </div>
 
       <div style="padding-bottom:2px;">${accionBtn}</div>
@@ -1738,7 +1738,7 @@ function renderFull(){
             </div>
           </div>
         </div>`}
-        ${renderFullRegistro(f)}
+        ${renderFullRegistro(fActual)}
       </td>
     </tr>`;
   }).join('');
