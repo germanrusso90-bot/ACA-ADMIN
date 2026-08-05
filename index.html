@@ -375,12 +375,12 @@ async function sGet(k,sh=true){
     }
   }catch(e){console.warn('sGet error',fk,e.message?.slice(0,40));}
 
-  // 4. Fallback: buscar claves VIEJAS (datos antes del sistema multi-tenant)
-  // La clave "cr3531:data:2026-05" puede estar guardada como "data:2026-05"
-  // Construir lista de claves viejas posibles
+  // 4. Fallback: buscar claves VIEJAS (solo para CR 3531 que tenía datos sin prefijo)
+  // Para dependencias nuevas esto NO aplica
+  if(CURRENT_CR!=='3531') return null;
+
   const oldKeys=[];
   if(fk.startsWith(`cr${CURRENT_CR}:`)){
-    // Quitar el prefijo cr3531:
     oldKeys.push(fk.slice(`cr${CURRENT_CR}:`.length));
   }
   // También probar sin encode (el encodeKey puede haber cambiado)
