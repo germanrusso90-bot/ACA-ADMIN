@@ -2466,14 +2466,20 @@ function renderTab(){
     case 'yer':    {
       const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq, _pa=YER._periodoAnterior;
       loadYER().then(()=>{
-        // Restaurar flags de estado (no se persisten en storage)
         if(_vl!=null) YER._viewingLiq=_vl;
         if(_bl!=null) YER._backup=_bl;
         if(_el!=null) YER._editingLiq=_el;
         if(_pa!=null) YER._periodoAnterior=_pa;
-        el.innerHTML=renderYER();
-        attachYER();
-      });break;
+        try{
+          el.innerHTML=renderYER();
+          attachYER();
+        }catch(e){
+          el.innerHTML=`<div style="padding:20px;color:red"><b>Error YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
+        }
+      }).catch(e=>{
+        el.innerHTML=`<div style="padding:20px;color:red"><b>Error cargando YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
+      });
+      break;
     }
     case 'checks': {
       (async()=>{
