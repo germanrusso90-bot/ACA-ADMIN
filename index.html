@@ -2881,30 +2881,44 @@ let YER = {
 let yerSub = 'diferencias';
 
 async function loadYER(){
-  const raw = await sGet('yer:'+CP, true);
-  if(raw){
-    YER = JSON.parse(raw);
-  } else {
-    // Mes nuevo: traer liqHistory y pcts del mes anterior
-    const prevP=prevMonth(CP);
-    const prevRaw=await sGet('yer:'+prevP,true);
-    if(prevRaw){
-      const prevYER=JSON.parse(prevRaw);
-      // Migrar historial de liquidaciones y porcentajes, pero NO los datos del mes (rows, evRows)
-      if(prevYER.liqHistory&&prevYER.liqHistory.length>0){
-        YER.liqHistory=JSON.parse(JSON.stringify(prevYER.liqHistory));
-      }
-      if(prevYER.pcts) YER.pcts=JSON.parse(JSON.stringify(prevYER.pcts));
-      // Si el mes anterior tenía una liquidación del mes anterior (la última)
-      // y no está ya en el historial, agregarla
+  // Reset a estado limpio antes de cargar
+  YER = {
+    pcts: { infinia_diesel:0, super:0, infinia:0, diesel500:0 },
+    pctLocked: true,
+    rows: [], evRows: [],
+    ventasFile: null, everilioFile: null,
+    liqHistory: [], validaciones: {}
+  };
+
+  try{
+    // Timeout de 8 segundos para evitar que se cuelgue
+    const withTimeout=(p,ms)=>Promise.race([p, new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),ms))]);
+
+    const raw = await withTimeout(sGet('yer:'+CP, true), 8000);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      YER={...YER,...parsed};
     } else {
-      const praw = await sGet('yer:pcts', true);
-      if(praw) YER.pcts = JSON.parse(praw);
+      // Mes nuevo: intentar traer pcts del mes anterior
+      try{
+        const prevRaw = await withTimeout(sGet('yer:'+prevMonth(CP), true), 5000);
+        if(prevRaw){
+          const prevYER=JSON.parse(prevRaw);
+          if(prevYER.pcts) YER.pcts=JSON.parse(JSON.stringify(prevYER.pcts));
+          if(prevYER.liqHistory?.length) YER.liqHistory=JSON.parse(JSON.stringify(prevYER.liqHistory));
+        }
+      }catch(e){ /* sin datos previos, usar defaults */ }
     }
+  }catch(e){
+    console.warn('loadYER error (usando defaults):', e.message);
   }
-  if(!YER.evRows) YER.evRows = [];
-  if(!YER.everilioFile) YER.everilioFile = null;
-  if(!YER.liqHistory) YER.liqHistory = [];
+
+  // Garantizar estructura mínima
+  if(!YER.evRows) YER.evRows=[];
+  if(!YER.everilioFile) YER.everilioFile=null;
+  if(!YER.liqHistory) YER.liqHistory=[];
+  if(!YER.validaciones) YER.validaciones={};
+  if(!YER.pcts) YER.pcts={infinia_diesel:0,super:0,infinia:0,diesel500:0};
 }
 async function saveYER(){
   await sSet('yer:'+CP, JSON.stringify(YER), true);
