@@ -760,7 +760,11 @@ function attachLogin(){
     const dep=DEPENDENCIAS.find(d=>d.cr===cr);
     if(dep&&dep.password===p){
       CURRENT_CR=dep.cr;
-      _cache={}; // limpiar cache al cambiar de dependencia
+      _cache={}; // limpiar cache en memoria
+      // Limpiar localStorage para evitar datos del CR anterior
+      Object.keys(localStorage).forEach(k=>{
+        if(!k.startsWith(`cr${CURRENT_CR}:`)) localStorage.removeItem(k);
+      });
       CU={username:dep.usuario,name:`${dep.nombre} (CR ${dep.cr})`,role:dep.role,cr:dep.cr,depNombre:dep.nombre};
       showLoad(true);
       const raw=await sGet('periodos',true);
@@ -4392,8 +4396,17 @@ function attachYER(){
   el.querySelector('#yer-ventas-input')?.addEventListener('change',async e=>{
     const file=e.target.files[0]; if(!file) return;
     showLoad(true);
-    try{ const ab=await file.arrayBuffer(); YER.rows=processVentasExcel(ab); YER.ventasFile={fileName:file.name,size:file.size}; await saveYER(); toast(YER.rows.length+' operaciones YER cargadas'); }
-    catch(err){alert('Error: '+err.message);}
+    try{
+      const ab=await file.arrayBuffer();
+      const rows=processVentasExcel(ab);
+      if(!rows||rows.length===0){
+        showLoad(false);
+        alert('No se encontraron operaciones YER en el archivo.\nVerificá que el Excel contenga filas del Sector 2 o 21.');
+        return;
+      }
+      YER.rows=rows; YER.ventasFile={fileName:file.name,size:file.size};
+      await saveYER(); toast(YER.rows.length+' operaciones YER cargadas');
+    }catch(err){alert('Error procesando Ventas Especiales:\n'+err.message);}
     showLoad(false); renderTab();
   });
   el.querySelector('#yer-del-ventas')?.addEventListener('click',async()=>{
