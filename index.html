@@ -2465,7 +2465,23 @@ function renderTab(){
     case 'hotel':  el.innerHTML=renderHotel();attachHotel();break;
     case 'yer':    {
       const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq, _pa=YER._periodoAnterior;
-      loadYER().then(()=>{
+      (async()=>{
+        // Timeout de 6 segundos para toda la carga de YER
+        try{
+          await Promise.race([
+            loadYER(),
+            new Promise((_,r)=>setTimeout(()=>r(new Error('YER timeout 6s')),6000))
+          ]);
+        }catch(e){
+          console.warn('loadYER timeout/error, usando estado actual:',e.message);
+          // Asegurar estado mínimo válido
+          if(!YER.pcts) YER.pcts={infinia_diesel:0,super:0,infinia:0,diesel500:0};
+          if(!YER.rows) YER.rows=[];
+          if(!YER.evRows) YER.evRows=[];
+          if(!YER.liqHistory) YER.liqHistory=[];
+          if(!YER.validaciones) YER.validaciones={};
+        }
+        // Restaurar flags de estado
         if(_vl!=null) YER._viewingLiq=_vl;
         if(_bl!=null) YER._backup=_bl;
         if(_el!=null) YER._editingLiq=_el;
@@ -2474,11 +2490,9 @@ function renderTab(){
           el.innerHTML=renderYER();
           attachYER();
         }catch(e){
-          el.innerHTML=`<div style="padding:20px;color:red"><b>Error YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
+          el.innerHTML=`<div style="padding:20px;color:red"><b>Error renderizando YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
         }
-      }).catch(e=>{
-        el.innerHTML=`<div style="padding:20px;color:red"><b>Error cargando YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
-      });
+      })();
       break;
     }
     case 'checks': {
