@@ -373,6 +373,13 @@ async function sGet(k,sh=true){
       if(val!==null)lsSet(fk,val,getTTL(fk));
       return val;
     }
+    // Cache negativo: la clave NO existe en Firebase (consulta exitosa).
+    // Evita re-consultar la red en cada click para dependencias nuevas sin datos.
+    // sSet() sobreescribe _cache al guardar, así que no bloquea datos futuros.
+    if(CURRENT_CR!=='3531'){
+      _cache[fk]=null;
+      return null;
+    }
   }catch(e){console.warn('sGet error',fk,e.message?.slice(0,40));}
 
   // 4. Fallback: buscar claves VIEJAS (solo para CR 3531 que tenía datos sin prefijo)
@@ -404,6 +411,7 @@ async function sGet(k,sh=true){
       }
     }catch(e){console.warn('sGet fallback error para',oldKey,e.message?.slice(0,40));}
   }
+  _cache[fk]=null; // cache negativo también para CR 3531 tras agotar fallbacks
   return null;
 }
 
@@ -2470,6 +2478,12 @@ function renderTab(){
     case 'hotel':  el.innerHTML=renderHotel();attachHotel();break;
     case 'yer':    {
       const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq, _pa=YER._periodoAnterior;
+      // Feedback inmediato: sin esto, el contenido del tab anterior queda en
+      // pantalla hasta que loadYER termina (hasta 6s) y parece que "no responde"
+      el.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:14px;">
+        <div class="spinner" style="border-color:var(--b);border-top-color:var(--p);"></div>
+        <div style="font-size:13px;font-weight:700;color:var(--m2);">Cargando YER…</div>
+      </div>`;
       (async()=>{
         // Timeout de 6 segundos para toda la carga de YER
         try{
