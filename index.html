@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recuperos — ACA Cipolletti</title>
+<title>Recuperos — ACA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window['pdfjs-dist/build/pdf'])window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -246,7 +246,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v2.1 — 06/08/2026 (fix YER)';
+const APP_VERSION='v2.3 — 06/08/2026 (fix tablas YER + membretes)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -2916,6 +2916,14 @@ let YER = {
   everilioFile: null
 };
 let yerSub = 'diferencias';
+let yerRowCap = 250; // máx filas renderizadas por tabla — evita congelar el navegador con archivos grandes
+function yerCapNote(total){
+  if(total<=yerRowCap) return '';
+  return `<div style="padding:10px 14px;background:#FFF8E1;border-top:1px solid #F5C842;font-size:12px;font-weight:700;color:#7B5800;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <span>Mostrando ${yerRowCap} de ${total} filas (limitado para no trabar el navegador). Usá el buscador para filtrar.</span>
+    <button onclick="yerRowCap+=500;renderTab();" style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;">Mostrar 500 más</button>
+  </div>`;
+}
 
 async function loadYER(){
   // Reset a estado limpio antes de cargar
@@ -3455,9 +3463,11 @@ function renderYERDiferencias(){
   if(!YER.validaciones)YER.validaciones={};
   const val=YER.validaciones;
 
-  // Celda de validación reutilizable
-  // Construir lista de remitos de Everilio para el selector cruzado
-  const evRemitoOpts=soloEv.map(r=>`<option value="${esc(r.remitoNorm||r.remito)}">${esc(r.remito)} — $${fmtArg(r.pvp)}</option>`).join('');
+  // Datalist COMPARTIDO de remitos Everilio — se construye UNA sola vez.
+  // (Antes cada fila de Ventas repetía un <select> con TODOS los remitos de
+  // Everilio: con archivos que no cruzan, eso genera filas×opciones elementos
+  // y congela el navegador. Un input+datalist compartido lo hace liviano.)
+  const evDatalist=`<datalist id="yer-ev-dl">${soloEv.map(r=>`<option value="${esc(r.remitoNorm||r.remito)}">${esc(r.remito)} — $${fmtArg(r.pvp)}</option>`).join('')}</datalist>`;
 
   const valCell=(key, tipo='sv')=>{
     const v=val[key]||{};
@@ -3466,21 +3476,11 @@ function renderYERDiferencias(){
     const evLink=v.evLink||''; // remito de Everilio vinculado
     const isOK=estado==='ok';
 
-    // Selector de remito Everilio (solo en filas de Ventas)
-    const evSelect=tipo==='sv'?`
-      <select data-val-key="${esc(key)}" data-val-field="evLink"
-        style="padding:4px 6px;border:1px solid ${evLink?'#1B6B35':'var(--b)'};border-radius:5px;font-size:11px;background:${evLink?'#F0FFF4':'#fff'};min-width:140px;max-width:180px;">
-        <option value="">Vincular Everilio...</option>
-        ${evRemitoOpts}
-      </select>`:'';
-
-    // Selector preseleccionado si ya tiene vínculo
+    // Input con datalist compartido (solo en filas de Ventas)
     const evSelectWithVal=tipo==='sv'?`
-      <select data-val-key="${esc(key)}" data-val-field="evLink"
-        style="padding:4px 6px;border:1px solid ${evLink?'#1B6B35':'var(--b)'};border-radius:5px;font-size:11px;background:${evLink?'#F0FFF4':'#fff'};min-width:140px;max-width:180px;">
-        <option value="">Vincular Everilio...</option>
-        ${soloEv.map(r=>`<option value="${esc(r.remitoNorm||r.remito)}" ${evLink===(r.remitoNorm||r.remito)?'selected':''}>${esc(r.remito)} — $${fmtArg(r.pvp)}</option>`).join('')}
-      </select>`:'';
+      <input list="yer-ev-dl" data-val-key="${esc(key)}" data-val-field="evLink"
+        value="${esc(evLink)}" placeholder="Vincular Everilio..."
+        style="padding:4px 6px;border:1px solid ${evLink?'#1B6B35':'var(--b)'};border-radius:5px;font-size:11px;background:${evLink?'#F0FFF4':'#fff'};min-width:140px;max-width:180px;">`:'';
 
     return `<td style="padding:5px 8px;border:1px solid var(--b);min-width:${tipo==='sv'?'320':'220'}px;vertical-align:middle;">
       <div style="display:flex;flex-direction:column;gap:4px;">
@@ -3522,7 +3522,7 @@ function renderYERDiferencias(){
     return aOK-bOK;
   });
 
-  const svRows=svSorted.map((r,i)=>{
+  const svRows=svSorted.slice(0,yerRowCap).map((r,i)=>{
     const vKey='sv:'+normRemito(r.remito);
     const v=val[vKey]||{};
     const isOK=v.estado==='ok';
@@ -3549,7 +3549,7 @@ function renderYERDiferencias(){
     return aOK-bOK;
   });
 
-  const seRows=seSorted.map((r,i)=>{
+  const seRows=seSorted.slice(0,yerRowCap).map((r,i)=>{
     const vKey='se:'+normRemito(r.remito);
     const v=val[vKey]||{};
     const rNorm=r.remitoNorm||normRemito(r.remito);
@@ -3564,7 +3564,7 @@ function renderYERDiferencias(){
     </tr>`;
   }).join('');
 
-  const dmRows=diffMonto.map((d,i)=>{
+  const dmRows=diffMonto.slice(0,yerRowCap).map((d,i)=>{
     const s=d.diff>0?'+':'';
     const col=Math.abs(d.diff)>500?'var(--r)':'#B8860B';
     const vKey='dm:'+normRemito(d.vRow.remito);
@@ -3587,7 +3587,7 @@ function renderYERDiferencias(){
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
       <th style="${th}">Remito</th><th style="${th}">Fecha</th><th style="${th}">Producto</th><th style="${th}">Litros</th><th style="${th}">Total $</th>
       <th style="${th}">Validación</th>
-    </tr></thead><tbody class="sv-tbody">${svRows}</tbody></table></div></div>`
+    </tr></thead><tbody class="sv-tbody">${svRows}</tbody></table></div>${yerCapNote(soloVentas.length)}</div>`
     :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Todos los remitos de Ventas tienen respaldo en Everilio</div>`;
 
   const tbSE=soloEv.length?`<div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:14px;">
@@ -3596,7 +3596,7 @@ function renderYERDiferencias(){
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
       <th style="${th}">Remito</th><th style="${th}">Fecha</th><th style="${th}">Total PVP $</th>
       <th style="${th}">Validación</th>
-    </tr></thead><tbody class="se-tbody">${seRows}</tbody></table></div></div>`
+    </tr></thead><tbody class="se-tbody">${seRows}</tbody></table></div>${yerCapNote(soloEv.length)}</div>`
     :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Todos los remitos de Everilio tienen respaldo en Ventas</div>`;
 
   const tbDM=diffMonto.length?`<div style="border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:14px;">
@@ -3605,7 +3605,7 @@ function renderYERDiferencias(){
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>
       <th style="${th}">Remito</th><th style="${th}">Producto</th><th style="${th}">Litros</th><th style="${th}">$ Ventas</th><th style="${th}">$ Everilio</th><th style="${th}">Diferencia</th>
       <th style="${th}">Validación</th>
-    </tr></thead><tbody class="dm-tbody">${dmRows}</tbody></table></div></div>`
+    </tr></thead><tbody class="dm-tbody">${dmRows}</tbody></table></div>${yerCapNote(diffMonto.length)}</div>`
     :`<div style="background:var(--gb);border:1px solid var(--gbr);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--g);font-weight:700;">Sin diferencias de monto significativas</div>`;
 
   // ── HISTORIAL DE LIQUIDACIONES ────────────────────────────────
@@ -3633,7 +3633,12 @@ function renderYERDiferencias(){
     </tr>`;
   }).join('');
 
-  return cards+tbSV+tbSE+tbDM;
+  // Aviso: los archivos casi no cruzan entre sí — probable archivo equivocado
+  const matchRate=vCount>0?(Math.max(0,ok)+diffMonto.length)/vCount:1;
+  const avisoNoCruce=(vCount>20&&eCount>20&&matchRate<0.1)?`<div style="background:var(--rb);border:2px solid var(--rbr);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--r);font-weight:700;">
+    ⚠️ Casi ningún remito de Ventas coincide con Everilio (${Math.max(0,ok)+diffMonto.length} de ${vCount}). Verificá que ambos archivos sean de la MISMA dependencia y el MISMO período. Si son correctos, puede que el formato de remito de esta estación sea distinto — avisale al administrador.
+  </div>`:'';
+  return evDatalist+cards+avisoNoCruce+tbSV+tbSE+tbDM;
 }
 
 function renderYERDetalleVentas(){
@@ -3642,7 +3647,7 @@ function renderYERDetalleVentas(){
   // Ordenar por fecha ascendente
   const parseF=s=>{const m=s.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);return m?new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5]):0;};
   rows.sort((a,b)=>parseF(a.fecha)-parseF(b.fecha));
-  const trs=rows.map((r,i)=>{
+  const trs=rows.slice(0,Math.max(yerRowCap,1000)).map((r,i)=>{
     const isNoComb = r.motivo==='YER_NoComb';
     const rowBg = isNoComb ? (i%2===0?'#F0F4FF':'#E8EEFF') : (i%2===0?'#FFFFF0':'#FFFDE0');
     const motivoBadge = isNoComb
@@ -3694,7 +3699,7 @@ function renderYERDetalleEverilio(){
     return parse(a.fecha)-parse(b.fecha);
   });
   const totalPVP=rows.reduce((a,r)=>a+r.pvp,0);
-  const trs=rows.map((r,i)=>`<tr class="yer-e-row" style="background:${i%2===0?'#FFFFF0':'#FFFDE0'}">
+  const trs=rows.slice(0,Math.max(yerRowCap,1000)).map((r,i)=>`<tr class="yer-e-row" style="background:${i%2===0?'#FFFFF0':'#FFFDE0'}">
     <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;white-space:nowrap;">${esc(r.fecha)}</td>
     <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;font-family:monospace;">${esc(r.remito)}</td>
     <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;font-weight:700;">$ ${fmtArg(r.pvp)}</td>
@@ -3861,7 +3866,7 @@ function buildLiqContent(liq){
 
   return `<div id="yer-liq-printable">
     <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
-      <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US Cipolletti · CR 3531</div>
+      <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US ${esc(CU?.depNombre||'')} · CR ${CU?.cr||CURRENT_CR}</div>
       <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACIÓN YER POR PORCENTAJE</div>
       <div style="font-size:15px;opacity:.9;font-weight:700;">MES: ${esc((liq.mesLabel||liq.period||'').toUpperCase())}</div>
     </div>
@@ -4012,7 +4017,7 @@ function buildLiqContent(liq){
 
   return `<div id="yer-liq-printable">
     <div style="background:var(--p);color:#fff;padding:20px 24px;text-align:center;">
-      <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US Cipolletti · CR 3531</div>
+      <div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:1px;">ACA — US ${esc(CU?.depNombre||'')} · CR ${CU?.cr||CURRENT_CR}</div>
       <div style="font-size:20px;font-weight:900;margin:6px 0;">LIQUIDACIÓN YER POR PORCENTAJE</div>
       <div style="font-size:15px;opacity:.9;font-weight:700;">MES: ${esc((liq.mesLabel||liq.period||'').toUpperCase())}</div>
     </div>
@@ -4472,11 +4477,20 @@ function attachYER(){
       });
     });
 
-    // Selector de vinculación con Everilio
-    el.querySelectorAll('select[data-val-key][data-val-field=evLink]').forEach(sel=>{
+    // Vinculación con Everilio (input con datalist compartido)
+    el.querySelectorAll('input[data-val-key][data-val-field=evLink], select[data-val-key][data-val-field=evLink]').forEach(sel=>{
       sel.addEventListener('change',async()=>{
         const key=sel.getAttribute('data-val-key');
-        const evLinkVal=sel.value;
+        const evLinkVal=sel.value.trim();
+        // Validar que el remito exista en el datalist (equivale al select viejo)
+        if(evLinkVal){
+          const valid=new Set([...document.querySelectorAll('#yer-ev-dl option')].map(o=>o.value));
+          if(valid.size&&!valid.has(evLinkVal)){
+            toast('Remito no encontrado en Everilio');
+            sel.value=(YER.validaciones[key]&&YER.validaciones[key].evLink)||'';
+            return;
+          }
+        }
         if(!YER.validaciones[key])YER.validaciones[key]={};
         YER.validaciones[key].evLink=evLinkVal;
         // Si se vincula con Everilio, auto-setear estado OK y copiar comentario
@@ -4842,7 +4856,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
 @media print{@page{size:portrait;margin:1cm}body{padding:0}}
 </style></head><body>
 <h1>${titulo}</h1>
-<div class="sub">ACA Cipolletti — CR 3531 · ${new Date().toLocaleString('es-AR')}</div>
+<div class="sub">ACA ${esc(CU?.depNombre||'')} — CR ${CU?.cr||CURRENT_CR} · ${new Date().toLocaleString('es-AR')}</div>
 <table>
   <thead><tr><th>Fecha</th><th>Tipo</th><th>Comprobante</th><th>N° Comp.</th><th style="text-align:right">Importe</th></tr></thead>
   <tbody>${rows}</tbody>
