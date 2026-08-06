@@ -784,6 +784,7 @@ function attachLogin(){
       APS=raw?JSON.parse(raw):[];
       if(!APS.includes(CP)){APS.push(CP);APS.sort();await sSet('periodos',JSON.stringify(APS),true);}
       await loadPeriod(CP);
+      await autoResetYER3611(); // borra y rearma YER de CR 3611 una única vez
       await loadYER();
       showLoad(false);AT='us';usView=null;render();
       return;
@@ -2929,14 +2930,15 @@ async function loadYER(){
 
     const raw = await withTimeout(sGet('yer:'+CP, true), 8000);
     if(raw){
-      const parsed=JSON.parse(raw);
-      YER={...YER,...parsed};
+      const parsed=sanitizeYER(raw);
+      if(parsed) YER={...YER,...parsed};
+      else console.warn('loadYER: datos corruptos en yer:'+CP+' — descartados, usando defaults');
     } else {
       // Mes nuevo: intentar traer pcts del mes anterior
       try{
         const prevRaw = await withTimeout(sGet('yer:'+prevMonth(CP), true), 5000);
-        if(prevRaw){
-          const prevYER=JSON.parse(prevRaw);
+        const prevYER = prevRaw?sanitizeYER(prevRaw):null;
+        if(prevYER){
           if(prevYER.pcts) YER.pcts=JSON.parse(JSON.stringify(prevYER.pcts));
           if(prevYER.liqHistory?.length) YER.liqHistory=JSON.parse(JSON.stringify(prevYER.liqHistory));
         }
@@ -2952,6 +2954,74 @@ async function loadYER(){
   if(!YER.liqHistory) YER.liqHistory=[];
   if(!YER.validaciones) YER.validaciones={};
   if(!YER.pcts) YER.pcts={infinia_diesel:0,super:0,infinia:0,diesel500:0};
+}
+
+// ── VALIDACIÓN ESTRUCTURAL DE DATOS YER ──────────────────────
+// Devuelve el objeto validado, o null si los datos están corruptos.
+// Protege contra documentos malformados que trababan el render.
+function sanitizeYER(raw){
+  try{
+    const p=typeof raw==='string'?JSON.parse(raw):raw;
+    if(!p||typeof p!=='object'||Array.isArray(p)) return null;
+    // Cada campo con tipo incorrecto se descarta individualmente
+    if(p.rows!==undefined && !Array.isArray(p.rows)) delete p.rows;
+    if(p.evRows!==undefined && !Array.isArray(p.evRows)) delete p.evRows;
+    if(p.liqHistory!==undefined && !Array.isArray(p.liqHistory)) delete p.liqHistory;
+    if(p.validaciones!==undefined && (typeof p.validaciones!=='object'||Array.isArray(p.validaciones))) delete p.validaciones;
+    if(p.pcts!==undefined && (typeof p.pcts!=='object'||Array.isArray(p.pcts))) delete p.pcts;
+    if(p.rows) p.rows=p.rows.filter(r=>r&&typeof r==='object');
+    if(p.evRows) p.evRows=p.evRows.filter(r=>r&&typeof r==='object');
+    if(p.liqHistory) p.liqHistory=p.liqHistory.filter(l=>l&&typeof l==='object');
+    // Flags de UI no se persisten: si quedaron guardados por error, limpiarlos
+    delete p._viewingLiq; delete p._editingLiq; delete p._backup; delete p._periodoAnterior;
+    return p;
+  }catch(e){ return null; }
+}
+
+// ── RESET COMPLETO DEL MÓDULO YER (por dependencia) ──────────
+// Borra TODOS los datos YER del CR actual en las 3 capas (memoria,
+// localStorage y Firebase) y deja una base limpia. Cada dependencia
+// tiene sus claves con prefijo crXXXX:, así que solo afecta al CR logueado.
+async function resetYERData(){
+  const cr=CURRENT_CR;
+  // Períodos a barrer: todos los meses de 2025 y 2026 + clave global de %
+  const keys=['yer:pcts'];
+  for(const y of [2025,2026]) for(let m=1;m<=12;m++) keys.push(`yer:${y}-${String(m).padStart(2,'0')}`);
+  // 1+2. Memoria y localStorage
+  keys.forEach(k=>{
+    const fk=`cr${cr}:${k}`;
+    delete _cache[fk];
+    try{localStorage.removeItem('_ttl:'+fk);localStorage.removeItem(fk);}catch(e){}
+  });
+  // 3. Firebase — deleteDoc sobre doc inexistente es inofensivo
+  try{
+    const db=await getDB();
+    await Promise.allSettled(keys.map(k=>db.deleteDoc(db.doc(db.fs,'kv',encodeKey(`cr${cr}:${k}`)))));
+  }catch(e){
+    console.warn('resetYERData: Firebase no disponible, solo se limpió cache local:',e.message);
+    throw e; // sin Firebase el reset queda incompleto — reintentar en próximo login
+  }
+  // 4. Rearmar base limpia y guardarla para que exista el documento del CR
+  YER={pcts:{infinia_diesel:0,super:0,infinia:0,diesel500:0},pctLocked:true,rows:[],evRows:[],
+       ventasFile:null,everilioFile:null,liqHistory:[],validaciones:{}};
+  await saveYER();
+  console.log(`✅ Módulo YER reiniciado para CR ${cr}`);
+  return true;
+}
+window.resetYERData=resetYERData; // disponible desde consola: resetYERData()
+
+// Auto-reset UNA sola vez para CR 3611 (datos corruptos detectados ago-2026).
+// El flag queda en Firebase para no repetir el borrado en cada login.
+async function autoResetYER3611(){
+  if(CURRENT_CR!=='3611') return;
+  try{
+    const flag=await sGet('yer:_wipe_v1',true);
+    if(flag==='done') return;
+    await resetYERData();
+    await sSet('yer:_wipe_v1','done',true);
+  }catch(e){
+    console.warn('autoResetYER3611: se reintentará en el próximo login:',e.message);
+  }
 }
 async function saveYER(){
   await sSet('yer:'+CP, JSON.stringify(YER), true);
