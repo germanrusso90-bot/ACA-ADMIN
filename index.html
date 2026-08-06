@@ -761,9 +761,14 @@ function attachLogin(){
     if(dep&&dep.password===p){
       CURRENT_CR=dep.cr;
       _cache={}; // limpiar cache en memoria
-      // Limpiar localStorage para evitar datos del CR anterior
+      // Limpiar localStorage — las claves se guardan como "_ttl:crXXXX:..."
       Object.keys(localStorage).forEach(k=>{
-        if(!k.startsWith(`cr${CURRENT_CR}:`)) localStorage.removeItem(k);
+        // Eliminar cualquier clave que NO pertenezca al CR actual
+        if(k.startsWith('_ttl:') && !k.startsWith(`_ttl:cr${dep.cr}:`)){
+          localStorage.removeItem(k);
+        } else if(!k.startsWith('_ttl:') && k.startsWith('cr') && !k.startsWith(`cr${dep.cr}:`)){
+          localStorage.removeItem(k);
+        }
       });
       CU={username:dep.usuario,name:`${dep.nombre} (CR ${dep.cr})`,role:dep.role,cr:dep.cr,depNombre:dep.nombre};
       showLoad(true);
