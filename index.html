@@ -245,6 +245,8 @@ table.ex input.ex-input.inp-date{width:100%;}
 <div id="toast"></div>
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
+// ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
+const APP_VERSION='v2.1 — 06/08/2026 (fix YER)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -744,6 +746,7 @@ function renderLogin(){
       <button type="submit">Ingresar</button>
       <p class="err" id="le"></p>
     </form>
+    <p style="text-align:center;font-size:11px;color:var(--m2);margin-top:14px;opacity:.7">${APP_VERSION}</p>
   </div></div>`;
 }
 function syncDepSelect(cr){
@@ -824,7 +827,7 @@ function renderShell(){
   return`<div class="topbar">
     <div class="brand">ACA <span>Recuperos</span></div>
     <div class="user-info">
-      <span>${esc(CU.depNombre||CU.name)} <small style="opacity:.6;font-size:10px">CR ${CU.cr||''}</small></span>
+      <span>${esc(CU.depNombre||CU.name)} <small style="opacity:.6;font-size:10px">CR ${CU.cr||''} · ${APP_VERSION}</small></span>
       <button onclick="diagFirebase()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-weight:700;margin-right:6px">🔍 Diag</button>
       <button class="btn-ghost" id="logout-btn">Salir</button>
     </div>
