@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recuperos — ACA</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window['pdfjs-dist/build/pdf'])window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -246,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v2.4 — 06/08/2026 (lector Everilio por encabezados)';
+const APP_VERSION='v2.5 — 07/08/2026 (fix importes con formato mixto)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -3043,6 +3046,27 @@ function parseArg(v){
   if(v===null||v===undefined||v==='') return 0;
   return parseFloat(String(v).replace(/\./g,'').replace(',','.')) || 0;
 }
+// Parser numérico tolerante: acepta "1.234,56" (es-AR), "1,234.56" (US),
+// "257398.31", " $ 257,398.31 " y números nativos de Excel.
+// Regla: el separador que aparece ÚLTIMO es el decimal.
+function parseNum(v){
+  if(v===null||v===undefined||v==='') return 0;
+  if(typeof v==='number') return isFinite(v)?v:0;
+  let s=String(v).replace(/[^0-9.,\-]/g,'').trim(); // quita $, espacios, NBSP
+  if(!s) return 0;
+  const lc=s.lastIndexOf(','), lp=s.lastIndexOf('.');
+  if(lc>-1&&lp>-1){
+    if(lc>lp) s=s.replace(/\./g,'').replace(',','.'); // 1.234,56
+    else      s=s.replace(/,/g,'');                    // 1,234.56
+  }else if(lc>-1){
+    // Solo coma: decimal si deja 1-2 dígitos ("1234,5"); si no, es de miles ("1,234")
+    s=(s.length-lc-1)<=2 ? s.replace(',','.') : s.replace(/,/g,'');
+  }else if(lp>-1){
+    // Solo punto: si hay varios, son de miles ("1.234.567")
+    if((s.match(/\./g)||[]).length>1) s=s.replace(/\./g,'');
+  }
+  return parseFloat(s)||0;
+}
 function fmtArg(n, dec=2){
   return new Intl.NumberFormat('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(n);
 }
@@ -3175,11 +3199,11 @@ function processEverilioExcel(ab){
     if(!remito || remito.startsWith('00000-')) continue;
     const {d:fDate,display:fechaStr}=parseFecha(String(r[cFecha]||''));
     if(fDate && (fDate < desde || fDate > hasta)) continue;
-    // Importe: detectar formato — con coma es es-AR ("1.234,56"), sin coma es decimal con punto ("899998.44")
-    const rawImp=String(r[cImporte]||'').trim();
-    const importe = rawImp.includes(',') ? parseArg(rawImp) : (parseFloat(rawImp.replace(/[^0-9.\-]/g,'')) || 0);
-    const rawTY = cTotYer>-1 ? String(r[cTotYer]||'').trim() : '';
-    const totalYer = rawTY ? (rawTY.includes(',') ? parseArg(rawTY) : (parseFloat(rawTY.replace(/[^0-9.\-]/g,'')) || 0)) : 0;
+    // Importe: el reporte mezcla formatos en la MISMA columna —
+    // "110000.48" (decimal con punto) y " $ 257,398.31 " (miles con coma).
+    // parseNum decide el separador decimal por cuál aparece último.
+    const importe = parseNum(r[cImporte]);
+    const totalYer = cTotYer>-1 ? parseNum(r[cTotYer]) : 0;
     rows.push({
       id: Math.random().toString(36).slice(2,9),
       fecha: fechaStr,
