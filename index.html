@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v2.6 — 19/08/2026 (fix Excel ventas Full)';
+const APP_VERSION='v2.7 — 19/08/2026 (fix cierre de visor)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -691,6 +691,7 @@ function parseVentas(ab){
 // Abrir Excel en visor inline (sin descarga automática)
 function openExcelViewer(f){
   try{
+    closeFileViewer(); // instancia única, igual que el visor de PDF/imagen
     const arr=Uint8Array.from(atob(f.dataUrl.split(',')[1]),c=>c.charCodeAt(0));
     const wb=XLSX.read(arr,{type:'array'});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -721,12 +722,14 @@ function openExcelViewer(f){
     contentDiv.appendChild(inner);
     wrap.appendChild(bar);wrap.appendChild(contentDiv);
     document.body.appendChild(wrap);
-    closeBtn.addEventListener('click',()=>wrap.remove());
+    closeBtn.addEventListener('click',closeFileViewer);
+    document.addEventListener('keydown',_fvEsc);
+    document.body.style.overflow='hidden';
     dlBtn.addEventListener('click',()=>{
       const a=document.createElement('a');a.href=f.dataUrl;a.download=f.fileName;
       document.body.appendChild(a);a.click();a.remove();
     });
-    wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+    wrap.addEventListener('click',e=>{if(e.target===wrap)closeFileViewer();});
   }catch(e){alert('No se pudo mostrar el archivo: '+e.message);}
 }
 
@@ -1481,7 +1484,30 @@ async function renderUSExcel(usKey){
 }
 
 // ── VISOR DE ARCHIVO INLINE ───────────────────────────────────
+// Cierra CUALQUIER visor abierto. Orden importante: primero se saca el
+// iframe del DOM y recién después se libera el blob — al revés, el visor
+// de PDF del navegador queda tildado unos segundos.
+function _fvEsc(e){ if(e.key==='Escape'||e.key==='Esc') closeFileViewer(); }
+function closeFileViewer(){
+  document.querySelectorAll('.file-viewer-wrap').forEach(w=>{
+    const u=w.dataset.blobUrl;
+    const ifr=w.querySelector('iframe');
+    if(ifr){ try{ ifr.src='about:blank'; }catch(e){} }
+    w.remove();
+    if(u) setTimeout(()=>{ try{ URL.revokeObjectURL(u); }catch(e){} },0);
+  });
+  document.removeEventListener('keydown',_fvEsc);
+  document.body.style.overflow='';
+}
+// base64 → Uint8Array sin arrays intermedios (más rápido y menos memoria
+// en comprobantes grandes)
+function b64ToBytes(b64){
+  const bin=atob(b64), out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
+  return out;
+}
 function openFileViewer(f){
+  closeFileViewer(); // nunca apilar visores: el ✕ de arriba quedaba sin efecto
   const isImg=f.type&&f.type.startsWith('image/');
   const wrap=document.createElement('div');
   wrap.className='file-viewer-wrap';
@@ -1495,12 +1521,9 @@ function openFileViewer(f){
   } else {
     // Convertir base64 a Blob para que el iframe funcione en todos los browsers
     try{
-      const b64=f.dataUrl.split(',')[1];
-      const byteChars=atob(b64);
-      const byteNums=new Array(byteChars.length);
-      for(let i=0;i<byteChars.length;i++)byteNums[i]=byteChars.charCodeAt(i);
-      const blob=new Blob([new Uint8Array(byteNums)],{type:'application/pdf'});
+      const blob=new Blob([b64ToBytes(f.dataUrl.split(',')[1])],{type:'application/pdf'});
       blobUrl=URL.createObjectURL(blob);
+      wrap.dataset.blobUrl=blobUrl;
       content=`<iframe src="${blobUrl}" style="width:100%;height:100%;border:none;" title="${esc(f.fileName)}"></iframe>`;
     }catch(e){
       // Fallback a dataUrl
@@ -1513,20 +1536,18 @@ function openFileViewer(f){
       <span>📎 ${esc(f.fileName)}</span>
       <div style="display:flex;gap:8px;align-items:center;">
         ${blobUrl?`<a href="${blobUrl}" download="${esc(f.fileName)}" style="background:rgba(255,255,255,.2);color:#fff;text-decoration:none;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:700;">⬇ Descargar</a>`:''}
-        <button id="fv-close" title="Cerrar" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:5px;padding:4px 10px;font-size:14px;cursor:pointer;">✕</button>
+        <button id="fv-close" title="Cerrar (Esc)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:5px;padding:4px 10px;font-size:14px;cursor:pointer;">✕</button>
       </div>
     </div>
     <div class="file-viewer-content">${content}</div>`;
 
   document.body.appendChild(wrap);
-  document.getElementById('fv-close').addEventListener('click',()=>{
-    if(blobUrl)URL.revokeObjectURL(blobUrl);
-    wrap.remove();
-  });
-  wrap.addEventListener('click',e=>{if(e.target===wrap){
-    if(blobUrl)URL.revokeObjectURL(blobUrl);
-    wrap.remove();
-  }});
+  document.body.style.overflow='hidden';
+  // querySelector sobre el wrap, NO getElementById: con dos visores abiertos
+  // el listener se ataba al botón del visor viejo y el ✕ visible no cerraba nada
+  wrap.querySelector('#fv-close').addEventListener('click',closeFileViewer);
+  wrap.addEventListener('click',e=>{if(e.target===wrap)closeFileViewer();});
+  document.addEventListener('keydown',_fvEsc);
 }
 
 // ── FULL: bloque de cancelación (editable o bloqueado) ────────
