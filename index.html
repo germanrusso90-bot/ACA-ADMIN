@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v2.5 — 07/08/2026 (fix importes con formato mixto)';
+const APP_VERSION='v2.6 — 19/08/2026 (fix Excel ventas Full)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -676,10 +676,13 @@ function parseVentas(ab){
     const total=row[colTotal];
     // Sectores 2 y 21 = Full
     const secNum=typeof sec==='number'?sec:parseFloat(sec);
-    if((secNum===2||secNum===21)&&typeof total==='number'&&total>0){
-      tot+=total; found=true;
+    // El importe puede venir como número o como texto ("1.234,56", "$ 1,234.56")
+    // según cómo exporte el sistema — parseNum cubre ambos casos.
+    const totalNum=typeof total==='number'?total:parseNum(total);
+    if((secNum===2||secNum===21)&&totalNum>0){
+      tot+=totalNum; found=true;
       // Cigarrillos y tabaco
-      if(typeof det==='string'&&det.trim()==='Cigarrillos') cig+=total;
+      if(typeof det==='string'&&det.trim()==='Cigarrillos') cig+=totalNum;
     }
   }
   if(!found)return null;
@@ -1640,13 +1643,13 @@ function renderFull(){
     return existing||{period:p,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null};
   });
   const f=PD.full;
-  // Si el período actual YA está guardado en el historial como locked,
-  // usar PD.full normalmente. Si NO, mostrar vacío para evitar datos de otro mes.
-  const fullEstaEnHistorial=!!history.find(r=>r.period===currentPeriod&&r.locked);
-  const fActual=fullEstaEnHistorial?f:{
-    ventas:null,nroFacturaACA:'',facturaACA:null,fechaCancelacion:'',
-    comprobanteTransferencia:null,interesMensual:'',diasAtrasados:'',locked:false
-  };
+  // PD se guarda por período (clave data:CP), así que PD.full SIEMPRE pertenece
+  // al período que se está liquidando — se muestra tal cual.
+  // (Antes se exigía que el período ya estuviera en el historial Y bloqueado;
+  //  en la fila editable eso es imposible por definición, así que el Excel
+  //  recién subido nunca llegaba a mostrarse.)
+  const fActual=f;
+  const editandoOtro=!!(f._editingPeriod&&f._editingPeriod!==currentPeriod);
   if(!f.interesMensual)f.interesMensual='';
   if(!f.diasAtrasados)f.diasAtrasados='';
 
@@ -1698,6 +1701,7 @@ function renderFull(){
         ${pLabel} <span style="font-size:10px;background:var(--p);color:#fff;padding:1px 6px;border-radius:3px;">ACTUAL</span>
       </td>
       <td colspan="8" style="padding:10px 14px;border:1px solid #D4C830;">
+        ${editandoOtro?`<div style="background:#FFF8E1;border:1.5px solid #FFD54F;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;font-weight:700;color:#7B5800;">✏ Estás editando el período ${periodLabel(f._editingPeriod)} — los datos de abajo corresponden a ese mes, no a ${pLabel}.</div>`:''}
         ${fActual.ventas?`
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
           <div class="calc-box"><div class="cl">Total Ventas (S.2+21)</div><div class="cv" style="font-size:15px;">$ ${fmt(fActual.ventas.totalVentas)}</div></div>
