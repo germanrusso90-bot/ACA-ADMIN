@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v2.9 — 20/08/2026 (tablas YER completas)';
+const APP_VERSION='v3.1 — 20/08/2026 (detalle de Solo Ventas y Dif. monto)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -4270,53 +4270,90 @@ function liqDetalleMostrar(tipo, mesLabel, snapshot){
   evRows.forEach(r=>{evMap.set(normR(r.remito||r.id||''),r);});
   const matched=new Set(rows.filter(r=>r.motivo!=='YER_NoComb').map(r=>normR(r.remito)));
 
+  // Las categorías se calculan cruzando Ventas contra Everilio con la MISMA
+  // lógica de la conciliación. Antes se filtraba por r.motivo==='SoloVentas' /
+  // 'DifMonto', pero processVentasExcel nunca escribe esos valores (solo pone
+  // 'YER' o 'YER_NoComb'), así que esas dos listas salían siempre vacías.
+  const conc=(()=>{
+    const bkR=YER.rows, bkE=YER.evRows;
+    try{ YER.rows=rows; YER.evRows=evRows; return calcConciliacion(); }
+    finally{ YER.rows=bkR; YER.evRows=bkE; }
+  })();
+  // Un remito vinculado a mano ya dejó de ser inconsistencia
+  const linkeados=new Set(Object.values(val).map(v=>v&&v.evLink).filter(Boolean));
+  const svData=conc.soloVentas.filter(r=>{
+    const k=val['sv:'+normR(r.remito)];
+    return !(k&&(k.evLink||k.estado==='ok'));
+  });
+  const seData=conc.soloEv.filter(r=>!linkeados.has(r.remitoNorm||normR(r.remito||'')));
+
   let titulo='',headers=[],data=[];
   if(tipo==='ventas'){
     data=rows.filter(r=>r.motivo!=='YER_NoComb');
     titulo=`Todos los registros de Ventas (${data.length})`;
-    headers=['Remito','Fecha','Producto','Litros','Total $','Estado'];
+    headers=['Remito','Fecha','Producto','Litros','Total $','Validación','Observación'];
   } else if(tipo==='soloVentas'){
-    data=rows.filter(r=>r.motivo==='SoloVentas');
+    data=svData;
     titulo=`Solo en Ventas — sin respaldo en Everilio (${data.length})`;
-    headers=['Remito','Fecha','Producto','Litros','Total $','Validación','Comentario'];
+    headers=['Remito','Fecha','Producto','Litros','Total $','Validación','Observación'];
   } else if(tipo==='everilio'){
     data=evRows;
     titulo=`Todos los registros de Everilio (${data.length})`;
-    headers=['Remito','Fecha','Total PVP $'];
+    headers=['Remito','Fecha','Total PVP $','Validación','Observación'];
   } else if(tipo==='soloEverilio'){
-    data=evRows.filter(r=>!matched.has(r.remitoNorm||normR(r.remito||r.id||'')));
+    data=seData;
     titulo=`Solo en Everilio — sin respaldo en Ventas (${data.length})`;
-    headers=['Remito','Fecha','Total PVP $','Validación'];
+    headers=['Remito','Fecha','Total PVP $','Validación','Observación'];
   } else if(tipo==='difMonto'){
-    data=rows.filter(r=>r.motivo==='DifMonto');
+    data=conc.diffMonto.map(d=>({...d.vRow,_eRow:d.eRow,_dif:d.diff}));
     titulo=`Diferencias de monto (${data.length})`;
-    headers=['Remito','Fecha','Producto','Lt','Total Ventas','Total Everilio','Diferencia'];
+    headers=['Remito','Fecha','Producto','Lt','Total Ventas','Total Everilio','Diferencia','Validación','Observación'];
   }
+
+  // Si no hay filas, explicar por qué en vez de mostrar la tabla vacía
+  const vacioMsg={
+    soloVentas:'No quedaron remitos de Ventas sin respaldo en Everilio: todos cruzaron o fueron vinculados a mano.',
+    soloEverilio:'No quedaron remitos de Everilio sin respaldo en Ventas.',
+    difMonto:'No hay diferencias de monto mayores a $20 entre Ventas y Everilio.',
+    ventas:'No hay registros de Ventas en el detalle guardado de este período.',
+    everilio:'No hay registros de Everilio en el detalle guardado de este período.'
+  }[tipo]||'Sin registros para mostrar.';
 
   const filas=data.map((r,i)=>{
     const bg=i%2===0?'#fff':'#f9f9f9';
     const rn=normR(r.remito||r.id||'');
+    // Las validaciones se guardan con prefijo según la tabla donde se cargaron:
+    // sv: (Solo Ventas), se: (Solo Everilio), dm: (Diferencias de monto).
     const vSV=val['sv:'+rn]||{};
     const vSE=val['se:'+rn]||{};
+    const vDM=val['dm:'+rn]||{};
+    // Estado legible + el remito vinculado, si se cruzó a mano
+    const estadoTxt=v=>{
+      if(!v||(!v.estado&&!v.evLink)) return '—';
+      const e=v.estado==='ok'?'✓ OK':v.estado==='error'?'✗ Error':v.estado==='pendiente'?'⏳ Pendiente':(v.estado||'—');
+      return v.evLink?`${e} → ${v.evLink}`:e;
+    };
     let cells=[];
     if(tipo==='ventas')
-      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),vSV.estado||'—'];
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),estadoTxt(vSV),vSV.comentario||''];
     else if(tipo==='soloVentas')
-      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),vSV.estado||'—',vSV.comentario||''];
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.producto||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),estadoTxt(vSV),vSV.comentario||''];
     else if(tipo==='everilio')
-      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0)];
+      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0),estadoTxt(vSE),vSE.comentario||''];
     else if(tipo==='soloEverilio')
-      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0),vSE.estado||'—'];
+      cells=[r.remito||r.id||'',fd(r.fecha),fmt(r.pvp||0),estadoTxt(vSE),vSE.comentario||''];
     else if(tipo==='difMonto'){
-      const evR=evMap.get(rn)||{};
-      const dif=(r.total||r.pvp||0)-(evR.pvp||0);
-      cells=[r.remito||'',fd(r.fecha),r.desc||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),fmt(evR.pvp||0),fmt(dif)];
+      const evR=r._eRow||evMap.get(rn)||{};
+      const dif=r._dif!=null?r._dif:((r.total||r.pvp||0)-(evR.pvp||0));
+      cells=[r.remito||'',fd(r.fecha),r.desc||r.motivo_combust||'',fmtArg(r.litros||0,0),fmt(r.total||r.pvp||0),fmt(evR.pvp||0),fmt(dif),estadoTxt(vDM),vDM.comentario||''];
     }
     return`<tr style="background:${bg}">${cells.map(c=>`<td style="padding:5px 8px;border-bottom:1px solid #eee;">${esc(String(c??''))}</td>`).join('')}</tr>`;
   }).join('');
 
   const th=headers.map(h=>`<th style="padding:7px 8px;background:#F5C842;color:#3D1F6E;text-align:left;font-size:11px;font-weight:800;">${h}</th>`).join('');
-  const tableHtml=`<table style="border-collapse:collapse;width:100%;font-size:11px;"><thead><tr>${th}</tr></thead><tbody>${filas}</tbody></table>`;
+  const tableHtml=data.length
+    ? `<table style="border-collapse:collapse;width:100%;font-size:11px;"><thead><tr>${th}</tr></thead><tbody>${filas}</tbody></table>`
+    : `<div style="padding:32px 20px;text-align:center;color:#666;border:2px dashed #ddd;border-radius:10px;font-size:13px;">${esc(vacioMsg)}</div>`;
 
   const existing=document.getElementById('liq-det-modal');
   if(existing)existing.remove();
