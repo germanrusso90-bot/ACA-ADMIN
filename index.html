@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v3.2 — 21/08/2026 (imprimir liquidación desde historial)';
+const APP_VERSION='v3.4 — 21/08/2026 (cola de sincronización)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -347,7 +347,7 @@ function lsDel(key){
 
 function getTTL(key){
   // Checks y archivos cambian poco → TTL largo
-  if(key.includes('check:')||key.includes('file:')||key.includes('periodos'))return LS_TTL_LARGO;
+  if(key.includes('check:')||key.includes('file:')||key.includes('periodos')||key.includes('yer:'))return LS_TTL_LARGO;
   return LS_TTL_CORTO;
 }
 
@@ -369,23 +369,28 @@ async function sGet(k,sh=true){
     return lv;
   }
   // 3. Firebase con clave nueva (con prefijo cr3531:)
+  // _fbOk distingue "consulté y no existe" de "no pude consultar".
+  // Cachear un null por error de red hacía que loadYER creyera que el mes
+  // estaba vacío y el siguiente guardado pisara los datos reales.
+  let _fbOk=false;
   try{
     const db=await getDB();
     const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(fk)));
+    _fbOk=true;
     if(snap.exists()){
       const val=snap.data().v;
       _cache[fk]=val;
       if(val!==null)lsSet(fk,val,getTTL(fk));
       return val;
     }
-    // Cache negativo: la clave NO existe en Firebase (consulta exitosa).
-    // Evita re-consultar la red en cada click para dependencias nuevas sin datos.
-    // sSet() sobreescribe _cache al guardar, así que no bloquea datos futuros.
     if(CURRENT_CR!=='3531'){
       _cache[fk]=null;
       return null;
     }
-  }catch(e){console.warn('sGet error',fk,e.message?.slice(0,40));}
+  }catch(e){
+    console.warn('sGet error',fk,e.message?.slice(0,40));
+    _sGetFallo=true; // lo consulta loadYER para no pisar datos
+  }
 
   // 4. Fallback: buscar claves VIEJAS (solo para CR 3531 que tenía datos sin prefijo)
   // Para dependencias nuevas esto NO aplica
@@ -416,9 +421,52 @@ async function sGet(k,sh=true){
       }
     }catch(e){console.warn('sGet fallback error para',oldKey,e.message?.slice(0,40));}
   }
-  _cache[fk]=null; // cache negativo también para CR 3531 tras agotar fallbacks
+  if(_fbOk) _cache[fk]=null; // solo si Firebase respondió que no existe
   return null;
 }
+// Se pone en true cuando una lectura de Firebase falla (red caída, timeout).
+// Sirve para NO sobrescribir datos buenos con un estado vacío.
+let _sGetFallo=false;
+
+// ── RECUPERACIÓN DE LIQUIDACIONES ────────────────────────────
+// Busca liquidaciones en el respaldo local del navegador (incluso vencido)
+// y las vuelve a incorporar al historial. No borra nada: solo agrega las
+// que falten. Se puede llamar desde la consola: recuperarLiquidaciones()
+async function recuperarLiquidaciones(){
+  const encontradas=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.includes('yer:')||!k.includes('cr'+CURRENT_CR)) continue;
+    try{
+      const raw=JSON.parse(localStorage.getItem(k));
+      const val=raw&&raw.v!==undefined?raw.v:raw;
+      const obj=typeof val==='string'?JSON.parse(val):val;
+      (obj&&obj.liqHistory||[]).forEach(l=>{ if(l&&(l.period||l.mesLabel)) encontradas.push({l,k}); });
+    }catch(e){}
+  }
+  if(!encontradas.length){
+    alert('No se encontraron liquidaciones en el respaldo de este navegador.\n\nProbá desde la computadora y el navegador donde hiciste la liquidación, sin borrar el historial de navegación.');
+    return 0;
+  }
+  const yaEstan=new Set((YER.liqHistory||[]).map(l=>l.period||l.mesLabel));
+  const nuevas=encontradas.filter(e=>!yaEstan.has(e.l.period||e.l.mesLabel));
+  if(!nuevas.length){
+    alert(`Se encontraron ${encontradas.length} liquidación(es) en el respaldo local, pero ya están todas en el historial.`);
+    return 0;
+  }
+  const lista=nuevas.map(e=>'• '+(e.l.mesLabel||e.l.period)).join('\n');
+  if(!confirm(`Se encontraron estas liquidaciones en el respaldo de este navegador:\n\n${lista}\n\n¿Restaurarlas al historial?`)) return 0;
+  if(!YER.liqHistory) YER.liqHistory=[];
+  nuevas.forEach(e=>YER.liqHistory.push(e.l));
+  YER.liqHistory.sort((a,b)=>(a.period||'').localeCompare(b.period||''));
+  YER._sinConexion=false;
+  const ok=await saveYER();
+  renderTab();
+  alert(ok?`Se restauraron ${nuevas.length} liquidación(es) y se guardaron en la nube.`
+          :`Se restauraron ${nuevas.length} liquidación(es) en pantalla, pero NO se pudieron guardar en la nube. No cierres el navegador y reintentá con el botón del cartel rojo.`);
+  return nuevas.length;
+}
+window.recuperarLiquidaciones=recuperarLiquidaciones;
 
 // Refresca Firebase en background (sin await) y actualiza caché si cambió
 function _fbRefresh(fk){
@@ -431,6 +479,83 @@ function _fbRefresh(fk){
   }).catch(()=>{});
 }
 
+// ── COLA DE SINCRONIZACIÓN ───────────────────────────────────
+// Todo lo que no llega a la nube queda encolado en el navegador (sin
+// vencimiento) y se reintenta solo. El indicador de abajo a la derecha
+// muestra siempre si hay algo pendiente, y permite forzar el envío.
+let _syncQueue={}, _syncing=false, _syncInit=false;
+const _syncLS=()=>'_sync:cr'+CURRENT_CR;
+
+function syncLoad(){
+  try{ _syncQueue=JSON.parse(localStorage.getItem(_syncLS())||'{}')||{}; }catch(e){ _syncQueue={}; }
+  _syncInit=true;
+  syncBadge();
+  if(syncPend()) sincronizar(false);
+}
+function syncPersist(){
+  try{ localStorage.setItem(_syncLS(), JSON.stringify(_syncQueue)); }
+  catch(e){ console.warn('No se pudo persistir la cola de sincronización (espacio lleno)'); }
+}
+function syncPend(){ return Object.keys(_syncQueue).length; }
+function syncEncolar(fk,v){ _syncQueue[fk]=v; syncPersist(); syncBadge(); }
+function syncQuitar(fk){ if(_syncQueue[fk]!==undefined){ delete _syncQueue[fk]; syncPersist(); syncBadge(); } }
+
+async function sincronizar(manual){
+  if(_syncing) return false;
+  const keys=Object.keys(_syncQueue);
+  if(!keys.length){ syncBadge(); if(manual) toast('Todo sincronizado ✓'); return true; }
+  _syncing=true; syncBadge();
+  let ok=true;
+  try{
+    const db=await getDB();
+    for(const fk of keys){
+      try{
+        await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:_syncQueue[fk],k:fk,updatedAt:Date.now()});
+        delete _syncQueue[fk];
+      }catch(e){ ok=false; console.warn('sync pendiente',fk,e.message?.slice(0,70)); }
+    }
+  }catch(e){ ok=false; }
+  _syncing=false; syncPersist(); syncBadge();
+  if(manual){
+    alert(ok?'Listo: todo quedó guardado en la nube.'
+            :'Todavía no se pudo guardar en la nube. Revisá la conexión y reintentá — mientras tanto los cambios siguen guardados en este navegador.');
+  }
+  return ok;
+}
+window.sincronizar=sincronizar;
+
+function syncBadge(){
+  let b=document.getElementById('sync-badge');
+  if(!b){
+    b=document.createElement('div');
+    b.id='sync-badge';
+    b.style.cssText='position:fixed;right:14px;bottom:14px;z-index:9998;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;display:flex;gap:10px;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,.18);font-family:inherit;';
+    document.body.appendChild(b);
+  }
+  const n=syncPend();
+  if(_syncing){
+    b.style.background='#3D1F6E'; b.style.color='#fff';
+    b.innerHTML='<span>⟳ Sincronizando…</span>';
+  } else if(n){
+    b.style.background='#B3261E'; b.style.color='#fff';
+    b.innerHTML=`<span>⚠️ ${n} cambio${n>1?'s':''} sin guardar en la nube</span>
+      <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`;
+  } else {
+    b.style.background='#E8FFF0'; b.style.color='#1B6B35';
+    b.style.border='1px solid #A6E9C1';
+    b.innerHTML='<span title="Todos los cambios están guardados en la nube">✓ Guardado en la nube</span>';
+  }
+}
+window.syncBadge=syncBadge;
+
+// Reintento automático: cada 30 s y cuando vuelve la conexión
+setInterval(()=>{ if(_syncInit&&syncPend()&&!_syncing) sincronizar(false); },30000);
+window.addEventListener('online',()=>{ if(_syncInit&&syncPend()) sincronizar(false); });
+// Avisar si se intenta cerrar con cambios sin subir
+window.addEventListener('beforeunload',e=>{
+  if(syncPend()){ e.preventDefault(); e.returnValue=''; return ''; }
+});
+
 async function sSet(k,v,sh=true){
   const fk=fullKey(k);
   _cache[fk]=v;
@@ -438,8 +563,11 @@ async function sSet(k,v,sh=true){
   try{
     const db=await getDB();
     await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v,k:fk,updatedAt:Date.now()});
+    syncQuitar(fk); // si estaba pendiente, ya está al día
   }catch(e){
-    console.warn('sSet Firebase error (guardado en localStorage)',fk,e.message?.slice(0,50));
+    console.warn('sSet Firebase error (queda en la cola)',fk,e.message?.slice(0,80));
+    syncEncolar(fk,v); // se reintenta solo y el indicador lo muestra
+    return false;
   }
   return true;
 }
@@ -781,6 +909,7 @@ function attachLogin(){
     if(dep&&dep.password===p){
       CURRENT_CR=dep.cr;
       _cache={}; // limpiar cache en memoria
+      syncLoad();  // recuperar cambios que quedaron sin subir
       // Limpiar localStorage — las claves se guardan como "_ttl:crXXXX:..."
       Object.keys(localStorage).forEach(k=>{
         // Eliminar cualquier clave que NO pertenezca al CR actual
@@ -2972,6 +3101,8 @@ async function loadYER(){
     liqHistory: [], validaciones: {}
   };
 
+  _sGetFallo=false;
+  YER._sinConexion=false;
   try{
     // Timeout de 8 segundos para evitar que se cuelgue
     const withTimeout=(p,ms)=>Promise.race([p, new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),ms))]);
@@ -2994,6 +3125,13 @@ async function loadYER(){
     }
   }catch(e){
     console.warn('loadYER error (usando defaults):', e.message);
+    _sGetFallo=true;
+  }
+  if(_sGetFallo){
+    // No se pudo leer la nube: marcar el estado como NO confiable para que
+    // saveYER no reemplace las liquidaciones guardadas por una lista vacía.
+    YER._sinConexion=true;
+    avisoGuardado('No se pudieron leer los datos de la nube. No cargues ni liquides hasta que vuelva la conexión: lo que hagas ahora podría no guardarse.');
   }
 
   // Garantizar estructura mínima
@@ -3071,10 +3209,73 @@ async function autoResetYER3611(){
     console.warn('autoResetYER3611: se reintentará en el próximo login:',e.message);
   }
 }
+// Firestore rechaza documentos de más de 1 MiB. Un snapshot de un mes con
+// ~1800 despachos pesa ~590 KB, así que el documento yer:<mes> con una sola
+// liquicación adentro ya superaba el límite: el guardado fallaba en la nube y
+// solo quedaba en localStorage (que caduca), y la liquidación "desaparecía".
+// Ahora cada snapshot va en su propio documento yer:snap:<período>.
+const YER_DOC_MAX = 900*1024; // margen bajo el límite de 1 MiB
+
 async function saveYER(){
-  await sSet('yer:'+CP, JSON.stringify(YER), true);
-  await sSet('yer:pcts', JSON.stringify(YER.pcts), true);
+  if(YER._sinConexion && !(YER.liqHistory||[]).length){
+    // El estado actual vino de una lectura fallida — guardar ahora borraría
+    // el historial real que está en la nube.
+    avisoGuardado('Guardado cancelado: no se pudo leer la nube y guardar ahora borraría el historial. Recargá la página cuando tengas conexión.');
+    return false;
+  }
+  // Sacar los snapshots del documento principal y guardarlos aparte
+  const pendientes=[];
+  (YER.liqHistory||[]).forEach(l=>{
+    if(l && l.snapshot){
+      const key='yer:snap:'+(l.period||l.mesLabel||'');
+      pendientes.push({key, data:slimSnapshot(l.snapshot)});
+      l.snapKey=key;
+      delete l.snapshot; // no viaja dentro del doc principal
+    }
+  });
+  let ok=true;
+  for(const p of pendientes){
+    if(!await sSet(p.key, JSON.stringify(p.data), true)) ok=false;
+  }
+  const payload=JSON.stringify(YER);
+  if(payload.length>YER_DOC_MAX){
+    avisoGuardado(`El período tiene demasiados datos para guardarse en la nube (${Math.round(payload.length/1024)} KB). Avisale al administrador antes de cerrar el navegador.`);
+    ok=false;
+  }
+  if(!await sSet('yer:'+CP, payload, true)) ok=false;
+  if(!await sSet('yer:pcts', JSON.stringify(YER.pcts), true)) ok=false;
+  return ok; // si algo falló ya quedó en la cola y lo muestra el indicador
 }
+
+// Deja el snapshot con lo mínimo necesario para reconstruir el detalle
+function slimSnapshot(s){
+  const campoRow=r=>({remito:r.remito,fecha:r.fecha,desc:r.desc,litros:r.litros,total:r.total,
+    motivo:r.motivo,combustKey:r.combustKey,precio:r.precio,pct:r.pct,comxLt:r.comxLt,totalCom:r.totalCom});
+  const campoEv=r=>({remito:r.remito,remitoNorm:r.remitoNorm,fecha:r.fecha,pvp:r.pvp,totalYer:r.totalYer});
+  return {
+    rows:(s.rows||[]).map(campoRow),
+    evRows:(s.evRows||[]).map(campoEv),
+    ventasFile:s.ventasFile?{fileName:s.ventasFile.fileName,size:s.ventasFile.size}:null,
+    everilioFile:s.everilioFile?{fileName:s.everilioFile.fileName,size:s.everilioFile.size}:null,
+    validaciones:s.validaciones||{}
+  };
+}
+
+// Cartel visible cuando un guardado no llega a la nube (antes solo se veía
+// en la consola del navegador y pasaba desapercibido)
+function avisoGuardado(msg){
+  let b=document.getElementById('aviso-guardado');
+  if(!b){
+    b=document.createElement('div');
+    b.id='aviso-guardado';
+    b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#B3261E;color:#fff;padding:12px 18px;font-size:13px;font-weight:700;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;box-shadow:0 -4px 16px rgba(0,0,0,.25);';
+    document.body.appendChild(b);
+  }
+  b.innerHTML=`<span>⚠️ ${esc(msg)}</span>
+    <button onclick="saveYER().then(ok=>{if(ok)document.getElementById('aviso-guardado')?.remove();})" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer;">Reintentar</button>
+    <button onclick="document.getElementById('aviso-guardado')?.remove()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">Cerrar</button>`;
+}
+window.avisoGuardado=avisoGuardado;
 
 function parseArg(v){
   if(v===null||v===undefined||v==='') return 0;
@@ -3310,10 +3511,14 @@ function renderYERHistorial(){
     <div style="font-size:28px;margin-bottom:10px;">📋</div>
     <div style="font-size:14px;font-weight:700;">Sin liquidaciones registradas</div>
     <div style="font-size:12px;margin-top:6px;">Cargá un período anterior con el botón 📅 Cargar período anterior</div>
+    <button onclick="recuperarLiquidaciones()" style="margin-top:14px;background:var(--p);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">🔎 Buscar liquidaciones en este navegador</button>
   </div>`;
 
   const th=`padding:9px 12px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:left;`;
   const fmtLt=v=>v!=null?new Intl.NumberFormat('es-AR').format(Math.round(v))+' Lt':'—';
+  const barraRecuperar=`<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <button onclick="recuperarLiquidaciones()" title="Busca liquidaciones guardadas en el respaldo local de este navegador" style="background:#fff;color:var(--p);border:1px solid var(--b);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">🔎 ¿Falta alguna? Buscar en este navegador</button>
+  </div>`;
 
   const rows=liqHistory.map((liq,i)=>{
     const bg=i%2===0?'#FEFEFE':'#F8F5FB';
@@ -3338,7 +3543,7 @@ function renderYERHistorial(){
     </tr>`;
   }).join('');
 
-  return`<div style="overflow-x:auto;border-radius:10px;border:1px solid var(--b);">
+  return barraRecuperar+`<div style="overflow-x:auto;border-radius:10px;border:1px solid var(--b);">
     <table style="border-collapse:collapse;width:100%;min-width:700px;">
       <thead><tr>
         <th style="${th}">Período</th>
@@ -4010,9 +4215,17 @@ function buildLiqContent(liq){
   </div>`;
 }
 
-function yerHistorialVer(idx){
+async function yerHistorialVer(idx){
   const liq=(YER.liqHistory||[])[idx];
   if(!liq){toast('No se encontró la liquidación');return;}
+  // El snapshot vive en su propio documento (yer:snap:<período>) para no
+  // hacer explotar el límite de tamaño del documento del mes.
+  if(!liq.snapshot && liq.snapKey){
+    try{
+      const raw=await sGet(liq.snapKey,true);
+      if(raw) liq.snapshot=typeof raw==='string'?JSON.parse(raw):raw;
+    }catch(e){ console.warn('No se pudo cargar el snapshot',liq.snapKey,e.message); }
+  }
   // Guardar estado actual de Junio como backup
   YER._backup={
     rows:JSON.parse(JSON.stringify(YER.rows||[])),
@@ -4041,8 +4254,8 @@ function yerHistorialVer(idx){
 }
 
 // Imprimir una liquidación directo desde la lista del historial
-function yerHistorialImprimir(idx){
-  yerHistorialVer(idx);
+async function yerHistorialImprimir(idx){
+  await yerHistorialVer(idx);
   yerSub='liq-resumen';
   renderTab();
   setTimeout(()=>imprimirLiqYER(true),350);
