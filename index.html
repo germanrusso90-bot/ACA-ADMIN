@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v3.1 — 20/08/2026 (detalle de Solo Ventas y Dif. monto)';
+const APP_VERSION='v3.2 — 21/08/2026 (imprimir liquidación desde historial)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -3331,6 +3331,7 @@ function renderYERHistorial(){
       <td style="padding:9px 12px;border:1px solid #E8E4F0;text-align:center;">
         <div style="display:flex;gap:6px;justify-content:center;">
           <button onclick="yerHistorialVer(${i})" style="background:var(--yl);color:var(--pd);border:1px solid var(--y2);border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">👁 Ver</button>
+          <button onclick="yerHistorialImprimir(${i})" title="Imprimir la hoja de liquidación" style="background:var(--p);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">🖨</button>
           <button onclick="yerHistorialDel(${i})" style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
         </div>
       </td>
@@ -3456,8 +3457,12 @@ function renderYER(){
 
     const banner=`<div style="background:#FFF8E1;border:2px solid #F5C842;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
       <span style="font-size:13px;font-weight:700;color:#7B5800;">👁 Viendo liquidación: <strong>${esc(liq.mesLabel||liq.period||'')}</strong></span>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button onclick="YER._viewingLiq=null;YER._editingLiq=null;if(YER._backup){YER.rows=YER._backup.rows;YER.evRows=YER._backup.evRows;YER.ventasFile=YER._backup.ventasFile;YER.everilioFile=YER._backup.everilioFile;YER.validaciones=YER._backup.validaciones;YER._backup=null;}yerSub='diferencias';renderTab();"
-        style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;">← Volver</button>
+        style="background:#fff;color:var(--p);border:2px solid var(--p);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;">← Volver</button>
+      <button onclick="imprimirLiqYER()" title="Imprimir la hoja de liquidación"
+        style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;">🖨 Imprimir liquidación</button>
+      </span>
     </div>`;
 
     if(snapshotEsCorrecto){
@@ -4035,6 +4040,15 @@ function yerHistorialVer(idx){
   renderTab();
 }
 
+// Imprimir una liquidación directo desde la lista del historial
+function yerHistorialImprimir(idx){
+  yerHistorialVer(idx);
+  yerSub='liq-resumen';
+  renderTab();
+  setTimeout(()=>imprimirLiqYER(true),350);
+}
+window.yerHistorialImprimir=yerHistorialImprimir;
+
 async function yerHistorialDel(idx){
   const liq=(YER.liqHistory||[])[idx];
   if(!liq)return;
@@ -4235,6 +4249,42 @@ el.querySelectorAll('[data-liq-del]').forEach(btn=>{
   });
 });
 }
+
+// Imprime la hoja de liquidación (desde "LIQUIDACIÓN YER POR PORCENTAJE"
+// hacia abajo). Usa un iframe oculto en vez de window.open, que los
+// bloqueadores de pop-ups suelen frenar sin avisar.
+function imprimirLiqYER(_reintento){
+  const src=document.getElementById('yer-liq-printable');
+  if(!src){
+    // La hoja vive en la solapa del resumen: si el usuario está en otra
+    // solapa, cambiar a ella y reintentar una sola vez.
+    if(!_reintento && YER._viewingLiq!=null){
+      yerSub='liq-resumen'; renderTab();
+      setTimeout(()=>imprimirLiqYER(true),300);
+      return;
+    }
+    alert('No hay una liquidación en pantalla para imprimir. Abrila desde el historial con el botón "Ver".');
+    return;
+  }
+  const cont=src.cloneNode(true);
+  cont.querySelectorAll('.no-print,button,input,select,textarea').forEach(n=>n.remove());
+  const titulo=(_liqVista&&_liqVista.mesLabel)||'';
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Liquidacion YER ${esc(titulo)}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;color:#1a1a1a;}
+      table{width:100%;border-collapse:collapse;}
+      th,td{padding:6px 10px;}
+      .no-print{display:none!important;}
+      @media print{@page{size:portrait;margin:10mm}}
+    </style></head><body>${cont.innerHTML}</body></html>`;
+  const f=document.createElement('iframe');
+  f.style.cssText='position:fixed;width:0;height:0;border:0;top:-1000px;';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(()=>{ f.contentWindow.focus(); f.contentWindow.print(); setTimeout(()=>f.remove(),2000); },300);
+}
+window.imprimirLiqYER=imprimirLiqYER;
 
 // Snapshot de la liquidación que se está viendo (lo setea buildLiqContent)
 let _liqVista=null;
