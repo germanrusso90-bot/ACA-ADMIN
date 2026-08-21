@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v3.4 — 21/08/2026 (cola de sincronización)';
+const APP_VERSION='v3.5 — 21/08/2026 (fix migración Unidad Servicial)';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
@@ -754,10 +754,17 @@ async function loadPeriod(p){
       }
       // Migrar us (datos históricos de Unidad Servicial)
       // Para cada ítem de US, traer las filas del mes anterior que estén locked
-      const usKeys=['electricidad','aguas','telefono','dpa','canon'];
+      // La lista se deriva de US_ITEMS: antes estaba escrita a mano e incluía
+      // 'electricidad', clave que NO existe (la real es 'energia'), así que
+      // Energía Eléctrica nunca se migraba al cambiar de mes y sus datos
+      // desaparecían del historial.
+      const usKeys=US_ITEMS.map(it=>it.key);
       for(const k of usKeys){
         if(prevPD.us&&prevPD.us[k]){
-          const prevRows=prevPD.us[k].filter(r=>r.locked);
+          // Migrar toda fila con contenido, no solo las bloqueadas: una fila
+          // cargada y sin confirmar también se perdía en el cambio de mes.
+          const prevRows=prevPD.us[k].filter(r=>r&&(r.locked||r.importe!=null||r.iva!=null||
+            (r.nroFacturaACA&&r.nroFacturaACA.trim())||r.facturaServicio||r.fecha));
           if(prevRows.length>0&&PD.us[k]){
             const existing=new Set(PD.us[k].map(r=>r.period));
             prevRows.forEach(r=>{if(!existing.has(r.period))PD.us[k].push({...r});});
@@ -1016,7 +1023,10 @@ function activateSearch(inputId, rowSelector, countId){
 // ── TAB: UNIDAD SERVICIAL — grilla ───────────────────────────
 function renderUSGrid(){
   const el=document.getElementById('tab-content');
-  let html=`<p style="font-size:13px;color:var(--m2);padding:4px 0 12px;">Hacé click en un ítem para ver el historial y cargar el recupero del mes.</p>
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:4px 0 12px;">
+    <p style="font-size:13px;color:var(--m2);margin:0;">Hacé click en un ítem para ver el historial y cargar el recupero del mes.</p>
+    <button onclick="recuperarUS()" title="Busca datos cargados en meses anteriores que no aparezcan en el historial" style="background:#fff;color:var(--p);border:1px solid var(--b);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">🔎 ¿Faltan meses? Recuperar</button>
+  </div>
   <div class="us-grid">`;
   US_ITEMS.forEach(it=>{
     const done=isUSDone(it.key);
@@ -1123,6 +1133,54 @@ const REAL_DATA = {
   ],
   canon:[]
 };
+// ── RECUPERACIÓN DE MESES ANTERIORES (Unidad Servicial) ──────
+// Recorre los documentos de meses previos y trae las filas de US que falten
+// en el período actual. Sirve para recuperar lo cargado antes de que se
+// arreglara la migración. No pisa nada: solo agrega lo que falta.
+async function recuperarUS(){
+  const meses=[];
+  let p=CP;
+  for(let i=0;i<18;i++){ p=prevMonth(p); meses.push(p); }
+  const encontrados=[];
+  for(const mes of meses){
+    let prevPD=null;
+    try{
+      const raw=await sGet('data:'+mes,true);
+      if(!raw) continue;
+      prevPD=mergeDef(typeof raw==='string'?JSON.parse(raw):raw);
+    }catch(e){ continue; }
+    for(const it of US_ITEMS){
+      const filas=(prevPD.us&&prevPD.us[it.key])||[];
+      for(const r of filas){
+        if(!r||!r.period) continue;
+        const tieneDatos=r.importe!=null||r.iva!=null||(r.nroFacturaACA&&r.nroFacturaACA.trim())||r.facturaServicio;
+        if(!tieneDatos) continue;
+        const actual=(PD.us[it.key]||[]).find(x=>x.period===r.period);
+        const actualVacio=!actual||(actual.importe==null&&actual.iva==null&&!(actual.nroFacturaACA||'').trim());
+        if(actualVacio) encontrados.push({key:it.key,label:it.label,row:r,origen:mes});
+      }
+    }
+  }
+  // Quedarse con la versión más reciente de cada ítem+período
+  const mejor={};
+  encontrados.forEach(e=>{ const id=e.key+'|'+e.row.period; if(!mejor[id]||e.origen>mejor[id].origen) mejor[id]=e; });
+  const lista=Object.values(mejor);
+  if(!lista.length){ alert('No se encontraron datos de Unidad Servicial en los meses anteriores.'); return 0; }
+  const detalle=lista.map(e=>`• ${e.label} — ${periodLabel(e.row.period)}${e.row.importe!=null?' ($ '+fmtArg(e.row.importe)+')':''}`).join('\n');
+  if(!confirm(`Se encontraron estos datos en meses anteriores:\n\n${detalle}\n\n¿Incorporarlos al historial actual?`)) return 0;
+  lista.forEach(e=>{
+    if(!PD.us[e.key]) PD.us[e.key]=[];
+    const i=PD.us[e.key].findIndex(x=>x.period===e.row.period);
+    if(i>=0) PD.us[e.key][i]={...e.row}; else PD.us[e.key].push({...e.row});
+    PD.us[e.key].sort((a,b)=>(a.period||'').localeCompare(b.period||''));
+  });
+  await saveP();
+  renderTab();
+  alert(`Se recuperaron ${lista.length} registro(s).`);
+  return lista.length;
+}
+window.recuperarUS=recuperarUS;
+
 function ensureDemoData(usKey){
   const existingByPeriod={};
   PD.us[usKey].forEach(r=>{ existingByPeriod[r.period]=r; });
