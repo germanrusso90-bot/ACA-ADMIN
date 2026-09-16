@@ -249,28 +249,28 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v3.5 — 21/08/2026 (fix migración Unidad Servicial)';
+const APP_VERSION='v4.2 — revisión 16/09/2026 · pendiente de activación';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
-  {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    password:'Grusso1',    role:'empleado'},
-  {cr:'3611', nombre:'Col. 25 de Mayo',   usuario:'Ffiorella1', password:'Ffiorella1', role:'empleado'},
-  {cr:'9954', nombre:'Zapala',            usuario:'Idiego1',    password:'Idiego1',    role:'empleado'},
-  {cr:'3492', nombre:'Chos Malal',        usuario:'Bkelly1',    password:'Bkelly1',    role:'empleado'},
-  {cr:'3468', nombre:'Choele-Choel',      usuario:'Odalma1',    password:'Odalma1',    role:'empleado'},
-  {cr:'8460', nombre:'S.M. de los Andes', usuario:'Malena1',   password:'Malena1',    role:'empleado'},
-  {cr:'4502', nombre:'El Bolson',         usuario:'Gludmila1',  password:'Gludmila1',  role:'empleado'},
-  {cr:'6785', nombre:'Neuquen',           usuario:'Tmatias1',   password:'Tmatias1',   role:'empleado'},
-  {cr:'9482', nombre:'V. La Angostura',   usuario:'Celiana1',   password:'Celiana1',   role:'empleado'},
-  {cr:'3255', nombre:'Caleu Caleu',       usuario:'Odalma1',    password:'Odalma1',    role:'empleado'},
-  {cr:'6092', nombre:'Los Menucos',       usuario:'Qlaureana1', password:'Qlaureana1', role:'empleado'},
-  {cr:'8591', nombre:'Sta.Rosa-Estacion', usuario:'Lgerman1',   password:'Lgerman1',   role:'empleado'},
-  {cr:'8605', nombre:'Sta. Rosa',         usuario:'Tmatias1',   password:'Tmatias1',   role:'empleado'},
-  {cr:'5967', nombre:'L. Mascardi',       usuario:'Luis1',      password:'Luis1',      role:'empleado'},
-  {cr:'2402', nombre:'Divisional',        usuario:'Falberto1',  password:'Falberto1',  role:'divisional'},
+  {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
+  {cr:'3611', nombre:'Col. 25 de Mayo',   usuario:'Ffiorella1', role:'empleado'},
+  {cr:'9954', nombre:'Zapala',            usuario:'Idiego1',    role:'empleado'},
+  {cr:'3492', nombre:'Chos Malal',        usuario:'Bkelly1',    role:'empleado'},
+  {cr:'3468', nombre:'Choele-Choel',      usuario:'Odalma1',    role:'empleado'},
+  {cr:'8460', nombre:'S.M. de los Andes', usuario:'Malena1',    role:'empleado'},
+  {cr:'4502', nombre:'El Bolson',         usuario:'Gludmila1',  role:'empleado'},
+  {cr:'6785', nombre:'Neuquen',           usuario:'Tmatias1',   role:'empleado'},
+  {cr:'9482', nombre:'V. La Angostura',   usuario:'Celiana1',   role:'empleado'},
+  {cr:'3255', nombre:'Caleu Caleu',       usuario:'Odalma1',    role:'empleado'},
+  {cr:'6092', nombre:'Los Menucos',       usuario:'Qlaureana1', role:'empleado'},
+  {cr:'8591', nombre:'Sta.Rosa-Estacion', usuario:'Lgerman1',   role:'empleado'},
+  {cr:'8605', nombre:'Sta. Rosa',         usuario:'Tmatias1',   role:'empleado'},
+  {cr:'5967', nombre:'L. Mascardi',       usuario:'Luis1',      role:'empleado'},
+  {cr:'2402', nombre:'Divisional',        usuario:'Falberto1',  role:'divisional'},
 ];
 // Mantener USERS para compatibilidad con admin
 const USERS={
-  admin:{password:'ACAadmin2026',name:'Administrador',role:'admin',cr:'0000'}
+  admin:{name:'Administrador',role:'admin',cr:'0000'}
 };
 // Clave de Firebase varía según CR — datos totalmente separados por dependencia
 let CURRENT_CR='3531'; // se actualiza al hacer login
@@ -295,6 +295,7 @@ const VARIOS_ITEMS=[
 ];
 const DOC_TYPES=['Factura','Nota de Crédito','Nota de Débito'];
 const MAX_FILE=3.5*1024*1024;
+const MAX_YER_FILE=25*1024*1024; // Los originales reales superan 11 MB.
 
 // ── STORAGE ───────────────────────────────────────────────────
 // ── FIREBASE ──────────────────────────────────────────────────
@@ -307,9 +308,9 @@ async function getDB(){
     const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('Firebase timeout')),5000));
     const connect=async()=>{
       const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-      const {getFirestore,doc,getDoc,setDoc,deleteDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const {getFirestore,doc,getDoc,setDoc,deleteDoc,collection,getDocs,writeBatch,runTransaction}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
       const app=getApps().length?getApps()[0]:initializeApp(firebaseConfig);
-      _db={fs:getFirestore(app),doc,getDoc,setDoc,deleteDoc};
+      _db=wrapDB({fs:getFirestore(app),doc,getDoc,setDoc,deleteDoc,collection,getDocs,writeBatch,runTransaction});
       return _db;
     };
     return await Promise.race([connect(),timeout]);
@@ -332,7 +333,7 @@ function lsGet(key){
     const raw=localStorage.getItem('_ttl:'+key);
     if(!raw)return null;
     const{v,ts,ttl}=JSON.parse(raw);
-    if(Date.now()-ts>ttl)return null; // expirado
+    // El respaldo no se descarta por vencimiento; la lectura remota decide vigencia.
     return v;
   }catch(e){return null;}
 }
@@ -352,9 +353,11 @@ function getTTL(key){
 }
 
 function fullKey(k){
-  const globalKeys=['yer:pcts','canon:litros'];
-  return globalKeys.includes(k)||k.startsWith('check:')||k.startsWith('file:')?`cr${CURRENT_CR}:${k}`:
-    k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
+  const fk=/^cr\d{4}:/.test(k)?k:`cr${CURRENT_CR}:${k}`;
+  // El titular confirmó: en CR 3611 solo YER es válido. Los demás
+  // documentos antiguos quedan intactos; la operación nueva usa otras claves.
+  if(/^cr3611:(?:data:|file:(?!yer:)|check:|canon:litros$|periodos$)/.test(fk))return fk.replace('cr3611:','cr3611:operativo-v2:');
+  return fk;
 }
 
 async function sGet(k,sh=true){
@@ -363,11 +366,7 @@ async function sGet(k,sh=true){
   if(_cache[fk]!==undefined)return _cache[fk];
   // 2. localStorage con TTL
   const lv=lsGet(fk);
-  if(lv!==null){
-    _cache[fk]=lv;
-    _fbRefresh(fk);
-    return lv;
-  }
+  if(Object.prototype.hasOwnProperty.call(_syncQueue,fk)){_cache[fk]=_syncQueue[fk];return _syncQueue[fk];}
   // 3. Firebase con clave nueva (con prefijo cr3531:)
   // _fbOk distingue "consulté y no existe" de "no pude consultar".
   // Cachear un null por error de red hacía que loadYER creyera que el mes
@@ -389,7 +388,9 @@ async function sGet(k,sh=true){
     }
   }catch(e){
     console.warn('sGet error',fk,e.message?.slice(0,40));
-    _sGetFallo=true; // lo consulta loadYER para no pisar datos
+    _sGetFallo=true;
+    if(lv!==null){_cache[fk]=lv;return lv;}
+    throw new Error('No se pudo leer '+fk+'. Se bloqueó la carga para evitar reemplazar datos existentes.');
   }
 
   // 4. Fallback: buscar claves VIEJAS (solo para CR 3531 que tenía datos sin prefijo)
@@ -411,12 +412,6 @@ async function sGet(k,sh=true){
         console.log(`✅ Migración automática: "${oldKey}" → "${fk}"`);
         _cache[fk]=val;
         lsSet(fk,val,getTTL(fk));
-        // Guardar con clave nueva y borrar la vieja en background
-        getDB().then(async db=>{
-          await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:val,k:fk,updatedAt:Date.now()});
-          await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
-          console.log(`✅ Clave migrada y vieja eliminada: ${oldKey}`);
-        }).catch(e=>console.warn('Error migrando clave',e));
         return val;
       }
     }catch(e){console.warn('sGet fallback error para',oldKey,e.message?.slice(0,40));}
@@ -484,7 +479,7 @@ function _fbRefresh(fk){
 // vencimiento) y se reintenta solo. El indicador de abajo a la derecha
 // muestra siempre si hay algo pendiente, y permite forzar el envío.
 let _syncQueue={}, _syncing=false, _syncInit=false;
-const _syncLS=()=>'_sync:cr'+CURRENT_CR;
+const _syncLS=()=>'_sync:v4:cr'+CURRENT_CR; // Las colas antiguas se conservan para revisión manual.
 
 function syncLoad(){
   try{ _syncQueue=JSON.parse(localStorage.getItem(_syncLS())||'{}')||{}; }catch(e){ _syncQueue={}; }
@@ -494,7 +489,7 @@ function syncLoad(){
 }
 function syncPersist(){
   try{ localStorage.setItem(_syncLS(), JSON.stringify(_syncQueue)); }
-  catch(e){ console.warn('No se pudo persistir la cola de sincronización (espacio lleno)'); }
+  catch(e){alert('El navegador no pudo guardar el respaldo local. No cierres esta ventana hasta confirmar la sincronización.');}
 }
 function syncPend(){ return Object.keys(_syncQueue).length; }
 function syncEncolar(fk,v){ _syncQueue[fk]=v; syncPersist(); syncBadge(); }
@@ -510,8 +505,9 @@ async function sincronizar(manual){
     const db=await getDB();
     for(const fk of keys){
       try{
-        await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:_syncQueue[fk],k:fk,updatedAt:Date.now()});
-        delete _syncQueue[fk];
+        const value=_syncQueue[fk];
+        await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:value,k:fk,updatedAt:Date.now()});
+        if(_syncQueue[fk]===value)delete _syncQueue[fk];
       }catch(e){ ok=false; console.warn('sync pendiente',fk,e.message?.slice(0,70)); }
     }
   }catch(e){ ok=false; }
@@ -559,11 +555,12 @@ window.addEventListener('beforeunload',e=>{
 async function sSet(k,v,sh=true){
   const fk=fullKey(k);
   _cache[fk]=v;
-  lsSet(fk,v,getTTL(fk)); // guardar en localStorage inmediatamente
+  lsSet(fk,v,getTTL(fk));
+  syncEncolar(fk,v); // Antes de iniciar la escritura remota
   try{
     const db=await getDB();
     await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v,k:fk,updatedAt:Date.now()});
-    syncQuitar(fk); // si estaba pendiente, ya está al día
+    if(_syncQueue[fk]===v)syncQuitar(fk);
   }catch(e){
     console.warn('sSet Firebase error (queda en la cola)',fk,e.message?.slice(0,80));
     syncEncolar(fk,v); // se reintenta solo y el indicador lo muestra
@@ -571,15 +568,7 @@ async function sSet(k,v,sh=true){
   }
   return true;
 }
-async function sDel(k,sh=true){
-  const fk=k.startsWith('cr')?k:`cr${CURRENT_CR}:${k}`;
-  delete _cache[fk];
-  lsDel(fk);
-  try{
-    const db=await getDB();
-    await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(fk)));
-  }catch(e){console.warn('sDel error',fk);}
-}
+async function sDel(k){if(!await sSet(k,null))throw Error('No se pudo archivar el registro. Se conserva el original.');}
 function encodeKey(k){
   // Firestore no acepta / en IDs de documento
   return k.replace(/\//g,'__').replace(/:/g,'--');
@@ -622,10 +611,10 @@ function mergeDef(data){
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
-function esc(s){const d=document.createElement('div');d.textContent=(s===null||s===undefined)?'':String(s);return d.innerHTML;}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmt(n){if(n===null||n===undefined||isNaN(n))return '—';return new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);}
 function fmtM(n){return n!==null&&n!==undefined&&!isNaN(n)?'$ '+fmt(n):'—';}
-function pN(v){const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;}
+function pN(v){if(v==null||String(v).trim()==='')return null;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:null;}
 function calcRec(row){
   const i=row.importe||0,v=row.iva||0,p=row.percepciones||0,it=row.intereses||0;
   if(row.importe===null&&row.iva===null&&row.percepciones===null&&row.intereses===null)return null;
@@ -672,37 +661,7 @@ async function diagFirebase(){
   }catch(e){alert('Error: '+e.message);}
 }
 
-async function migrarClavesViejas(viejas,db){
-  let ok=0,err=0;
-  showLoad(true);
-  for(const item of viejas){
-    try{
-      const oldKey=item.k;
-      const newKey=`cr${CURRENT_CR}:${oldKey}`;
-      // Leer valor original
-      const snap=await db.getDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
-      if(!snap.exists())continue;
-      const val=snap.data().v;
-      // Guardar con clave nueva
-      await db.setDoc(db.doc(db.fs,'kv',encodeKey(newKey)),{v:val,k:newKey,updatedAt:Date.now()});
-      // Borrar clave vieja
-      await db.deleteDoc(db.doc(db.fs,'kv',encodeKey(oldKey)));
-      // Actualizar caché
-      _cache[newKey]=val;
-      lsSet(newKey,val,getTTL(newKey));
-      console.log(`Migrado: ${oldKey} → ${newKey}`);
-      ok++;
-    }catch(e){console.warn('Error migrando',item.k,e);err++;}
-  }
-  showLoad(false);
-  // Recargar datos
-  _cache={};
-  await loadPeriod(CP);
-  await loadYER();
-  render();
-  alert(`Migración completa ✓\n${ok} claves migradas${err>0?`\n${err} errores`:''}\n\nLos datos del historial ahora deberían aparecer.`);
-}
-
+async function migrarClavesViejas(){alert('Migración automática deshabilitada. Las claves antiguas siguen disponibles en modo lectura.');}
 
 async function loadPeriod(p){
   const raw=await sGet('data:'+p,true);
@@ -772,19 +731,19 @@ async function loadPeriod(p){
         }
       }
       // Guardar el PD migrado para que no tenga que migrar cada vez
-      await saveP();
+      // La copia histórica se guarda solo con una edición explícita.
     }
   }
 }
 async function saveP(){
-  // Guardar en la clave del período actual
-  await sSet('data:'+CP,JSON.stringify(PD),true);
+  if(!await sSet('data:'+CP,JSON.stringify(PD),true))throw Error('Los cambios no están confirmados en la nube. Conservá esta ventana abierta.');
+  if(!APS.includes(CP)){APS.push(CP);APS.sort();if(!await sSet('periodos',JSON.stringify(APS)))throw Error('Índice de períodos pendiente de sincronizar.');}
 }
 async function savePeriod(p,data){
   // Guardar datos de un período específico (para preservar historial al cambiar de mes)
   await sSet('data:'+p,JSON.stringify(data),true);
 }
-function saveD(){clearTimeout(stimer);stimer=setTimeout(()=>saveP(),600);}
+function saveD(){return saveP();}
 
 // ── EXCEL VENTAS ─────────────────────────────────────────────
 function parseVentas(ab){
@@ -821,7 +780,7 @@ function parseVentas(ab){
     }
   }
   if(!found)return null;
-  return{totalVentas:tot,cigarrillos:cig,base:tot-cig,recupero12:(tot-cig)*0.12};
+  return{totalVentas:tot,cigarrillos:cig,base:fullBase(tot,cig),recupero12:fullBase(tot,cig)*fullRate(),porcentaje:fullRate()*100};
 }
 // Abrir Excel en visor inline (sin descarga automática)
 function openExcelViewer(f){
@@ -869,119 +828,36 @@ function openExcelViewer(f){
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────
-function renderLogin(){
-  const opts=DEPENDENCIAS.map(d=>`<option value="${d.cr}">${d.cr} — ${d.nombre}</option>`).join('');
-  return`<div class="login-wrap"><div class="login-card">
-    <div class="login-logo">ACA</div>
-    <h1>Gestión Administrativa</h1>
-    <p class="sub">Sistema de Recuperos y Auditoría</p>
-    <form id="lf">
-      <label class="lbl">CR (N° de dependencia)</label>
-      <input type="text" id="lu-cr" placeholder="Ej: 3531" autocomplete="off" inputmode="numeric"
-        style="margin-bottom:8px" oninput="syncDepSelect(this.value)">
-      <label class="lbl">Dependencia</label>
-      <select id="lu-dep" onchange="syncCrInput(this.value)"
-        style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:8px;font-size:14px;background:var(--card2);color:var(--text);margin-bottom:8px">
-        <option value="">— Seleccioná tu dependencia —</option>
-        ${opts}
-      </select>
-      <label class="lbl">Contraseña</label>
-      <input type="password" id="lp" autocomplete="current-password" required>
-      <button type="submit">Ingresar</button>
-      <p class="err" id="le"></p>
-    </form>
-    <p style="text-align:center;font-size:11px;color:var(--m2);margin-top:14px;opacity:.7">${APP_VERSION}</p>
-  </div></div>`;
-}
-function syncDepSelect(cr){
-  const sel=document.getElementById('lu-dep');
-  if(sel&&cr.length===4){
-    const opt=[...sel.options].find(o=>o.value===cr);
-    if(opt)sel.value=cr;
-  }
-}
-function syncCrInput(cr){
-  const inp=document.getElementById('lu-cr');
-  if(inp)inp.value=cr;
-}
-function attachLogin(){
-  document.getElementById('lf').addEventListener('submit',async e=>{
-    e.preventDefault();
-    const cr=document.getElementById('lu-dep').value||document.getElementById('lu-cr').value.trim();
-    const p=document.getElementById('lp').value;
-    const le=document.getElementById('le');
-
-    // Buscar en DEPENDENCIAS
-    const dep=DEPENDENCIAS.find(d=>d.cr===cr);
-    if(dep&&dep.password===p){
-      CURRENT_CR=dep.cr;
-      _cache={}; // limpiar cache en memoria
-      syncLoad();  // recuperar cambios que quedaron sin subir
-      // Limpiar localStorage — las claves se guardan como "_ttl:crXXXX:..."
-      Object.keys(localStorage).forEach(k=>{
-        // Eliminar cualquier clave que NO pertenezca al CR actual
-        if(k.startsWith('_ttl:') && !k.startsWith(`_ttl:cr${dep.cr}:`)){
-          localStorage.removeItem(k);
-        } else if(!k.startsWith('_ttl:') && k.startsWith('cr') && !k.startsWith(`cr${dep.cr}:`)){
-          localStorage.removeItem(k);
-        }
-      });
-      CU={username:dep.usuario,name:`${dep.nombre} (CR ${dep.cr})`,role:dep.role,cr:dep.cr,depNombre:dep.nombre};
-      showLoad(true);
-      const raw=await sGet('periodos',true);
-      APS=raw?JSON.parse(raw):[];
-      if(!APS.includes(CP)){APS.push(CP);APS.sort();await sSet('periodos',JSON.stringify(APS),true);}
-      await loadPeriod(CP);
-      await autoResetYER3611(); // borra y rearma YER de CR 3611 una única vez
-      await loadYER();
-      showLoad(false);AT='us';usView=null;render();
-      return;
-    }
-    // Buscar en USERS (admin)
-    if(cr==='0000'||cr==='admin'){
-      const user=USERS['admin'];
-      if(user&&user.password===p){
-        CURRENT_CR='0000';
-        _cache={};
-        CU={username:'admin',name:'Administrador',role:'admin',cr:'0000'};
-        showLoad(true);
-        await loadPeriod(CP);await loadYER();
-        showLoad(false);AT='us';usView=null;render();
-        return;
-      }
-    }
-    le.textContent='CR o contraseña incorrectos';
-  });
-}
-
+function renderLogin(){return `<div class="login-wrap"><div class="login-card"><div class="login-logo">ACA</div><h1>Recuperos por estación</h1><p class="sub">Ingresá con tu cuenta de Google autorizada.</p><button id="google-login">Continuar con Google</button><p class="err" id="le"></p><p>Tu cuenta mantiene el CR de tu estación y sus archivos.</p><small>${APP_VERSION}</small></div></div>`;}
+function attachLogin(){document.getElementById('google-login').onclick=googleLogin;}
 // ── SHELL ─────────────────────────────────────────────────────
 function renderShell(){
   // Divisional ve su propio tablero
   if(CU.role==='divisional'){
     return`<div class="topbar">
       <div class="brand">ACA <span>Divisional</span></div>
-      <div class="user-info"><span>Divisional — CR 2402</span><button class="btn-ghost" id="logout-btn">Salir</button></div>
+      <div class="user-info"><span>Divisional — CR 2402</span>${IS_ACCESS_ADMIN?'<button class="btn-ghost" onclick="openAdminPanel()">Administrar accesos</button>':''}<button class="btn-ghost" onclick="exportLocalBackup()">Respaldo local</button><button class="btn-ghost" id="logout-btn">Salir</button></div>
     </div>
     <div class="tabs">
       <button class="tab-btn active" data-tab="div-checks">✅ Checks por Dependencia</button>
     </div>
     <div id="tab-content"></div>`;
   }
-  const tabs=[{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'},{key:'cancel',label:'Cancelaciones'},{key:'checks',label:'✅ Checks'}];
+  const tabs=[{key:'liquidacion',label:'Recuperos configurables'},{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'},{key:'cancel',label:'Cancelaciones'},{key:'checks',label:'✅ Checks'}];
   if(CU.role==='admin'){tabs.push({key:'varios',label:'Varios'});tabs.push({key:'resumen',label:'Resumen'});}
   return`<div class="topbar">
     <div class="brand">ACA <span>Recuperos</span></div>
     <div class="user-info">
       <span>${esc(CU.depNombre||CU.name)} <small style="opacity:.6;font-size:10px">CR ${CU.cr||''} · ${APP_VERSION}</small></span>
-      <button onclick="diagFirebase()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-weight:700;margin-right:6px">🔍 Diag</button>
-      <button class="btn-ghost" id="logout-btn">Salir</button>
+      <button hidden onclick="diagFirebase()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-weight:700;margin-right:6px">🔍 Diag</button>
+      ${IS_ACCESS_ADMIN?'<button class="btn-ghost" onclick="openAdminPanel()">Administrar accesos</button>':''}<button class="btn-ghost" onclick="exportLocalBackup()">Respaldo local</button><button class="btn-ghost" id="logout-btn">Salir</button>
     </div>
   </div>
   <div class="tabs">${tabs.map(t=>`<button class="tab-btn ${AT===t.key?'active':''}" data-tab="${t.key}">${t.label}</button>`).join('')}</div>
   <div id="tab-content"></div>`;
 }
 function attachShell(){
-  document.getElementById('logout-btn').addEventListener('click',()=>{CU=null;PD=null;_cache={};render();});
+  document.getElementById('logout-btn').addEventListener('click',logoutSafe);
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       AT=btn.getAttribute('data-tab');usView=null;
@@ -1181,35 +1057,7 @@ async function recuperarUS(){
 }
 window.recuperarUS=recuperarUS;
 
-function ensureDemoData(usKey){
-  const existingByPeriod={};
-  PD.us[usKey].forEach(r=>{ existingByPeriod[r.period]=r; });
-  const realRows=REAL_DATA[usKey]||[];
-  const newRows=[];
-  const realPeriods=new Set(realRows.map(r=>r.period));
-  for(const row of realRows){
-    const existing=existingByPeriod[row.period];
-    if(existing){
-      // Si el usuario desbloqueó la fila (locked=false) o la modificó, preservar sus datos
-      const userUnlocked=existing.locked===false&&row.locked===true;
-      const userModified=existing.nroFacturaACA&&existing.nroFacturaACA!==row.nroFacturaACA
-        ||existing.importe!=null&&existing.importe!==row.importe
-        ||existing.facturaServicio!=null
-        ||existing.precioSuper!=null;
-      if(userUnlocked||userModified){
-        newRows.push(existing);
-      } else {
-        newRows.push({...row,facturaServicio:existing.facturaServicio||null});
-      }
-    } else {
-      newRows.push({...row});
-    }
-  }
-  for(const [period,row] of Object.entries(existingByPeriod)){
-    if(!realPeriods.has(period)) newRows.push(row);
-  }
-  PD.us[usKey]=newRows;
-}
+function ensureDemoData(usKey){if(!PD.us[usKey])PD.us[usKey]=[];}
 
 function prevMonth(p){
   const [y,m]=p.split('-').map(Number);
@@ -1318,7 +1166,7 @@ async function renderUSExcel(usKey){
       const bgCls=isCurr?(locked?'row-locked':'row-current'):locked?'row-hist':'row-current';
 
       // Cálculo: importe = litros × precio; IVA = importe × 21%; recuperar = importe + IVA
-      const importe=(litrosFijos&&precio)?(litrosFijos*precio):(row?.importe||null);
+      const importe=row?.locked!==false&&row?.importe!=null?row.importe:(litrosFijos&&precio)?(litrosFijos*precio):(row?.importe??null);
       const iva=importe!=null?importe*0.21:null;
       const recuperar=importe!=null?importe+(iva||0):null;
       const recDisp=recuperar!=null?('$ '+fmt(recuperar)):'—';
@@ -1401,7 +1249,7 @@ async function renderUSExcel(usKey){
           const g=f=>trEl.querySelector(`input[data-field="${f}"]`)?.value;
           const precio=pN(g('precioSuper'))||0;
           const importe=litrosFijos*precio;
-          row.precioSuper=precio;
+          row.precioSuper=precio;row.litrosAplicados=litrosFijos;
           row.importe=importe;
           row.iva=importe*0.21;
           row.nroFacturaACA=g('nroFacturaACA')||'';
@@ -1545,21 +1393,21 @@ async function renderUSExcel(usKey){
     trEl.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('input',()=>{
         clearTimeout(usAutoTimer);
-        usAutoTimer=setTimeout(async()=>{
+        (async()=>{
           const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():null;};
           let idx=PD.us[usKey].findIndex(r=>r.period===period);
           if(idx===-1){PD.us[usKey].push({period});idx=PD.us[usKey].length-1;}
           const rObj=PD.us[usKey][idx];
           const imp=g('importe'),iva=g('iva'),per=g('percepciones'),int2=g('intereses');
           const nro=g('nroFacturaACA'),fecha=g('fecha');
-          if(imp!==null)rObj.importe=pN(imp)||null;
-          if(iva!==null)rObj.iva=pN(iva)||null;
-          if(per!==null)rObj.percepciones=pN(per)||null;
-          if(int2!==null)rObj.intereses=pN(int2)||null;
+          if(imp!==null)rObj.importe=pN(imp);
+          if(iva!==null)rObj.iva=pN(iva);
+          if(per!==null)rObj.percepciones=pN(per);
+          if(int2!==null)rObj.intereses=pN(int2);
           if(nro!==null)rObj.nroFacturaACA=nro;
           if(fecha!==null)rObj.fecha=fecha;
           await saveP();
-        },800);
+        })().catch(e=>alert(e.message));
       });
     });
   });
@@ -1808,13 +1656,7 @@ const REAL_DATA_FULL=[
   {period:'2026-04',importe:127694942.7,cigarrillos:17224230,recuperar:13256485.52,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false},
 ];
 
-function ensureFullHistory(){
-  if(!PD.fullHistory) PD.fullHistory=[];
-  const existingPeriods=new Set(PD.fullHistory.map(r=>r.period));
-  for(const row of REAL_DATA_FULL){
-    if(!existingPeriods.has(row.period)) PD.fullHistory.push({...row});
-  }
-}
+function ensureFullHistory(){if(!PD.fullHistory)PD.fullHistory=[];}
 
 function calcIntereses(f, periodo){
   const tasa=pN(f.interesMensual);
@@ -1915,7 +1757,7 @@ function renderFull(){
           <div class="calc-box"><div class="cl">Total Ventas (S.2+21)</div><div class="cv" style="font-size:15px;">$ ${fmt(fActual.ventas.totalVentas)}</div></div>
           <div class="calc-box"><div class="cl">Cigarrillos</div><div class="cv" style="font-size:15px;">$ ${fmt(fActual.ventas.cigarrillos)}</div></div>
           <div class="calc-box"><div class="cl">Base</div><div class="cv" style="font-size:15px;">$ ${fmt(fActual.ventas.base)}</div></div>
-          <div class="calc-box hl"><div class="cl">Subtotal 12%</div><div class="cv" style="font-size:15px;">$ ${fmt(subtotal)}</div></div>
+          <div class="calc-box hl"><div class="cl">Subtotal según condición</div><div class="cv" style="font-size:15px;">$ ${fmt(subtotal)}</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;background:#F8F5FB;border:1px solid var(--b);border-radius:8px;padding:8px 12px;margin-bottom:12px;">
           <span style="font-size:13px;font-weight:600;color:var(--pd);flex:1;">📊 ${esc(fActual.ventas.fileName)}</span>
@@ -1966,7 +1808,7 @@ function renderFull(){
               <div id="full-man-base" style="font-size:15px;font-weight:800;color:var(--pd);">—</div>
             </div>
             <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;">
-              <div style="font-size:10px;color:var(--m2);font-weight:700;text-transform:uppercase;">Recupero 12%</div>
+              <div style="font-size:10px;color:var(--m2);font-weight:700;text-transform:uppercase;">Recupero según condición</div>
               <div id="full-man-rec" style="font-size:15px;font-weight:800;color:var(--g);">—</div>
             </div>
             <div style="text-align:center;display:flex;align-items:center;justify-content:center;">
@@ -1988,7 +1830,7 @@ function renderFull(){
             <th style="${th}">PERÍODO</th>
             <th style="${th}">IMPORTE FACTURADO</th>
             <th style="${th}">CIGARRILLOS</th>
-            <th style="${th}">RECUPERAR (12%)</th>
+            <th style="${th}">RECUPERAR</th>
             <th style="${th}">INTERESES</th>
             <th style="${th}">TOTAL</th>
             <th style="${th}">N° FAC. ACA</th>
@@ -2023,13 +1865,7 @@ const REAL_DATA_HOTEL_TEL=[
   {period:'2026-04',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
   {period:'2026-05',importe:null,iva:0,percepciones:0,intereses:0,nroFacturaACA:'',fecha:'',facturaServicio:null,locked:false},
 ];
-function ensureHotelTelHistory(){
-  if(!PD.hotel.telHistory) PD.hotel.telHistory=[];
-  const existing=new Set(PD.hotel.telHistory.map(r=>r.period));
-  for(const row of REAL_DATA_HOTEL_TEL){
-    if(!existing.has(row.period)) PD.hotel.telHistory.push({...row});
-  }
-}
+function ensureHotelTelHistory(){if(!PD.hotel.telHistory)PD.hotel.telHistory=[];}
 
 // ── CANON SERVICIOS US: datos históricos reales ───────────────
 const REAL_DATA_CANON_US=[
@@ -2052,12 +1888,6 @@ const REAL_DATA_CANON_US=[
   {period:'2026-05',precioSuper:null,importe:870716,nroFacturaACA:'654-940',locked:true},
 ];
 function ensureCanonData(){
-  const existing=new Set(PD.us.canon.map(r=>r.period));
-  for(const row of REAL_DATA_CANON_US){
-    if(!existing.has(row.period)){
-      PD.us.canon.push({...row,iva:null,percepciones:null,intereses:null,facturaServicio:null});
-    }
-  }
   if(!PD.us.canon.find(r=>r.period===CP)){
     PD.us.canon.push({period:CP,precioSuper:null,importe:null,iva:null,percepciones:null,intereses:null,nroFacturaACA:'',facturaServicio:null,locked:false});
   }
@@ -2069,13 +1899,7 @@ const REAL_DATA_CANON=[
   {period:'2026-03',factNro:'650-21338',factTotal:9504132.01,ncNro:'650-7331',ncTotal:1782024.75,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
   {period:'2026-04',factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false},
 ];
-function ensureCanonHistory(){
-  if(!PD.hotel.canonHistory) PD.hotel.canonHistory=[];
-  const existing=new Set(PD.hotel.canonHistory.map(r=>r.period));
-  for(const row of REAL_DATA_CANON){
-    if(!existing.has(row.period)) PD.hotel.canonHistory.push({...row});
-  }
-}
+function ensureCanonHistory(){if(!PD.hotel.canonHistory)PD.hotel.canonHistory=[];}
 
 function renderHotel(){
   const isAdmin=CU.role==='admin';
@@ -2349,6 +2173,7 @@ function attachHotel(){
   el.querySelectorAll('[data-canon-upload-row]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0]; if(!file) return;
+    if(file.size>MAX_FILE){alert('Máximo 3,5 MB.');return;}
       if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
       const slotKey=inp.getAttribute('data-canon-upload-row');
       const period=inp.getAttribute('data-canon-period');
@@ -2571,7 +2396,8 @@ function attachHotel(){
   // ── Guardar inputs del canon en tiempo real (sin renderTab) ──
   el.querySelectorAll('[id^="canon-fact-nro-"],[id^="canon-fact-total-"],[id^="canon-nc-nro-"],[id^="canon-nc-total-"],[id^="canon-nro-"]').forEach(inp=>{
     inp.addEventListener('input',()=>{
-      const period=inp.id.split('-').pop();
+      const period=hotelPeriodFromInputId(inp.id);
+      if(!period)return;
       let row=PD.hotel.canonHistory.find(r=>r.period===period);
       if(!row){row={period,factNro:'',factTotal:null,ncNro:'',ncTotal:null,nroRecibo:'',facturaACA:null,notaCredito:null,transf:null,locked:false};PD.hotel.canonHistory.push(row);}
       if(inp.id.startsWith('canon-fact-nro-')) row.factNro=inp.value.trim();
@@ -2679,6 +2505,7 @@ function renderFileSlotG(slotId,label,fileMeta,editable,period){
 // ── RENDER ────────────────────────────────────────────────────
 function render(){
   const app=document.getElementById('app');
+  if(CU?.role==='access-admin'){renderAccessAdmin();return;}
   if(!CU){app.innerHTML=renderLogin();attachLogin();return;}
   app.innerHTML=renderShell();attachShell();
   if(CU.role==='divisional'){renderDivisionalTablero();}
@@ -2688,13 +2515,16 @@ function renderTab(){
   const el=document.getElementById('tab-content');
   if(!el)return;
   if(AT==='us'){
+    if(economicFor(CP)||CURRENT_CR!=='3531'){renderEconomicEntry('us');return;}
     if(usView){renderUSExcel(usView);}
     else{renderUSGrid();}
     return;
   }
   switch(AT){
-    case 'full':   el.innerHTML=renderFull();attachFull();break;
-    case 'hotel':  el.innerHTML=renderHotel();attachHotel();break;
+    case 'condiciones':renderEconomic();break;
+    case 'liquidacion':renderEconomicEntry();break;
+    case 'full': if(CURRENT_CR!=='3531'&&!economicFor(prevMonth(CP))){el.textContent='Faltan condiciones de Full para el período a liquidar. Contactá al administrador.';break;}el.innerHTML=renderFull();attachFull();break;
+    case 'hotel': if(economicFor(CP)||CURRENT_CR!=='3531'){renderEconomicEntry('hotel');break;} el.innerHTML=renderHotel();attachHotel();break;
     case 'yer':    {
       const _vl=YER._viewingLiq, _bl=YER._backup, _el=YER._editingLiq, _pa=YER._periodoAnterior;
       // Feedback inmediato: sin esto, el contenido del tab anterior queda en
@@ -2706,10 +2536,7 @@ function renderTab(){
       (async()=>{
         // Timeout de 6 segundos para toda la carga de YER
         try{
-          await Promise.race([
-            loadYER(),
-            new Promise((_,r)=>setTimeout(()=>r(new Error('YER timeout 6s')),6000))
-          ]);
+          await loadYER();
         }catch(e){
           console.warn('loadYER timeout/error, usando estado actual:',e.message);
           // Asegurar estado mínimo válido
@@ -2725,7 +2552,7 @@ function renderTab(){
         if(_el!=null) YER._editingLiq=_el;
         if(_pa!=null) YER._periodoAnterior=_pa;
         try{
-          el.innerHTML=renderYER();
+          if(AT!=='yer')return;el.innerHTML=renderYER();
           attachYER();
         }catch(e){
           el.innerHTML=`<div style="padding:20px;color:red"><b>Error renderizando YER:</b> ${e.message}<br><pre style="font-size:10px">${e.stack?.slice(0,600)}</pre></div>`;
@@ -2917,8 +2744,8 @@ function attachFull(){
   const recalcManual=()=>{
     const tot=pN(manTotal?.value)||0;
     const cig=pN(manCig?.value)||0;
-    const base=tot-cig;
-    const rec=base*0.12;
+    const base=fullBase(tot,cig);
+    const rec=base*fullRate();
     const baseEl=el.querySelector('#full-man-base');
     const recEl=el.querySelector('#full-man-rec');
     if(baseEl)baseEl.textContent=tot?'$ '+fmt(base):'—';
@@ -2930,9 +2757,9 @@ function attachFull(){
     const tot=pN(manTotal?.value)||0;
     const cig=pN(manCig?.value)||0;
     if(!tot){alert('Ingresá el total de ventas.');return;}
-    const base=tot-cig;
+    const base=fullBase(tot,cig);
     PD.full.ventas={fileName:'Carga manual',size:0,uploadedAt:new Date().toISOString(),
-      totalVentas:tot,cigarrillos:cig,base,recupero12:base*0.12,manual:true};
+      totalVentas:tot,cigarrillos:cig,base,recupero12:base*fullRate(),manual:true};
     showLoad(true);await saveP();showLoad(false);toast('Datos cargados ✓');renderTab();
   });
   function recalcIntereses(){
@@ -3163,13 +2990,13 @@ async function loadYER(){
   YER._sinConexion=false;
   try{
     // Timeout de 8 segundos para evitar que se cuelgue
-    const withTimeout=(p,ms)=>Promise.race([p, new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),ms))]);
+    const withTimeout=p=>p;
 
     const raw = await withTimeout(sGet('yer:'+CP, true), 8000);
     if(raw){
       const parsed=sanitizeYER(raw);
       if(parsed) YER={...YER,...parsed};
-      else console.warn('loadYER: datos corruptos en yer:'+CP+' — descartados, usando defaults');
+      else throw Error('Datos YER inválidos: se conserva el original y se bloquea el guardado.');
     } else {
       // Mes nuevo: intentar traer pcts del mes anterior
       try{
@@ -3177,6 +3004,7 @@ async function loadYER(){
         const prevYER = prevRaw?sanitizeYER(prevRaw):null;
         if(prevYER){
           if(prevYER.pcts) YER.pcts=JSON.parse(JSON.stringify(prevYER.pcts));
+          if(prevYER.rates)YER.rates=structuredClone(prevYER.rates);
           if(prevYER.liqHistory?.length) YER.liqHistory=JSON.parse(JSON.stringify(prevYER.liqHistory));
         }
       }catch(e){ /* sin datos previos, usar defaults */ }
@@ -3191,6 +3019,8 @@ async function loadYER(){
     YER._sinConexion=true;
     avisoGuardado('No se pudieron leer los datos de la nube. No cargues ni liquides hasta que vuelva la conexión: lo que hagas ahora podría no guardarse.');
   }
+
+  const ec=economicFor(prevMonth(CP));if(ec&&!YER.rows.length&&!YER.liqHistory.some(l=>l.period===CP)){YER.rates=structuredClone(ec.yer);YER.pcts=Object.fromEntries(FUELS.map(f=>[f,ec.yer[f].mode==='porcentaje'?ec.yer[f].value:0]));}
 
   // Garantizar estructura mínima
   if(!YER.evRows) YER.evRows=[];
@@ -3208,14 +3038,14 @@ function sanitizeYER(raw){
     const p=typeof raw==='string'?JSON.parse(raw):raw;
     if(!p||typeof p!=='object'||Array.isArray(p)) return null;
     // Cada campo con tipo incorrecto se descarta individualmente
-    if(p.rows!==undefined && !Array.isArray(p.rows)) delete p.rows;
-    if(p.evRows!==undefined && !Array.isArray(p.evRows)) delete p.evRows;
-    if(p.liqHistory!==undefined && !Array.isArray(p.liqHistory)) delete p.liqHistory;
-    if(p.validaciones!==undefined && (typeof p.validaciones!=='object'||Array.isArray(p.validaciones))) delete p.validaciones;
-    if(p.pcts!==undefined && (typeof p.pcts!=='object'||Array.isArray(p.pcts))) delete p.pcts;
-    if(p.rows) p.rows=p.rows.filter(r=>r&&typeof r==='object');
-    if(p.evRows) p.evRows=p.evRows.filter(r=>r&&typeof r==='object');
-    if(p.liqHistory) p.liqHistory=p.liqHistory.filter(l=>l&&typeof l==='object');
+    if(p.rows!==undefined && !Array.isArray(p.rows)) return null;
+    if(p.evRows!==undefined && !Array.isArray(p.evRows)) return null;
+    if(p.liqHistory!==undefined && !Array.isArray(p.liqHistory)) return null;
+    if(p.validaciones!==undefined && (typeof p.validaciones!=='object'||Array.isArray(p.validaciones))) return null;
+    if(p.pcts!==undefined && (typeof p.pcts!=='object'||Array.isArray(p.pcts))) return null;
+    if(p.rows?.some(r=>!r||typeof r!=='object'))return null;
+    if(p.evRows?.some(r=>!r||typeof r!=='object'))return null;
+    if(p.liqHistory?.some(l=>!l||typeof l!=='object'))return null;
     // Flags de UI no se persisten: si quedaron guardados por error, limpiarlos
     delete p._viewingLiq; delete p._editingLiq; delete p._backup; delete p._periodoAnterior;
     return p;
@@ -3226,47 +3056,8 @@ function sanitizeYER(raw){
 // Borra TODOS los datos YER del CR actual en las 3 capas (memoria,
 // localStorage y Firebase) y deja una base limpia. Cada dependencia
 // tiene sus claves con prefijo crXXXX:, así que solo afecta al CR logueado.
-async function resetYERData(){
-  const cr=CURRENT_CR;
-  // Períodos a barrer: todos los meses de 2025 y 2026 + clave global de %
-  const keys=['yer:pcts'];
-  for(const y of [2025,2026]) for(let m=1;m<=12;m++) keys.push(`yer:${y}-${String(m).padStart(2,'0')}`);
-  // 1+2. Memoria y localStorage
-  keys.forEach(k=>{
-    const fk=`cr${cr}:${k}`;
-    delete _cache[fk];
-    try{localStorage.removeItem('_ttl:'+fk);localStorage.removeItem(fk);}catch(e){}
-  });
-  // 3. Firebase — deleteDoc sobre doc inexistente es inofensivo
-  try{
-    const db=await getDB();
-    await Promise.allSettled(keys.map(k=>db.deleteDoc(db.doc(db.fs,'kv',encodeKey(`cr${cr}:${k}`)))));
-  }catch(e){
-    console.warn('resetYERData: Firebase no disponible, solo se limpió cache local:',e.message);
-    throw e; // sin Firebase el reset queda incompleto — reintentar en próximo login
-  }
-  // 4. Rearmar base limpia y guardarla para que exista el documento del CR
-  YER={pcts:{infinia_diesel:0,super:0,infinia:0,diesel500:0},pctLocked:true,rows:[],evRows:[],
-       ventasFile:null,everilioFile:null,liqHistory:[],validaciones:{}};
-  await saveYER();
-  console.log(`✅ Módulo YER reiniciado para CR ${cr}`);
-  return true;
-}
-window.resetYERData=resetYERData; // disponible desde consola: resetYERData()
-
-// Auto-reset UNA sola vez para CR 3611 (datos corruptos detectados ago-2026).
-// El flag queda en Firebase para no repetir el borrado en cada login.
-async function autoResetYER3611(){
-  if(CURRENT_CR!=='3611') return;
-  try{
-    const flag=await sGet('yer:_wipe_v1',true);
-    if(flag==='done') return;
-    await resetYERData();
-    await sSet('yer:_wipe_v1','done',true);
-  }catch(e){
-    console.warn('autoResetYER3611: se reintentará en el próximo login:',e.message);
-  }
-}
+async function resetYERData(){throw Error('Borrado masivo deshabilitado para proteger los archivos.');}
+async function autoResetYER3611(){return;}
 // Firestore rechaza documentos de más de 1 MiB. Un snapshot de un mes con
 // ~1800 despachos pesa ~590 KB, así que el documento yer:<mes> con una sola
 // liquicación adentro ya superaba el límite: el guardado fallaba en la nube y
@@ -3275,40 +3066,28 @@ async function autoResetYER3611(){
 const YER_DOC_MAX = 900*1024; // margen bajo el límite de 1 MiB
 
 async function saveYER(){
-  if(YER._sinConexion && !(YER.liqHistory||[]).length){
+  if(YER._sinConexion){
     // El estado actual vino de una lectura fallida — guardar ahora borraría
     // el historial real que está en la nube.
     avisoGuardado('Guardado cancelado: no se pudo leer la nube y guardar ahora borraría el historial. Recargá la página cuando tengas conexión.');
     return false;
   }
-  // Sacar los snapshots del documento principal y guardarlos aparte
-  const pendientes=[];
-  (YER.liqHistory||[]).forEach(l=>{
-    if(l && l.snapshot){
-      const key='yer:snap:'+(l.period||l.mesLabel||'');
-      pendientes.push({key, data:slimSnapshot(l.snapshot)});
-      l.snapKey=key;
-      delete l.snapshot; // no viaja dentro del doc principal
+  const payload=structuredClone(YER);
+  delete payload._backup;delete payload._viewingLiq;delete payload._editingLiq;delete payload._sinConexion;
+  for(const liq of payload.liqHistory||[]){
+    if(liq?.snapshot){const key='yer:snap:'+(liq.period||liq.mesLabel||'')+':'+crypto.randomUUID();
+      if(!await sSet(key,JSON.stringify(slimSnapshot(liq.snapshot))))return false;
+      liq.snapKey=key;delete liq.snapshot;
     }
-  });
-  let ok=true;
-  for(const p of pendientes){
-    if(!await sSet(p.key, JSON.stringify(p.data), true)) ok=false;
   }
-  const payload=JSON.stringify(YER);
-  if(payload.length>YER_DOC_MAX){
-    avisoGuardado(`El período tiene demasiados datos para guardarse en la nube (${Math.round(payload.length/1024)} KB). Avisale al administrador antes de cerrar el navegador.`);
-    ok=false;
-  }
-  if(!await sSet('yer:'+CP, payload, true)) ok=false;
-  if(!await sSet('yer:pcts', JSON.stringify(YER.pcts), true)) ok=false;
-  return ok; // si algo falló ya quedó en la cola y lo muestra el indicador
+  if(!await sSet('yer:'+CP,JSON.stringify(payload)))return false;
+  return true;
 }
 
 // Deja el snapshot con lo mínimo necesario para reconstruir el detalle
 function slimSnapshot(s){
   const campoRow=r=>({remito:r.remito,fecha:r.fecha,desc:r.desc,litros:r.litros,total:r.total,
-    motivo:r.motivo,combustKey:r.combustKey,precio:r.precio,pct:r.pct,comxLt:r.comxLt,totalCom:r.totalCom});
+    motivo:r.motivo,combustKey:r.combustKey,precio:r.precio,pct:r.pct,comxLt:r.comxLt,totalCom:r.totalCom,commissionMode:r.commissionMode??'porcentaje',commissionValue:r.commissionValue??r.pct});
   const campoEv=r=>({remito:r.remito,remitoNorm:r.remitoNorm,fecha:r.fecha,pvp:r.pvp,totalYer:r.totalYer});
   return {
     rows:(s.rows||[]).map(campoRow),
@@ -3336,6 +3115,7 @@ function avisoGuardado(msg){
 window.avisoGuardado=avisoGuardado;
 
 function parseArg(v){
+  if(typeof v==='number')return Number.isFinite(v)?v:0;
   if(v===null||v===undefined||v==='') return 0;
   return parseFloat(String(v).replace(/\./g,'').replace(',','.')) || 0;
 }
@@ -3418,6 +3198,7 @@ function processVentasExcel(ab){
   const cFecha=col('fecha'), cDesc=col('descripcion'), cLitros=col('litros');
   const cTotal=col('total'), cTipoV=col('tipo venta'), cRemito=col('remitonro');
   const cMotivo=col('motivo');
+  if([cFecha,cDesc,cLitros,cTotal,cTipoV,cRemito,cMotivo].some(i=>i<0))throw Error('Faltan columnas requeridas en Ventas Especiales. No se reemplazó la carga anterior.');
   const { desde, hasta } = yerPeriod();
   const seen = new Set(), rows = [];
   for(let i=1; i<data.length; i++){
@@ -3440,13 +3221,13 @@ function processVentasExcel(ab){
     const desc=String(r[cDesc]||'').trim();
     // NoComb: sin combustible ni comisión
     const ck   = isNoComb ? null : descToCombust(desc);
-    const pct  = ck ? (YER.pcts[ck]||0) : 0;
+    const rate=yerRate(ck);const pct=rate.mode==='porcentaje'?rate.value:0;
     const precio = litros > 0 ? total / litros : 0;
-    const comxLt = precio*(pct/100);
+    const comxLt=rate.mode==='pesos_litro'?rate.value:precio*(pct/100);
     rows.push({
       id:Math.random().toString(36).slice(2,9),
       fecha:fechaStr, desc, litros, total,
-      remito, precio, combustKey:ck, pct, comxLt,
+      remito, precio, combustKey:ck, pct, comxLt,commissionMode:rate.mode,commissionValue:rate.value,
       totalCom:litros*comxLt,
       motivo: isNoComb ? 'YER_NoComb' : 'YER'
     });
@@ -3468,10 +3249,7 @@ function processEverilioExcel(ab){
   let cImporte=findCol(h=>h==='TOT. PVP',h=>h==='TOTAL PVP',h=>h.includes('PVP')&&h.includes('TOT'),h=>h==='IMPORTE');
   let cFecha=findCol(h=>h.includes('FECHA Y HORA'),h=>h==='FECHA',h=>h.includes('FECHA'));
   let cTotYer=findCol(h=>h==='TOT. YER',h=>h.includes('YER')&&h.includes('TOT'));
-  // Fallback al formato histórico (Cipolletti) si no hay encabezados reconocibles
-  if(cRemito===-1){cRemito=3;cImporte=8;cFecha=0;cTotYer=-1;}
-  if(cImporte===-1)cImporte=8;
-  if(cFecha===-1)cFecha=0;
+  if([cRemito,cImporte,cFecha].some(i=>i<0))throw Error('Faltan encabezados REMITO, FECHA o TOTAL PVP/IMPORTE. No se reemplazó la carga anterior.');
   // Fecha: soporta "dd/mm/yyyy hh:mm" (histórico) y "yyyy-mm-dd hh:mm" (ISO)
   const parseFecha=s=>{
     let m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
@@ -3491,7 +3269,8 @@ function processEverilioExcel(ab){
     const remito = String(r[cRemito]||'').trim();
     if(!remito || remito.startsWith('00000-')) continue;
     const {d:fDate,display:fechaStr}=parseFecha(String(r[cFecha]||''));
-    if(fDate && (fDate < desde || fDate > hasta)) continue;
+    if(!fDate||Number.isNaN(fDate.getTime()))throw Error('Fecha inválida en Everilio, fila '+(i+1)+'. Se conserva la carga anterior.');
+    if(fDate < desde || fDate > hasta) continue;
     // Importe: el reporte mezcla formatos en la MISMA columna —
     // "110000.48" (decimal con punto) y " $ 257,398.31 " (miles con coma).
     // parseNum decide el separador decimal por cuál aparece último.
@@ -3541,9 +3320,9 @@ function calcConciliacion(){
 
 function recalcYERRows(){
   YER.rows=YER.rows.map(r=>{
-    const pct=r.combustKey?(YER.pcts[r.combustKey]||0):0;
-    const comxLt=r.precio*(pct/100);
-    return {...r,pct,comxLt,totalCom:r.litros*comxLt};
+    const rate=yerRate(r.combustKey);const pct=rate.mode==='porcentaje'?rate.value:0;
+    const comxLt=rate.mode==='pesos_litro'?rate.value:r.precio*(pct/100);
+    return {...r,pct,comxLt,commissionMode:rate.mode,commissionValue:rate.value,totalCom:r.litros*comxLt};
   });
 }
 
@@ -3617,23 +3396,21 @@ function renderYER(){
   const locked=YER.pctLocked!==false;
   const ro=locked?'readonly':'', bgl=locked?'background:#F0FFF4;border-color:#C8E6C9;':'';
   const pctGrid=YER_COMBUST.map(c=>{
-    const val=YER.pcts[c.key]||0;
+    const rate=yerRate(c.key);const val=rate.value;
     return `<div style="background:#fff;border:2px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
       <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">${c.label}</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
-        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" ${ro}
+        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" readonly
           style="width:80px;padding:8px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${bgl}">
-        <span style="font-size:16px;font-weight:700;color:var(--m2);">%</span>
+        <span style="font-size:16px;font-weight:700;color:var(--m2);">${rate.mode==='pesos_litro'?'$/L':'%'}</span>
       </div>
     </div>`;
   }).join('');
-  const pctBtns=locked
-    ?`<button id="yer-pct-edit" style="background:var(--p);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Editar %</button>`
-    :`<button id="yer-pct-save" style="background:var(--g);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;">Guardar %</button>`;
+  const pctBtns='<small>Condiciones cargadas por el administrador</small>';
 
-  const pctBox=`<div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;">
+  const pctBox=`<div style="margin:10px 0">${YER.ventasFile?.fileKey?'<button onclick="viewYERSource(\'ventasFile\')">Ver Excel de ventas original</button>':''} ${YER.everilioFile?.fileKey?'<button onclick="viewYERSource(\'everilioFile\')">Ver Excel Everilio original</button>':''}</div><div style="background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-bottom:16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-      <div style="font-size:14px;font-weight:800;color:var(--pd);">PORCENTAJES DE COMISION POR COMBUSTIBLE</div>
+      <div style="font-size:14px;font-weight:800;color:var(--pd);">COMISIÓN POR COMBUSTIBLE</div>
       ${pctBtns}
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">${pctGrid}</div>
@@ -4018,7 +3795,7 @@ function renderYERDetalleVentas(){
       <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">$ ${fmtArg(r.total)}</td>
       <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:center;">${motivoBadge}</td>
       <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">${isNoComb?'—':'$ '+fmtArg(r.precio)}</td>
-      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:center;">${isNoComb?'—':r.pct+'%'}</td>
+      <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:center;">${isNoComb?'—':r.commissionMode==='pesos_litro'?fmtArg(r.commissionValue)+' $/L':r.pct+'%'}</td>
       <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;">${isNoComb?'—':'$ '+fmtArg(r.comxLt)}</td>
       <td style="padding:6px 8px;border:1px solid #D4C830;font-size:12px;text-align:right;font-weight:700;color:${isNoComb?'var(--m2)':'var(--g)'};">${isNoComb?'—':'$ '+fmtArg(r.totalCom)}</td>
       <td style="padding:6px 8px;border:1px solid #D4C830;text-align:center;"><button style="background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;" data-yer-del="${r.id}">X</button></td>
@@ -4097,7 +3874,7 @@ async function abrirModalPeriodoAnteriorYER(){
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <h3 style="font-size:16px;font-weight:800;color:var(--pd);margin-bottom:6px">📅 Cargar período anterior</h3>
-    <p style="font-size:13px;color:var(--m2);margin-bottom:18px">Seleccioná el mes. Se limpiarán los archivos actuales para que subas los de ese período.</p>
+    <p style="font-size:13px;color:var(--m2);margin-bottom:18px">Seleccioná el mes. Se abrirá el período elegido conservando los archivos del período actual.</p>
     <select id="yer-sel-periodo" style="width:100%;padding:10px 12px;border:1.5px solid var(--b);border-radius:8px;font-size:14px;background:var(--card2);color:var(--pd);margin-bottom:18px">
       ${opciones.map(o=>`<option value="${o.p}">${o.label}</option>`).join('')}
     </select>
@@ -4111,13 +3888,9 @@ async function abrirModalPeriodoAnteriorYER(){
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
   modal.querySelector('#yer-ant-ok').addEventListener('click',async()=>{
     const periodo=modal.querySelector('#yer-sel-periodo').value;
-    if(!confirm(`¿Cargar YER de ${opciones.find(o=>o.p===periodo)?.label}?\nSe limpiarán los archivos actuales para que subas los de ese mes.`)){return;}
+    if(!confirm(`¿Cargar YER de ${opciones.find(o=>o.p===periodo)?.label}?\nSe conservarán los archivos del período actual.`)){return;}
     modal.remove();
-    YER._periodoAnterior=periodo;
-    YER.rows=[]; YER.evRows=[];
-    YER.ventasFile=null; YER.everilioFile=null;
-    YER.validaciones={};
-    showLoad(true); await saveYER(); showLoad(false);
+    showLoad(true);await loadPeriod(yerStoragePeriod(periodo));await loadYER();showLoad(false);
     yerSub='diferencias'; renderTab();
     toast(`Modo carga: ${opciones.find(o=>o.p===periodo)?.label} — subí los archivos de ese mes`);
   });
@@ -4906,6 +4679,7 @@ function attachYER(){
   });
   el.querySelector('#yer-ventas-input')?.addEventListener('change',async e=>{
     const file=e.target.files[0]; if(!file) return;
+    if(file.size>MAX_YER_FILE){alert('Máximo 25 MB para Excel YER.');return;}
     showLoad(true);
     try{
       const ab=await file.arrayBuffer();
@@ -4915,8 +4689,10 @@ function attachYER(){
         alert('No se encontraron operaciones YER en el archivo.\nVerificá que el Excel contenga filas del Sector 2 o 21.');
         return;
       }
-      YER.rows=rows; YER.ventasFile={fileName:file.name,size:file.size};
-      await saveYER(); toast(YER.rows.length+' operaciones YER cargadas');
+      const sourceKey='file:yer:ventas:'+CP+':'+crypto.randomUUID();
+      if(!await sSet(sourceKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:await readDU(file)})))throw Error('No se guardó el Excel original.');
+      YER.rows=rows; YER.ventasFile={fileName:file.name,size:file.size,fileKey:sourceKey};
+      if(!await saveYER())throw Error('Período pendiente de guardar.');toast(YER.rows.length+' operaciones YER cargadas');
     }catch(err){alert('Error procesando Ventas Especiales:\n'+err.message);}
     showLoad(false); renderTab();
   });
@@ -4926,8 +4702,9 @@ function attachYER(){
   });
   el.querySelector('#yer-everilio-input')?.addEventListener('change',async e=>{
     const file=e.target.files[0]; if(!file) return;
+    if(file.size>MAX_YER_FILE){alert('Máximo 25 MB para Excel YER.');return;}
     showLoad(true);
-    try{ const ab=await file.arrayBuffer(); YER.evRows=processEverilioExcel(ab); YER.everilioFile={fileName:file.name,size:file.size}; await saveYER(); toast(YER.evRows.length+' registros Everilio cargados'); }
+    try{ const ab=await file.arrayBuffer();const rows=processEverilioExcel(ab);if(!rows.length)throw Error('El Excel no contiene registros válidos. Se conserva la carga anterior.');const sourceKey='file:yer:everilio:'+CP+':'+crypto.randomUUID();if(!await sSet(sourceKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:await readDU(file)})))throw Error('No se guardó el Excel original.');YER.evRows=rows;YER.everilioFile={fileName:file.name,size:file.size,fileKey:sourceKey};if(!await saveYER())throw Error('Pendiente de guardar el período.');toast(YER.evRows.length+' registros Everilio cargados'); }
     catch(err){alert('Error: '+err.message);}
     showLoad(false); renderTab();
   });
@@ -5666,7 +5443,7 @@ async function renderChecksHistorial(){
   const trs=allNC.map((x,i)=>{
     const cerrada=x.cerrada||false;
     const rowBg=cerrada?(i%2===0?'#F0FFF4':'#E8FFF0'):(i%2===0?'#FFF5F5':'#FFF0F0');
-    return`<tr style="background:${rowBg}" id="hist-row-${x.periodo}-${x.n}">
+    return`<tr style="background:${rowBg}" id="hist-row-${x.periodo}-${x.checkIndex}-${x.n}">
       <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center;font-size:12px;font-weight:700;white-space:nowrap">${x.mesLabel}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:12px">${esc(x.pregunta)}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:${cerrada?'var(--m2)':'var(--r)'}">${esc(x.obs||'')}</td>
@@ -5678,7 +5455,7 @@ async function renderChecksHistorial(){
       <td style="padding:8px 10px;border:1px solid #E0D4F0;font-size:11px;color:var(--m2);max-width:160px">${esc(x.detallecierre||x.detalle||'')}</td>
       <td style="padding:8px 10px;border:1px solid #E0D4F0;text-align:center">
         ${cerrada
-          ?`<button data-nc-reabrir="${x.periodo}" data-nc-n="${x.n}"
+          ?`<button data-nc-reabrir="${x.periodo}" data-nc-n="${x.n}" data-nc-check="${x.checkIndex}"
               style="background:var(--rb);color:var(--r);border:1px solid var(--rbr);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">
               ↩ Reabrir
             </button>`
@@ -5719,7 +5496,7 @@ async function renderChecksPendientes(){
   </div>`;
 
   const cards=allNC.map(x=>`
-    <div style="background:var(--card);border:1.5px solid var(--rbr);border-radius:10px;padding:14px 16px;margin-bottom:10px" id="nc-card-${x.periodo}-${x.n}">
+    <div style="background:var(--card);border:1.5px solid var(--rbr);border-radius:10px;padding:14px 16px;margin-bottom:10px" id="nc-card-${x.periodo}-${x.checkIndex}-${x.n}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="background:var(--p);color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;white-space:nowrap">${x.mesLabel}</span>
@@ -5732,12 +5509,12 @@ async function renderChecksPendientes(){
       ${x.obs?`<div style="font-size:12px;color:var(--r);background:var(--rb);border-radius:6px;padding:7px 10px;margin-bottom:10px">⚠️ ${esc(x.obs)}</div>`:''}
       <!-- Detalle / Cierre -->
       <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
-        <textarea id="nc-det-${x.periodo}-${x.n}" placeholder="Agregar detalle o acción tomada..." rows="2"
+        <textarea id="nc-det-${x.periodo}-${x.checkIndex}-${x.n}" placeholder="Agregar detalle o acción tomada..." rows="2"
           style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--b);border-radius:6px;font-size:12px;font-family:inherit;resize:vertical">${esc(x.detalle||'')}</textarea>
         <div style="display:flex;flex-direction:column;gap:6px">
-          <button data-nc-guardar="${x.periodo}" data-nc-n="${x.n}"
+          <button data-nc-guardar="${x.periodo}" data-nc-n="${x.n}" data-nc-check="${x.checkIndex}"
             style="background:var(--p);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 Guardar detalle</button>
-          <button data-nc-cerrar="${x.periodo}" data-nc-n="${x.n}"
+          <button data-nc-cerrar="${x.periodo}" data-nc-n="${x.n}" data-nc-check="${x.checkIndex}"
             style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">✅ Marcar cerrada</button>
         </div>
       </div>
@@ -5994,11 +5771,13 @@ async function renderChecksMes(period, modo='ver'){
 
 
 // Busca un item por n en todos los checks del período (maneja array o objeto)
-function findAndUpdateNC(raw, n, updateFn){
+function findAndUpdateNC(raw, n, updateFn, checkIndex=null){
   const parsed=JSON.parse(raw);
   const checkArr=Array.isArray(parsed)?parsed:[parsed];
   let found=false;
-  for(const chk of checkArr){
+  const candidates=checkIndex===null?checkArr:checkArr[checkIndex]?[checkArr[checkIndex]]:[];
+  if(candidates.flatMap(c=>c.items||[]).filter(x=>x.n===n).length!==1)return{updated:raw,found:false};
+  for(const chk of candidates){
     const item=(chk.items||[]).find(x=>x.n===n);
     if(item){updateFn(item);found=true;break;}
   }
@@ -6011,12 +5790,14 @@ async function attachNCHandlers(container){
     btn.addEventListener('click',async()=>{
       const periodo=btn.getAttribute('data-nc-guardar');
       const n=parseInt(btn.getAttribute('data-nc-n'));
-      const det=container.querySelector(`#nc-det-${periodo}-${n}`)?.value.trim()||'';
+      const checkIndex=Number(btn.getAttribute('data-nc-check'));
+      const det=container.querySelector(`#nc-det-${periodo}-${checkIndex}-${n}`)?.value.trim()||'';
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.detalle=det;item.detalleAt=new Date().toISOString();});
-        if(found)await sSet(`check:${periodo}`,updated,true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.detalle=det;item.detalleAt=new Date().toISOString();},checkIndex);
+        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('Detalle guardado ✓');
       }
       showLoad(false);
@@ -6028,15 +5809,17 @@ async function attachNCHandlers(container){
     btn.addEventListener('click',async()=>{
       const periodo=btn.getAttribute('data-nc-cerrar');
       const n=parseInt(btn.getAttribute('data-nc-n'));
-      const det=container.querySelector(`#nc-det-${periodo}-${n}`)?.value.trim()||'';
+      const checkIndex=Number(btn.getAttribute('data-nc-check'));
+      const det=container.querySelector(`#nc-det-${periodo}-${checkIndex}-${n}`)?.value.trim()||'';
       if(!confirm('¿Marcar como cerrada?'))return;
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();});
-        if(found)await sSet(`check:${periodo}`,updated,true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();},checkIndex);
+        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('No conformidad cerrada ✓');
-        const card=container.querySelector(`#nc-card-${periodo}-${n}`);
+        const card=container.querySelector(`#nc-card-${periodo}-${checkIndex}-${n}`);
         if(card){
           card.style.background='var(--gb)';card.style.borderColor='var(--gbr)';
           card.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:4px"><span style="font-size:20px">✅</span><span style="font-size:13px;font-weight:700;color:var(--g)">Cerrada — N°${n}</span></div>`;
@@ -6051,15 +5834,17 @@ async function attachNCHandlers(container){
     btn.addEventListener('click',async()=>{
       const periodo=btn.getAttribute('data-nc-reabrir');
       const n=parseInt(btn.getAttribute('data-nc-n'));
+      const checkIndex=Number(btn.getAttribute('data-nc-check'));
       if(!confirm('¿Reabrir esta no conformidad? Volverá a aparecer en Pendientes.'))return;
       showLoad(true);
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
-        const{updated,found}=findAndUpdateNC(raw,n,item=>{delete item.cerrada;delete item.detallecierre;delete item.fechaCierre;});
-        if(found)await sSet(`check:${periodo}`,updated,true);
+        const{updated,found}=findAndUpdateNC(raw,n,item=>{delete item.cerrada;delete item.detallecierre;delete item.fechaCierre;},checkIndex);
+        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('NC reabierta — vuelve a Pendientes ✓');
         // Actualizar fila visualmente
-        const row=container.querySelector(`#hist-row-${periodo}-${n}`);
+        const row=container.querySelector(`#hist-row-${periodo}-${checkIndex}-${n}`);
         if(row){
           row.style.background='#FFF5F5';
           const badge=row.querySelector('span[style*="background"]');
@@ -6078,8 +5863,8 @@ function getItemsDeCheck(raw){
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
   const checkArr = Array.isArray(parsed) ? parsed : [parsed];
   // Concatenar items de todos los checks del mes
-  return checkArr.flatMap(c => (c.items||[]).map(x=>({
-    ...x,
+  return checkArr.flatMap((c,checkIndex) => (c.items||[]).map(x=>({
+    ...x,checkIndex,
     auditor: x.auditor || c.auditor || '',
     auditorTipo: x.auditorTipo || c.auditorTipo || ''
   })));
@@ -6888,6 +6673,205 @@ async function renderDivisionalNC(cr){
   });
 }
 
+
+// Existing kv identifiers remain unchanged. Chunks are immutable; only a
+// complete, hash-verified value is published. Concurrent edits fail closed.
+function wrapDB(native){
+ const expected=new Map(),writers=new Map();
+ const signature=s=>s.exists()?JSON.stringify(s.data()):null;
+ const wrapped={...native};
+ wrapped.getDoc=async ref=>{
+  const snap=await native.getDoc(ref);
+  if(ref.parent.id==='kv'&&!expected.has(ref.id))expected.set(ref.id,signature(snap));
+  if(!snap.exists()||!snap.data().chunked)return snap;
+  const meta=snap.data();if(meta.chunked!==1||!Number.isInteger(meta.count)||meta.count<1||meta.count>200)throw Error('Índice de archivo inválido.');
+  const parts=[];for(let i=0;i<meta.count;i++){const p=await native.getDoc(native.doc(native.fs,'kv',ref.id+'--chunk--'+meta.revision+'--'+i));if(!p.exists())throw Error('Archivo incompleto: falta una parte. No se modificó el original.');const d=p.data();if(d.revision!==meta.revision||d.index!==i)throw Error('Parte de archivo inválida.');parts.push(Uint8Array.from(atob(d.chunk),c=>c.charCodeAt(0)));}
+  const bytes=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let pos=0;parts.forEach(p=>{bytes.set(p,pos);pos+=p.length;});
+  const hash=await sha256(bytes);if(hash!==meta.sha256||bytes.length!==meta.bytes)throw Error('El archivo no pasó la verificación de integridad.');
+  return {exists:()=>true,data:()=>({...meta,v:new TextDecoder().decode(bytes)}),id:snap.id,ref:snap.ref};
+ };
+ wrapped.setDoc=(ref,data,...args)=>{
+  if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
+  // Same-browser writes are serialized, including retries.
+  const immutable=structuredClone(data);
+  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args));
+  writers.set(ref.id,job);return job;
+ };
+ async function write(ref,data,args){
+  let stored=data;
+  if(typeof data.v==='string'&&new TextEncoder().encode(data.v).length>=700000){
+   const bytes=new TextEncoder().encode(data.v),revision=crypto.randomUUID(),count=Math.ceil(bytes.length/480000);
+   for(let i=0;i<count;i++){
+    const block=bytes.subarray(i*480000,(i+1)*480000);let str='';for(let j=0;j<block.length;j+=8000)str+=String.fromCharCode(...block.subarray(j,j+8000));
+    await native.setDoc(native.doc(native.fs,'kv',ref.id+'--chunk--'+revision+'--'+i),{k:data.k,chunk:btoa(str),revision,index:i});
+   }
+   stored={...data,v:null,chunked:1,revision,count,bytes:bytes.length,sha256:await sha256(bytes)};
+  }
+  await native.runTransaction(native.fs,async tx=>{
+   const before=await tx.get(ref),actual=signature(before);
+   if(expected.has(ref.id)?actual!==expected.get(ref.id):before.exists()){
+    const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';throw error;
+   }
+   // Retain previous contents, including file manifests, before replacing.
+   if(before.exists())tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
+   tx.set(ref,stored,...args);
+  });
+  expected.set(ref.id,JSON.stringify(stored));
+ }
+ // Physical deletes are disabled. Existing callers may remove references only.
+ wrapped.deleteDoc=async()=>{throw Error('Borrado físico deshabilitado: los documentos y adjuntos se conservan.');};
+ return wrapped;
+}
+async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');}
+
+const ECON_VERSION=1;
+let ECON=[];
+const econStyle=`<style>.econ{max-width:1100px;margin:20px auto;padding:24px;background:white;border-radius:16px;font:15px 'Segoe UI',sans-serif;color:#241338}.econ h2,.econ h3{margin:12px 0}.econ p{margin:10px 0;line-height:1.5}.econ label{display:block;margin:10px 0}.econ input,.econ select,.econ textarea{padding:9px;border:1px solid #bcb1c7;border-radius:6px;max-width:100%;box-sizing:border-box}.econ input:not([type=checkbox]),.econ textarea{width:100%}.econ button{padding:10px 15px;margin:6px;background:#4b2563;color:white;border:0;border-radius:7px;cursor:pointer}.econ fieldset{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:10px}.econ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.econ .note{background:#fff8df;padding:12px}.econ table{width:100%;border-collapse:collapse}.econ td,.econ th{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{.econ button,.topbar,.tabs{display:none}}</style>`;
+const FUELS=['infinia_diesel','super','infinia','diesel500'];
+function blankEconomic(cr='3611'){return {schema:1,cr,vigencia:'',responsable:'',email:'',full:{enabled:true,pct:null,excludeCigarettes:true},yer:Object.fromEntries(FUELS.map(f=>[f,{mode:"porcentaje",value:null}])),concepts:[['energia','Energía eléctrica','us'],['aguas','Agua','us'],['telefono','Teléfono','us'],['canon','Canon servicios','us'],['hotel','Hotel','hotel']].map(([id,name,area])=>({id,name,area,enabled:true,mode:id==='canon'?'litros':id==='hotel'?'factura':'porcentaje',pct:null,litros:null,vat:0,deductIVA:false,deductPercepciones:false,deductIntereses:false,base:'',medidor:'',notes:''}))};}
+function checkEconomic(c){
+ if(!c||c.schema!==1||!/^\d{4}$/.test(c.cr)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(c.vigencia))throw Error('Completá CR y mes de vigencia.');
+ if(!c.responsable?.trim()||!/^\S+@\S+\.\S+$/.test(c.email))throw Error('Completá responsable y correo de Google.');
+ const num=(v,name,max=Infinity)=>{if(typeof v!=='number'||!Number.isFinite(v)||v<0||v>max)throw Error('Valor inválido: '+name);};
+ if(c.full?.enabled)num(c.full.pct,'porcentaje Full',100);
+ FUELS.forEach(f=>{const r=c.yer?.[f];if(!r||!['porcentaje','pesos_litro'].includes(r.mode))throw Error('Elegí modalidad YER '+f);num(r.value,'YER '+f,r.mode==='porcentaje'?100:Infinity);});c.full.excludeCigarettes=true;
+ if(!Array.isArray(c.concepts)||c.concepts.length>100)throw Error('Conceptos inválidos.');
+ const ids=new Set();c.concepts.forEach(x=>{if(!/^[a-zA-Z0-9_-]{1,80}$/.test(x.id)||ids.has(x.id))throw Error('Identificador de concepto inválido o repetido.');ids.add(x.id);if(!x.name?.trim()||!['us','hotel'].includes(x.area))throw Error('Nombre o área inválida.');if(!['porcentaje','factura','mixto','litros'].includes(x.mode))throw Error('Modalidad inválida.');if(!x.enabled)return;if(['porcentaje','mixto'].includes(x.mode))num(x.pct,x.name+' porcentaje',100);if(x.mode==='litros')num(x.litros,x.name+' litros');num(x.vat,x.name+' IVA agregado',100);if(!x.base?.trim())throw Error('Detallá la base de cálculo de '+x.name);});return c;
+}
+function economicFor(period){return ECON.filter(c=>c.cr===CURRENT_CR&&c.vigencia<=period).sort((a,b)=>b.vigencia.localeCompare(a.vigencia))[0]||null;}
+function fullRate(){const c=economicFor(prevMonth(CP));if(c){if(!c.full.enabled)throw Error('Full no aplica a esta estación.');return c.full.pct/100;}if(CURRENT_CR==='3531')return .12;throw Error('Cargá las condiciones económicas antes de calcular Full.');}
+function fullBase(total,cig){const c=economicFor(prevMonth(CP));return total-cig;}
+async function loadEconomic(){const raw=await sGet('economic:versions');ECON=raw?JSON.parse(raw):[];if(!Array.isArray(ECON))throw Error('Configuración inválida.');ECON.forEach(checkEconomic);}
+function econDownload(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function field(label,key,value,type='text'){return `<label>${esc(label)}<input data-k="${key}" type="${type}" value="${esc(value??'')}" ${type==='number'?'min="0" step="any"':''}></label>`;}
+function checkbox(label,key,value){return `<label><input type="checkbox" data-k="${key}" ${value?'checked':''}> ${esc(label)}</label>`;}
+function selectField(label,key,value,opts){return `<label>${label}<select data-k="${key}">${opts.map(([v,n])=>`<option value="${v}" ${v===value?'selected':''}>${n}</option>`).join('')}</select></label>`;}
+function getFields(el){const out={};el.querySelectorAll('[data-k]').forEach(x=>out[x.dataset.k]=x.type==='checkbox'?x.checked:x.type==='number'?(x.value===''?null:Number(x.value)):x.value.trim());return out;}
+function mountEconomic(el,initial,onSave){
+ let draft=structuredClone(initial);
+ function collect(){const head=getFields(el.querySelector('#ec-head'));return {...draft,...head,full:getFields(el.querySelector('#ec-full')),yer:Object.fromEntries(FUELS.map(f=>[f,getFields(el.querySelector('[data-rate="'+f+'"]'))])),concepts:[...el.querySelectorAll('[data-concept]')].map((x,i)=>({...draft.concepts[i],...getFields(x)}))};}
+ function paint(){el.innerHTML=econStyle+`<section class="econ"><h2>Condiciones económicas por estación</h2><p>Completá los valores del acuerdo vigente. El correo informado no habilita acceso: cada persona debe ingresar con Google y esperar aprobación. Para dos medidores, agregá un concepto por medidor. Podés agregar tasas municipales u otros recuperos propios.</p><p class="note">Los campos vacíos no se interpretan como cero. Indicá 0 cuando corresponda y desmarcá los conceptos que no aplican. En modalidad mixta, factura y porcentaje se suman sobre bases distintas que debés describir para evitar duplicaciones.</p><form id="ec-form"><fieldset id="ec-head"><legend>Estación y vigencia</legend><div class="econ-grid">${field('CR','cr',draft.cr)}${field('Vigente desde','vigencia',draft.vigencia,'month')}${field('Responsable','responsable',draft.responsable)}${field('Cuenta de Google a autorizar','email',draft.email,'email')}</div></fieldset><fieldset id="ec-full"><legend>Full · porcentaje de facturación</legend>${checkbox('Aplica Full','enabled',draft.full.enabled)}${field('Porcentaje','pct',draft.full.pct,'number')}<p>Base: facturación menos cigarrillos. Se aplica a todas las estaciones.</p></fieldset><fieldset id="ec-yer"><legend>YER · mismo proceso y dos Excel para todas las estaciones</legend><div class="econ-grid">${FUELS.map(f=>`<div data-rate="${f}"><h3>${f.replaceAll('_',' ')}</h3>${selectField('Modalidad','mode',draft.yer[f].mode,[['porcentaje','Porcentaje de venta'],['pesos_litro','Pesos por litro']])}${field('Valor de la comisión','value',draft.yer[f].value,'number')}</div>`).join('')}</div><p>Porcentaje: importe de la venta × porcentaje, sin deducciones. Pesos por litro: litros vendidos × comisión. La modalidad se define por producto.</p></fieldset><div id="ec-concepts">${draft.concepts.map((c,i)=>`<fieldset data-concept="${i}"><legend>Recupero ${i+1}</legend>${checkbox('Aplica','enabled',c.enabled)}<div class="econ-grid">${field('Nombre','name',c.name)}${selectField('Área','area',c.area,[['us','Unidad Servicial'],['hotel','Hotel']])}${field('Medidor / cuenta / proveedor','medidor',c.medidor)}${selectField('Modalidad','mode',c.mode,[['porcentaje','Porcentaje de base'],['factura','Importe de factura'],['mixto','Factura + porcentaje'],['litros','Litros × precio combustible']])}${field('Porcentaje','pct',c.pct,'number')}${field('Litros pactados','litros',c.litros,'number')}${field('IVA a agregar al recupero (%)','vat',c.vat,'number')}</div>${checkbox('Deducir IVA de la base','deductIVA',c.deductIVA)}${checkbox('Deducir percepciones de la base','deductPercepciones',c.deductPercepciones)}${checkbox('Deducir intereses de la base','deductIntereses',c.deductIntereses)}${field('Base de cálculo / componentes de la modalidad mixta / combustible','base',c.base)}${field('Observaciones del acuerdo','notes',c.notes)}</fieldset>`).join('')}</div><button type="button" id="ec-add">+ Agregar medidor o recupero propio</button><p>Cancelaciones y Checks mantienen el mismo funcionamiento en todas las estaciones.</p><button type="submit">Descargar formulario completo (JSON)</button>${onSave?'<button type="button" id="ec-save">Aplicar condiciones a esta estación</button>':''}<button type="button" id="ec-import">Importar formulario JSON</button><input type="file" id="ec-file" accept=".json,application/json" hidden><button type="button" onclick="window.print()">Imprimir / guardar PDF</button><p id="ec-status" role="status"></p></form></section>`;
+ el.querySelector('#ec-add').onclick=()=>{draft=collect();draft.concepts.push({id:'extra_'+crypto.randomUUID().replaceAll('-',''),name:'',area:'us',enabled:true,mode:'porcentaje',pct:null,litros:null,vat:0,base:'',medidor:'',notes:''});paint();};
+ const status=msg=>el.querySelector('#ec-status').textContent=msg;
+ el.querySelector('#ec-form').onsubmit=e=>{e.preventDefault();try{draft=checkEconomic(collect());econDownload('condiciones-'+draft.cr+'.json',draft);status('Formulario descargado. Enviáselo al administrador.');}catch(e){status(e.message);}};
+ el.querySelector('#ec-import').onclick=()=>el.querySelector('#ec-file').click();
+ el.querySelector('#ec-file').onchange=async e=>{try{if(e.target.files[0].size>250000)throw Error('Archivo demasiado grande.');draft=checkEconomic(JSON.parse(await e.target.files[0].text()));paint();status('Formulario leído. Revisalo antes de aplicarlo.');}catch(e){status(e.message);}};
+ if(onSave)el.querySelector('#ec-save').onclick=async()=>{try{draft=checkEconomic(collect());await onSave(draft);status('Condiciones guardadas. Las liquidaciones existentes conservan su cálculo.');}catch(e){status(e.message);}};
+ }
+ paint();
+}
+function renderEconomic(){if(!IS_ACCESS_ADMIN){document.getElementById('tab-content').textContent='Las condiciones las carga el administrador.';return;}mountEconomic(document.getElementById('tab-content'),economicFor(CP)||blankEconomic(CURRENT_CR),saveEconomicConfiguration);}
+function calculateEconomic(c,v){
+ const number=(key)=>{const n=v[key];if(typeof n!=='number'||!Number.isFinite(n)||n<0)throw Error('Completá '+key+' con un importe válido.');return n;};
+ let base=0,total=0;
+ if(['porcentaje','mixto'].includes(c.mode)){base=number('base');for(const [flag,key] of [['deductIVA','iva'],['deductPercepciones','percepciones'],['deductIntereses','intereses']])if(c[flag])base-=number(key);if(base<0)throw Error('Las deducciones superan la base.');total+=base*c.pct/100;}
+ if(['factura','mixto'].includes(c.mode))total+=number('factura');
+ if(c.mode==='litros')total=c.litros*number('precio');
+ if(c.area==='hotel' && v.notaCredito!==undefined){const nc=number('notaCredito');if(nc>total)throw Error('La nota de crédito supera el recupero.');total-=nc;}
+ return Math.round((total*(1+c.vat/100)+Number.EPSILON)*100)/100;
+}
+async function renderEconomicEntry(area){
+ const el=document.getElementById('tab-content');const c=economicFor(CP);
+ if(!c){el.innerHTML=econStyle+'<div class="econ"><h2>Faltan condiciones económicas</h2><p>Completá o importá el formulario en Condiciones económicas.</p></div>';return;}
+ const cr=CURRENT_CR,period=CP;let entries;try{const raw=await sGet('economic:entries:'+period);entries=raw?JSON.parse(raw):[];}catch(e){el.textContent=e.message;return;}
+ if(CURRENT_CR!==cr)return;
+ el.innerHTML=econStyle+`<div class="econ"><h2>Recuperos · ${esc(period)} · CR ${esc(cr)}</h2><p>Acuerdo vigente desde ${esc(c.vigencia)}. Cada registro conserva su condición e importe. Los archivos históricos permanecen en las pantallas originales.</p><label>Período <input type="month" id="ee-period" value="${period}"></label><button id="ee-legacy">Consultar pantalla histórica original</button>${c.concepts.filter(x=>x.enabled&&(!area||x.area===area)).map(x=>`<form data-entry="${x.id}"><fieldset><legend>${esc(x.name)} ${esc(x.medidor)}</legend><p>${esc(x.base)} · ${esc(x.mode)}${['porcentaje','mixto'].includes(x.mode)?' · '+x.pct+'%':''}${x.mode==='litros'?' · '+x.litros+' litros':''}</p><div class="econ-grid">${(['porcentaje','mixto'].includes(x.mode)?field('Facturación / base','base',null,'number'):'')}${x.deductIVA?field('IVA a deducir','iva',0,'number'):''}${x.deductPercepciones?field('Percepciones a deducir','percepciones',0,'number'):''}${x.deductIntereses?field('Intereses a deducir','intereses',0,'number'):''}${['factura','mixto'].includes(x.mode)?field('Importe de factura (confirmar lectura)','factura',null,'number'):''}${x.mode==='litros'?field('Precio por litro','precio',null,'number'):''}${field('Número de comprobante','nro','')}${field('Fecha','fecha','','date')}${x.area==='hotel'?field('Nota de crédito a descontar (0 si no hay)','notaCredito',0,'number')+field('Número de nota de crédito','ncNro','')+field('Fecha de nota de crédito','ncFecha','','date'):''}</div>${x.area==='hotel'?'<p>La nota de crédito se descuenta del recupero antes del IVA adicional, si lo hubiera. Cargá el importe sobre esa misma base.</p><label>Adjuntar nota de crédito <input type="file" class="ee-nc-file" accept=".pdf,.png,.jpg,.jpeg"></label>':''}<label>Adjuntar factura / respaldo <input type="file" class="ee-file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"></label><button type="submit">Calcular y guardar</button><output class="ee-result"></output></fieldset></form>`).join('')}<h3>Registros guardados del período</h3><table><thead><tr><th>Concepto</th><th>Comprobante</th><th>Importe</th><th>Respaldo</th></tr></thead><tbody>${entries.map((r,i)=>`<tr><td>${esc(r.condition.name)}</td><td>${esc(r.values.nro)}</td><td>${fmtM(r.total)}</td><td>${r.fileKey?`<button data-ee-view="${i}">Ver archivo</button>`:'Sin archivo'}${r.ncFileKey?` <button data-ee-nc-view="${i}">Ver NC</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+ el.querySelector('#ee-period').onchange=async e=>{if(!e.target.value)return;try{await loadPeriod(e.target.value);renderEconomicEntry(area);}catch(e){alert(e.message);}};
+ el.querySelector('#ee-legacy').onclick=()=>{if(area==='hotel'){el.innerHTML=renderHotel();attachHotel();attachGenericFiles();}else renderUSGrid();};
+ el.querySelectorAll('[data-ee-view]').forEach(b=>b.onclick=async()=>{try{const raw=await sGet(entries[+b.dataset.eeView].fileKey);if(raw)openFileViewer(JSON.parse(raw));else alert('Archivo no encontrado.');}catch(e){alert(e.message);}});
+ el.querySelectorAll('[data-ee-nc-view]').forEach(b=>b.onclick=async()=>{try{const raw=await sGet(entries[+b.dataset.eeNcView].ncFileKey);if(raw)openFileViewer(JSON.parse(raw));else alert('Nota de crédito no encontrada.');}catch(e){alert(e.message);}});
+ el.querySelectorAll('[data-entry]').forEach(form=>{
+ const condition=c.concepts.find(x=>x.id===form.dataset.entry);let file=null,ncFile=null;
+ const ncInput=form.querySelector('.ee-nc-file');if(ncInput)ncInput.onchange=e=>{ncFile=e.target.files[0]||null;if(ncFile&&ncFile.size>MAX_FILE){alert('Máximo 3,5 MB');ncFile=null;e.target.value='';}};
+ form.querySelector('.ee-file').onchange=async e=>{file=e.target.files[0];if(!file)return;if(file.size>MAX_FILE){alert('Máximo 3,5 MB');file=null;e.target.value='';return;}if(file.type==='application/pdf'&&form.querySelector('[data-k="factura"]')){try{const pdfjs=window['pdfjs-dist/build/pdf'];const pdf=await pdfjs.getDocument({data:await file.arrayBuffer()}).promise;let text='';for(let i=1;i<=pdf.numPages;i++)text+=(await (await pdf.getPage(i)).getTextContent()).items.map(x=>x.str).join(' ')+'\n';const candidates=[...text.matchAll(/(?:importe\s+total|total\s+a\s+pagar|total\s+factura)\s*[:$]?\s*([\d.,]+)/gi)];if(candidates.length===1){form.querySelector('[data-k="factura"]').value=parseNum(candidates[0][1]);form.querySelector('output').textContent='Importe detectado. Comparalo con la factura antes de guardar.';}else form.querySelector('output').textContent='No hay un total inequívoco. Ingresá el importe manualmente.';}catch(e){form.querySelector('output').textContent='No se pudo leer el PDF. Ingresá el importe manualmente.';}}};
+ form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{if(CURRENT_CR!==cr||CP!==period)throw Error('Cambió la estación o el período. Recargá la pantalla.');const values=getFields(form);const total=calculateEconomic(condition,values);if(condition.area==='hotel'){if(values.notaCredito>0&&(!values.ncNro||!/^\d{4}-\d{2}-\d{2}$/.test(values.ncFecha)))throw Error('Completá número y fecha de la nota de crédito.');if((ncFile||values.ncNro||values.ncFecha)&&!(values.notaCredito>0))throw Error('Ingresá el importe de la nota de crédito.');}if(!values.nro||!values.fecha)throw Error('Completá número de comprobante y fecha.');if(entries.some(r=>r.condition.id===condition.id&&r.values.nro===values.nro))throw Error('Este comprobante ya está cargado para el concepto.');const id=crypto.randomUUID();let fileKey=null;if(file){fileKey='file:economic:'+period+':'+id;if(!await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:await readDU(file)})))throw Error('Archivo pendiente de sincronización. Reintentá cuando esté guardado.');}let ncFileKey=null;if(ncFile){ncFileKey='file:economic:'+period+':'+id+':nc';if(!await sSet(ncFileKey,JSON.stringify({fileName:ncFile.name,type:ncFile.type,dataUrl:await readDU(ncFile)})))throw Error('Nota de crédito pendiente de sincronización.');}const entry={id,period,cr,ncFileKey,condition:structuredClone(condition),vigencia:c.vigencia,values,total,fileKey,createdAt:new Date().toISOString(),user:CU.username};const next=[...entries,entry];if(!await sSet('economic:entries:'+period,JSON.stringify(next)))throw Error('Registro pendiente de sincronización.');entries=next;await renderEconomicEntry(area);}catch(e){form.querySelector('output').textContent=e.message;}finally{button.disabled=false;}};
+ });
+}
+
+function yerRate(key){
+ if(!key)return {mode:'porcentaje',value:0};
+ const rate=YER.rates?.[key];
+ if(rate){if(!['porcentaje','pesos_litro'].includes(rate.mode)||typeof rate.value!=='number'||!Number.isFinite(rate.value)||rate.value<0||(rate.mode==='porcentaje'&&rate.value>100))throw Error('Comisión inválida para '+key);return rate;}
+ // Legacy periods contain only percentage values. Preserve their meaning.
+ if(CURRENT_CR!=='3531'&&!economicFor(prevMonth(CP))&&!Object.values(YER.pcts||{}).some(v=>v>0))throw Error('Faltan las condiciones YER de esta estación.');
+ const value=Number(YER.pcts?.[key]??0);if(!Number.isFinite(value)||value<0||value>100)throw Error('Porcentaje inválido para '+key);
+ return {mode:'porcentaje',value};
+}
+async function viewYERSource(field){try{const meta=YER[field];if(!meta?.fileKey)throw Error('Este registro histórico no contiene el Excel original.');const raw=await sGet(meta.fileKey);if(!raw)throw Error('Archivo no encontrado.');openExcelViewer(JSON.parse(raw));}catch(e){alert(e.message);}}
+function exportLocalBackup(){
+ if(!CU?.cr)throw Error('Entrá a tu estación antes de exportar.');
+ const values={};Object.keys(localStorage).filter(k=>k.startsWith('_ttl:cr'+CU.cr+':')||(k==='_sync:cr'+CU.cr||k==='_sync:v4:cr'+CU.cr)||k.startsWith('cr'+CU.cr+':')).forEach(k=>values[k]=localStorage.getItem(k));
+ econDownload('respaldo-local-'+CU.cr+'-'+Date.now()+'.json',{cr:CU.cr,createdAt:new Date().toISOString(),scope:'Solo datos presentes en este navegador; no equivale a respaldo completo de Firebase.',values});
+}
+
+function hotelPeriodFromInputId(id){const m=String(id).match(/-(\d{4}-(?:0[1-9]|1[0-2]))$/);return m?m[1]:null;}
+function yerStoragePeriod(month){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw Error('Período YER inválido.');const [y,m]=month.split('-').map(Number);return m===12?(y+1)+'-01':y+'-'+String(m+1).padStart(2,'0');}
+
+let AUTH_PERSON=null, IS_ACCESS_ADMIN=false;
+async function googleLogin(){
+ const button=document.getElementById('google-login');if(button)button.disabled=true;
+ try{
+  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+  const auth=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  const app=getApps()[0]||initializeApp(firebaseConfig);window.acaAuth=auth.getAuth(app);
+  window.acaSignOut=()=>auth.signOut(window.acaAuth);
+  const provider=new auth.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
+  const result=await auth.signInWithPopup(window.acaAuth,provider);AUTH_PERSON=result.user;
+  if(!AUTH_PERSON.emailVerified)throw Error('Google debe verificar el correo antes de solicitar acceso.');
+  await resolveAccess();
+ }catch(e){showLoad(false);CU=null;render();document.getElementById('le').textContent=authError(e);}
+ finally{const b=document.getElementById('google-login');if(b)b.disabled=false;}
+}
+function authError(e){return e.code==='auth/operation-not-allowed'?'Falta habilitar Google en Firebase Authentication.':e.code==='auth/unauthorized-domain'?'Falta autorizar el dominio de esta aplicación en Firebase.':e.code==='permission-denied'?'No se pudo verificar el permiso. Revisá la configuración de acceso de Firebase con el administrador.':e.message;}
+async function resolveAccess(preferStation=false){
+ const db=await getDB();const uid=AUTH_PERSON.uid;
+ const admin=await db.getDoc(db.doc(db.fs,'admins',uid));IS_ACCESS_ADMIN=admin.exists()&&admin.data().enabled===true;
+ if(IS_ACCESS_ADMIN&&!preferStation){CU={uid,username:AUTH_PERSON.email,role:'access-admin',name:'Administración de accesos'};render();return;}
+ const snap=await db.getDoc(db.doc(db.fs,'access',uid));const access=snap.exists()?snap.data():null;
+ if(!access||access.enabled!==true){await renderAccessRequest();return;}
+ const dep=DEPENDENCIAS.find(d=>d.cr===access.cr&&d.role!=='divisional');
+ if(!dep)throw Error('La estación asignada no es válida. Contactá al administrador.');
+ CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncInit=false;
+ CU={uid,username:AUTH_PERSON.email,name:dep.nombre,depNombre:dep.nombre,cr:dep.cr,role:'empleado'};
+ showLoad(true);
+ try{await loadEconomic();syncLoad();const raw=await sGet('periodos');APS=raw?JSON.parse(raw):[];await loadPeriod(CP);await loadYER();AT='us';usView=null;render();}finally{showLoad(false);}
+}
+async function renderAccessRequest(){
+ CU=null;const db=await getDB();const ref=db.doc(db.fs,'accessRequests',AUTH_PERSON.uid);const snap=await db.getDoc(ref);const request=snap.exists()?snap.data():null;
+ const status=request?.status;const depOptions=DEPENDENCIAS.filter(d=>d.role!=='divisional').map(d=>`<option value="${d.cr}">${esc(d.nombre)} · CR ${d.cr}</option>`).join('');
+ document.getElementById('app').innerHTML=econStyle+`<section class="econ" style="max-width:620px"><h2>${status==='pending'?'Solicitud pendiente de autorización':status==='rejected'?'Solicitud rechazada':status==='approved'?'Acceso no habilitado':'Solicitar acceso a una estación'}</h2><p>${esc(AUTH_PERSON.email)}</p>${request?`<p>Estación solicitada: ${esc(request.cr)}. ${status==='pending'?'El administrador debe aprobar tu solicitud antes de que puedas ver datos o archivos.':'Contactá al administrador para revisar tu acceso.'}</p>`:`<form id="request-access"><label>Estación<select id="request-cr" required><option value="">Seleccioná tu estación</option>${depOptions}</select></label><button>Enviar solicitud</button></form>`}<p id="request-status" role="status"></p><button id="request-refresh">Consultar estado</button><button id="request-logout">Salir</button><details><summary>Identificador de cuenta</summary><p>${esc(AUTH_PERSON.uid)}</p></details></section>`;
+ document.getElementById('request-logout').onclick=logoutSafe;
+ document.getElementById('request-refresh').onclick=()=>resolveAccess().catch(e=>document.getElementById('request-status').textContent=authError(e));
+ document.getElementById('request-access')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{const cr=document.getElementById('request-cr').value;if(!DEPENDENCIAS.some(d=>d.cr===cr&&d.role!=='divisional'))throw Error('Elegí una estación.');await db.setDoc(ref,{uid:AUTH_PERSON.uid,email:AUTH_PERSON.email,cr,status:'pending',createdAt:Date.now()});await renderAccessRequest();}catch(e){document.getElementById('request-status').textContent=authError(e);b.disabled=false;}});
+}
+async function logoutSafe(){
+ if(syncPend()&&!await sincronizar(true))return;
+ clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncInit=false;_db=null;
+ document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
+}
+async function renderAccessAdmin(){
+ const root=document.getElementById('app');root.innerHTML=econStyle+'<section class="econ"><h2>Accesos y condiciones económicas</h2><p>Cargando solicitudes…</p></section>';
+ try{
+ const db=await getDB();const [requests,users]=await Promise.all([db.getDocs(db.collection(db.fs,'accessRequests')),db.getDocs(db.collection(db.fs,'access'))]);
+ const reqs=requests.docs.map(d=>({id:d.id,...d.data()}));const accounts=users.docs.map(d=>({id:d.id,...d.data()}));
+ const options=DEPENDENCIAS.filter(d=>d.role!=='divisional').map(d=>`<option value="${d.cr}">${esc(d.nombre)} · ${d.cr}</option>`).join('');
+ root.innerHTML=econStyle+`<section class="econ"><h2>Accesos y condiciones económicas</h2><p>${esc(CU.username)} · Administrador</p><button id="adm-my-station">Mi estación</button><button id="adm-refresh">Actualizar</button><button id="adm-logout">Salir</button><h3>Solicitudes</h3>${reqs.length?'':'<p>Todavía no hay solicitudes.</p>'}<div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>Estación solicitada</th><th>Estado</th><th>Decisión</th></tr></thead><tbody>${reqs.map(r=>`<tr><td>${esc(r.email)}</td><td>${esc(r.cr)}</td><td>${esc(({pending:'Pendiente',approved:'Aprobada',rejected:'Rechazada'})[r.status]||r.status)}</td><td>${r.status!=='approved'?`<button data-approve="${esc(r.id)}">Aprobar</button>`:''}${r.status==='pending'?`<button data-reject="${esc(r.id)}">Rechazar</button>`:''}</td></tr>`).join('')}</tbody></table></div><h3>Cuentas autorizadas</h3><div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>CR</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${accounts.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.cr)}</td><td>${u.enabled?'Habilitada':'Revocada'}</td><td><button data-toggle="${esc(u.id)}">${u.enabled?'Revocar':'Habilitar'}</button></td></tr>`).join('')}</tbody></table></div><h3>Cargar condiciones</h3><p>Elegí la estación para importar su formulario. Esta sección no abre sus operaciones.</p><select id="adm-cr">${options}</select><button id="adm-conditions">Abrir condiciones</button><p id="adm-status" role="status"></p><div id="adm-economic"></div></section>`;
+ root.querySelector('#adm-my-station').onclick=()=>resolveAccess(true).catch(e=>root.querySelector('#adm-status').textContent=e.message);root.querySelector('#adm-refresh').onclick=renderAccessAdmin;root.querySelector('#adm-logout').onclick=logoutSafe;
+ async function action(fn){try{await fn();await renderAccessAdmin();}catch(e){root.querySelector('#adm-status').textContent=e.message;}}
+ root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
+ root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
+ root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ }catch(e){root.innerHTML=econStyle+`<section class="econ"><h2>No se pudo cargar la administración</h2><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
+}
+async function saveEconomicConfiguration(c){
+ if(!IS_ACCESS_ADMIN)throw Error('Solo el administrador puede cargar condiciones.');
+ if(c.cr!==CURRENT_CR)throw Error('El CR del formulario no corresponde a la estación seleccionada.');
+ if(ECON.some(x=>x.vigencia===c.vigencia))throw Error('Ya existe una versión para ese mes. Usá una nueva vigencia para preservar el acuerdo anterior.');
+ const next=[...ECON,structuredClone(c)];if(!await sSet('economic:versions',JSON.stringify(next)))throw Error('Condiciones pendientes de sincronización. No están confirmadas en la nube.');ECON=next;
+}
+
+async function openAdminPanel(){if(!IS_ACCESS_ADMIN)return;if(syncPend()&&!await sincronizar(true))return;CU={uid:AUTH_PERSON.uid,username:AUTH_PERSON.email,role:"access-admin",name:"Administración de accesos"};render();}
 
 render();
 </script>
