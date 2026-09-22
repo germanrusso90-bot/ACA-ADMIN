@@ -1,0 +1,26 @@
+{
+  "passed": 20,
+  "tests": [
+    "Sin sesión: lectura y escritura denegadas",
+    "Correo sin verificar: acceso denegado",
+    "Cuenta pendiente: no lee ni escribe operaciones",
+    "Solicitud propia pendiente permitida",
+    "No puede autoaprobarse, crear permisos ni administrador",
+    "No puede falsificar el correo de su solicitud",
+    "Cipolletti lee y escribe sus operaciones",
+    "Colonia conserva acceso YER y espacio operativo nuevo",
+    "Lectura y escritura cruzadas denegadas en ambas direcciones",
+    "Cuenta revocada no accede a sus operaciones",
+    "Listado general kv denegado incluso al administrador",
+    "Datos antiguos sin CR solo legibles por Cipolletti",
+    "Estación lee condiciones pero no puede alterarlas",
+    "Administrador carga condiciones sin leer operaciones",
+    "Fragmentos y respaldos de condiciones solo modificables por administrador",
+    "Fragmentos y respaldos operativos quedan en la estación",
+    "Aprobación por administrador en lote y acceso posterior",
+    "Revocación deniega la siguiente lectura sin borrar datos",
+    "Borrado físico de operaciones denegado",
+    "Listado de solicitudes y cuentas reservado al administrador"
+  ],
+  "scope": "Reglas compiladas y ejecutadas en emulador Firestore local con usuarios simulados; sin producción y sin login Google real."
+}

@@ -1,0 +1,31 @@
+{
+  "passed": 25,
+  "tests": [
+    "Login sin contraseñas",
+    "Parseo decimal numérico y argentino; cero preservado",
+    "YER inválido no se sanea de manera destructiva",
+    "YER porcentaje y pesos/litro",
+    "Recuperos porcentaje, factura, mixto y litros",
+    "Rechazo de deducciones mayores que la base",
+    "Archivo grande fragmentado y recuperado íntegro",
+    "Fragmento faltante detectado",
+    "Conflicto de otra sesión conserva su versión",
+    "Respaldo anterior a modificar documento",
+    "Borrado físico deshabilitado",
+    "Solicitud pendiente no abre datos de estación",
+    "Administrador aprueba Gmail y CR solicitados",
+    "Revocar cuenta no elimina documentos",
+    "Full 10% y 12%, siempre sin cigarrillos",
+    "Checks: números repetidos no cierran otra auditoría",
+    "Fallo de lectura sin respaldo bloquea carga",
+    "Cambio de vigencia no altera registro ya calculado",
+    "Hotel factura menos NC reproduce agosto de Cipolletti",
+    "Hotel mixto y porcentaje descuentan NC y rechazan exceso",
+    "Hotel guarda factura y NC separadas; valida referencia y conserva adjunto",
+    "Recupero importe total menos IVA menos percepciones",
+    "Formulario cuatro modalidades YER y recupero adicional",
+    "Formulario incompleto no se acepta",
+    "Formulario completo exporta valores por producto y medidor"
+  ],
+  "scope": "Pruebas de funciones y DOM en Node/jsdom con base simulada. Sin Google real, sin Firestore ni emulador de reglas; no es revisión visual."
+}

@@ -1,0 +1,15 @@
+{
+  "name": "aca-recuperos-revision",
+  "version": "4.3.0",
+  "private": true,
+  "scripts": {
+    "test": "node pruebas.cjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-aca-validation 'node pruebas-reglas.cjs'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "4.0.1",
+    "firebase": "11.1.0",
+    "firebase-tools": "13.35.1",
+    "jsdom": "30.0.1"
+  }
+}

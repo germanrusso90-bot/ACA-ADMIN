@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function verified() { return request.auth != null && request.auth.token.email_verified == true; }
+  function admin() { return verified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true; }
+  function approved() { return verified() && exists(/databases/$(database)/documents/access/$(request.auth.uid)) && get(/databases/$(database)/documents/access/$(request.auth.uid)).data.enabled == true; }
+  function ownCR() { return get(/databases/$(database)/documents/access/$(request.auth.uid)).data.cr; }
+  function validCR(cr) { return cr in ['3531','3611','9954','3492','3468','8460','4502','6785','9482','3255','6092','8591','8605','5967']; }
+  function config(id) { return id.matches('cr[0-9]{4}--economic--versions.*'); }
+  function ownKey(id) { return approved() && id.matches('cr' + ownCR() + '--.*'); }
+  function legacy(id) { return approved() && ownCR() == '3531' && !id.matches('cr[0-9]{4}--.*'); }
+  match /admins/{uid} {
+   allow get: if verified() && request.auth.uid == uid;
+   allow list, create, update, delete: if false; // Initial administrator: Firebase Console only.
+  }
+  match /accessRequests/{uid} {
+   allow get: if verified() && (request.auth.uid == uid || admin());
+   allow list: if admin();
+   allow create: if verified() && request.auth.uid == uid
+    && request.resource.data.keys().hasOnly(['uid','email','cr','status','createdAt'])
+    && request.resource.data.uid == uid
+    && request.resource.data.email == request.auth.token.email
+    && validCR(request.resource.data.cr)
+    && request.resource.data.status == 'pending'
+    && request.resource.data.createdAt is number;
+   allow update: if admin()
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reviewedBy','reviewedAt'])
+    && request.resource.data.status in ['approved','rejected']
+    && request.resource.data.reviewedBy == request.auth.uid;
+   allow delete: if false;
+  }
+  match /access/{uid} {
+   allow get: if verified() && (request.auth.uid == uid || admin());
+   allow list: if admin();
+   allow create, update: if admin()
+    && request.resource.data.keys().hasOnly(['email','cr','enabled','approvedBy','updatedAt'])
+    && request.resource.data.email is string
+    && request.resource.data.enabled is bool
+    && request.resource.data.approvedBy == request.auth.uid
+    && validCR(request.resource.data.cr);
+   allow delete: if false;
+  }
+  match /kv/{id} {
+   allow get: if ownKey(id) || legacy(id) || (admin() && config(id));
+   allow list: if false;
+   allow create, update: if (admin() && config(id)) || (ownKey(id) && !config(id));
+   allow delete: if false;
+  }
+ }
+}

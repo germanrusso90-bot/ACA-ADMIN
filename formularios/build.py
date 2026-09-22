@@ -1,0 +1,28 @@
+from pathlib import Path
+import json
+src=Path('revision/economic.js').read_text().split('function renderEconomic(){')[0]
+src=src.replace("f.replaceAll('_',' ')","({infinia_diesel:'Infinia Diesel',super:'Súper',infinia:'Infinia',diesel500:'Diesel 500'})[f]")
+src=src.replace('Condiciones económicas por estación</h2>','Colonia 25 de Mayo · Condiciones económicas</h2><p class="note">CR 3611. Los porcentajes YER provienen de la liquidación de agosto de 2026: confirmalos o corregilos según el acuerdo vigente. Los demás datos históricos de Colonia no se usaron. Indicá expresamente el IVA a agregar: 0 si no corresponde.</p>')
+src=src.replace("vat:0,deductIVA:false", "vat:null,deductIVA:false")
+src=src.replace('Factura + porcentaje','Factura + porcentaje (se suman)')
+src=src.replace("['litros','Litros × precio combustible']", "['litros','Litros × precio combustible'],['total_menos_iva_percepciones','Importe total menos IVA menos percepciones']")
+src=src.replace('Observaciones del acuerdo','Observaciones / notas de crédito / particularidades del acuerdo')
+src=src.replace("${field('Vigente desde','vigencia',draft.vigencia,'month')}", "")
+src=src.replace("${field('Responsable','responsable',draft.responsable)}", "<label>Responsable<input data-k=\"responsable\" type=\"text\" placeholder=\"Nombre y apellido\" value=\"${esc(draft.responsable??'')}\"></label>")
+src=src.replace('<legend>Estación y vigencia</legend>', '<legend>Datos de la estación</legend>')
+src=src.replace("yer:Object.fromEntries(FUELS.map(f=>[f,getFields(el.querySelector('[data-rate=\"'+f+'\"]'))]))", "yer:Object.fromEntries(FUELS.map(f=>[f,{mode:el.querySelector('#yer-mode').value,value:Number(el.querySelector('[data-rate=\"'+f+'\"] [data-k=\"value\"]').value)}]))")
+old='''<div class="econ-grid">${FUELS.map(f=>`<div data-rate="${f}"><h3>${({infinia_diesel:'Infinia Diesel',super:'Súper',infinia:'Infinia',diesel500:'Diesel 500'})[f]}</h3>${selectField('Modalidad','mode',draft.yer[f].mode,[['porcentaje','Porcentaje de venta'],['pesos_litro','Pesos por litro']])}${field('Valor de la comisión','value',draft.yer[f].value,'number')}</div>`).join('')}</div><p>Porcentaje: importe de la venta × porcentaje, sin deducciones. Pesos por litro: litros vendidos × comisión. La modalidad se define por producto.</p>'''
+new='''${selectField('Modalidad para todos los productos','yer-mode',draft.yer.super.mode,[['porcentaje','Porcentaje de venta'],['pesos_litro','Pesos por litro']]).replace('data-k="yer-mode"','id="yer-mode"')}<div class="econ-grid">${FUELS.map(f=>`<div data-rate="${f}"><h3>${({infinia_diesel:'Infinia Diesel',super:'Súper',infinia:'Infinia',diesel500:'Diesel 500'})[f]}</h3>${field('Valor de la comisión','value',draft.yer[f].value,'number')}</div>`).join('')}</div><p>La modalidad elegida se aplica a los cuatro productos. Porcentaje: importe de venta × porcentaje, sin deducciones. Pesos por litro: litros vendidos × comisión.</p>'''
+src=src.replace(old,new)
+src=src.replace('<p>Cancelaciones y Checks mantienen', '<p>Hotel: indicá si se liquida por factura, porcentaje o ambos. Si hay notas de crédito o ajustes, detallá su tratamiento en Observaciones.</p><p>Cancelaciones y Checks mantienen')
+src=src.replace('<button type="submit">Descargar formulario completo (JSON)</button>', '<label><input type="checkbox" id="confirmed" required> Revisé las condiciones y confirmé los porcentajes YER.</label><button type="submit">Descargar formulario completo (JSON)</button>')
+# Exponer solo los campos pertinentes sin descartar los valores previamente escritos.
+src=src.replace('function paint(){el.innerHTML=', '''function adaptFields(){el.querySelectorAll('[data-concept]').forEach(box=>{const mode=box.querySelector('[data-k="mode"]').value;for(const [key,show]of [['pct',['porcentaje','mixto'].includes(mode)],['litros',mode==='litros'],['deductIVA',['porcentaje','mixto'].includes(mode)],['deductPercepciones',['porcentaje','mixto'].includes(mode)],['deductIntereses',['porcentaje','mixto'].includes(mode)]]){const input=box.querySelector('[data-k="'+key+'"]');input.closest('label').hidden=!show;}box.querySelector('[data-k="mode"]').onchange=adaptFields;});}
+ function paint(){el.innerHTML=''')
+src=src.replace(" const status=msg=>", " adaptFields();el.querySelector('#ec-head [data-k=\"cr\"]').readOnly=true;\n const status=msg=>")
+src=src.replace("e.preventDefault();try{draft=checkEconomic(collect());", "e.preventDefault();try{if(!el.querySelector('#confirmed').checked)throw Error('Confirmá que revisaste las condiciones.');draft=checkEconomic(collect());")
+src=src.replace("draft=checkEconomic(JSON.parse(await e.target.files[0].text()));paint();", "const imported=checkEconomic(JSON.parse(await e.target.files[0].text()));if(imported.cr!=='3611')throw Error('Este formulario corresponde a Colonia, CR 3611.');draft=imported;paint();")
+pcts=json.loads(Path('audit-real/results.json').read_text())['conditions']['3611']['yer']
+html='''<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Colonia 25 de Mayo · Condiciones económicas ACA</title></head><body style="background:#f4f1f8"><main id="form"></main><script>function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+'''+src+'''\nconst initial=blankEconomic('3611');initial.vigencia=new Date().toISOString().slice(0,7);const verifiedRates='''+json.dumps(pcts)+''';for(const [fuel,value]of Object.entries(verifiedRates))initial.yer[fuel]={mode:'porcentaje',value};mountEconomic(document.getElementById('form'),initial,null);</script></body></html>'''
+Path('formularios/formulario-colonia.html').write_text(html)
