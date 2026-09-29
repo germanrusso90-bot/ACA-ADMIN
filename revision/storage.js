@@ -2,7 +2,18 @@
 // complete, hash-verified value is published. Concurrent edits fail closed.
 function wrapDB(native){
  const expected=new Map(),writers=new Map(),owned=new Set();
- const signature=s=>s.exists()?JSON.stringify(s.data()):null;
+ const stableValue=value=>{
+  if(value===null||typeof value!=='object')return value;
+  if(Array.isArray(value))return value.map(stableValue);
+  if(typeof value.toJSON==='function')return stableValue(value.toJSON());
+  return Object.keys(value).sort().reduce((out,key)=>{out[key]=stableValue(value[key]);return out;},{});
+ };
+ const stableJSON=value=>JSON.stringify(stableValue(value));
+ const normalizeSignature=value=>{
+  if(value===null||value===undefined)return value;
+  try{return stableJSON(JSON.parse(value));}catch{return value;}
+ };
+ const signature=s=>s.exists()?stableJSON(s.data()):null;
  const conflict=()=>{const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';return error;};
  const wrapped={...native};
  wrapped.getDoc=async ref=>{
@@ -22,6 +33,13 @@ function wrapDB(native){
    expected.set(ref.id,signature(snap));
   }
   return expected.get(ref.id);
+ };
+ wrapped.refreshExpected=async ref=>{
+  if(ref.parent.id!=='kv')return null;
+  const snap=await native.getDoc(ref),value=signature(snap);
+  expected.set(ref.id,value);
+  owned.delete(ref.id);
+  return value;
  };
  wrapped.setQueuedDoc=(ref,data,base,...args)=>{
   if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
@@ -51,15 +69,16 @@ function wrapDB(native){
    const before=await tx.get(ref),actual=signature(before);
    let baseline;
    if(queuedBase.known){
-    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedBase.value&&!owned.has(ref.id))throw conflict();
-    baseline=owned.has(ref.id)?expected.get(ref.id):queuedBase.value;
+    const queuedValue=normalizeSignature(queuedBase.value);
+    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedValue&&!owned.has(ref.id))throw conflict();
+    baseline=owned.has(ref.id)?expected.get(ref.id):queuedValue;
    }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
    if(actual!==baseline)throw conflict();
    // Retain previous contents, including file manifests, before replacing.
    if(before.exists())tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
-  expected.set(ref.id,JSON.stringify(stored));
+  expected.set(ref.id,stableJSON(stored));
   owned.add(ref.id);
  }
  // Physical deletes are disabled. Existing callers may remove references only.

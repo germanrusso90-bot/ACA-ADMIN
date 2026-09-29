@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.2 — revisión 29/09/2026';
+const APP_VERSION='v4.3.3 — revisión 29/09/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -499,6 +499,7 @@ function syncPersist(){
 }
 function syncPend(){ return Object.keys(_syncQueue).length; }
 function legacyPendingKeys(){ return Object.keys(_syncQueue).filter(fk=>syncEntry(_syncQueue[fk]).legacy); }
+function conflictPendingKeys(){ return Object.keys(_syncQueue).filter(fk=>_syncErrors[fk]?.code==='aca/conflict'&&!syncEntry(_syncQueue[fk]).legacy); }
 function syncEncolar(fk,v,base){
   const previous=Object.prototype.hasOwnProperty.call(_syncQueue,fk)?syncEntry(_syncQueue[fk]):null;
   const safeBase=previous?(previous.legacy?undefined:previous.base):base;
@@ -530,8 +531,8 @@ async function sincronizar(manual){
     const conflict=Object.values(_syncErrors).some(e=>e.code==='aca/conflict');
     alert(ok?'Listo: todo quedó guardado en la nube.'
             :legacy?'Los cambios siguen guardados en este navegador, pero fueron creados por la versión anterior. Descargá “Respaldo local” y envialo al administrador para recuperarlos sin pisar información de la nube.'
-            :conflict?'Otra sesión modificó el mismo registro. Los cambios locales y la versión de la nube se conservaron; descargá “Respaldo local” para conciliarlos.'
-            :'Todavía no se pudo guardar en la nube. Revisá la conexión y reintentá — mientras tanto los cambios siguen guardados en este navegador.');
+            :conflict?'Firebase detectó una versión distinta. Cerrá otras pestañas de ACA y usá “Guardar mis cambios”; la versión anterior de la nube quedará respaldada automáticamente.'
+            :'Todavía no se pudo guardar en la nube. Motivo: '+[...new Set(Object.values(_syncErrors).map(e=>e.code||e.message))].join(', ')+'. Los cambios siguen guardados en este navegador.');
   }
   return ok;
 }
@@ -562,6 +563,30 @@ function discardLegacyPending(){
 window.clearLegacyPendingLocal=clearLegacyPendingLocal;
 window.discardLegacyPending=discardLegacyPending;
 
+async function resolvePendingConflicts(){
+  const keys=conflictPendingKeys();
+  if(!keys.length){toast('No hay conflictos pendientes.');return false;}
+  if(!confirm(`¿Guardar ${keys.length===1?'este cambio':`estos ${keys.length} cambios`} como la versión vigente?\n\nCerrá antes cualquier otra pestaña de ACA. La versión que está ahora en Firebase se conservará automáticamente como respaldo.`))return false;
+  _syncing=true;syncBadge();
+  try{
+    const db=await getDB();
+    for(const fk of keys){
+      const pending=_syncQueue[fk],entry=syncEntry(pending);
+      const base=await db.refreshExpected(db.doc(db.fs,'kv',encodeKey(fk)));
+      if(_syncQueue[fk]===pending){_syncQueue[fk]={schema:2,value:entry.value,base,queuedAt:Date.now()};delete _syncErrors[fk];}
+    }
+    syncPersist();
+  }catch(e){
+    keys.forEach(fk=>{if(_syncQueue[fk])_syncErrors[fk]={code:e.code||'',message:e.message||'No se pudo actualizar la versión base'};});
+    _syncing=false;syncPersist();syncBadge();
+    alert('No se pudo preparar la resolución del conflicto. Motivo: '+(e.code||e.message||'error desconocido')+'.');
+    return false;
+  }
+  _syncing=false;syncBadge();
+  return sincronizar(true);
+}
+window.resolvePendingConflicts=resolvePendingConflicts;
+
 function syncBadge(){
   let b=document.getElementById('sync-badge');
   if(!b){
@@ -577,10 +602,15 @@ function syncBadge(){
   } else if(n){
     b.style.background='#B3261E'; b.style.color='#fff';
     const legacy=legacyPendingKeys().length;
+    const conflicts=conflictPendingKeys().length;
     b.innerHTML=legacy
       ?`<span>⚠️ ${legacy} cambio${legacy>1?'s':''} de la versión anterior</span>
         <button onclick="exportLocalBackup()" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Respaldo local</button>
         <button onclick="discardLegacyPending()" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Descartar y recargar</button>`
+      :conflicts
+      ?`<span>⚠️ ${conflicts} cambio${conflicts>1?'s':''} en conflicto con Firebase</span>
+        <button onclick="exportLocalBackup()" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Respaldo local</button>
+        <button onclick="resolvePendingConflicts()" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Guardar mis cambios</button>`
       :`<span>⚠️ ${n} cambio${n>1?'s':''} sin guardar en la nube</span>
         <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`;
   } else {
@@ -6734,7 +6764,18 @@ async function renderDivisionalNC(cr){
 // complete, hash-verified value is published. Concurrent edits fail closed.
 function wrapDB(native){
  const expected=new Map(),writers=new Map(),owned=new Set();
- const signature=s=>s.exists()?JSON.stringify(s.data()):null;
+ const stableValue=value=>{
+  if(value===null||typeof value!=='object')return value;
+  if(Array.isArray(value))return value.map(stableValue);
+  if(typeof value.toJSON==='function')return stableValue(value.toJSON());
+  return Object.keys(value).sort().reduce((out,key)=>{out[key]=stableValue(value[key]);return out;},{});
+ };
+ const stableJSON=value=>JSON.stringify(stableValue(value));
+ const normalizeSignature=value=>{
+  if(value===null||value===undefined)return value;
+  try{return stableJSON(JSON.parse(value));}catch{return value;}
+ };
+ const signature=s=>s.exists()?stableJSON(s.data()):null;
  const conflict=()=>{const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';return error;};
  const wrapped={...native};
  wrapped.getDoc=async ref=>{
@@ -6754,6 +6795,13 @@ function wrapDB(native){
    expected.set(ref.id,signature(snap));
   }
   return expected.get(ref.id);
+ };
+ wrapped.refreshExpected=async ref=>{
+  if(ref.parent.id!=='kv')return null;
+  const snap=await native.getDoc(ref),value=signature(snap);
+  expected.set(ref.id,value);
+  owned.delete(ref.id);
+  return value;
  };
  wrapped.setQueuedDoc=(ref,data,base,...args)=>{
   if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
@@ -6783,15 +6831,16 @@ function wrapDB(native){
    const before=await tx.get(ref),actual=signature(before);
    let baseline;
    if(queuedBase.known){
-    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedBase.value&&!owned.has(ref.id))throw conflict();
-    baseline=owned.has(ref.id)?expected.get(ref.id):queuedBase.value;
+    const queuedValue=normalizeSignature(queuedBase.value);
+    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedValue&&!owned.has(ref.id))throw conflict();
+    baseline=owned.has(ref.id)?expected.get(ref.id):queuedValue;
    }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
    if(actual!==baseline)throw conflict();
    // Retain previous contents, including file manifests, before replacing.
    if(before.exists())tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
-  expected.set(ref.id,JSON.stringify(stored));
+  expected.set(ref.id,stableJSON(stored));
   owned.add(ref.id);
  }
  // Physical deletes are disabled. Existing callers may remove references only.
