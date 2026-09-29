@@ -22,7 +22,7 @@ async function resolveAccess(preferStation=false){
  if(!access||access.enabled!==true){await renderAccessRequest();return;}
  const dep=DEPENDENCIAS.find(d=>d.cr===access.cr&&d.role!=='divisional');
  if(!dep)throw Error('La estación asignada no es válida. Contactá al administrador.');
- CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncInit=false;
+ CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;
  CU={uid,username:AUTH_PERSON.email,name:dep.nombre,depNombre:dep.nombre,cr:dep.cr,role:'empleado'};
  showLoad(true);
  try{await loadEconomic();syncLoad();const raw=await sGet('periodos');APS=raw?JSON.parse(raw):[];await loadPeriod(CP);await loadYER();AT='us';usView=null;render();}finally{showLoad(false);}
@@ -37,7 +37,7 @@ async function renderAccessRequest(){
 }
 async function logoutSafe(){
  if(syncPend()&&!await sincronizar(true))return;
- clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncInit=false;_db=null;
+ clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;_db=null;
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
 async function renderAccessAdmin(){
@@ -52,7 +52,7 @@ async function renderAccessAdmin(){
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
- root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
  }catch(e){root.innerHTML=econStyle+`<section class="econ"><h2>No se pudo cargar la administración</h2><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){

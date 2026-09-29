@@ -1,8 +1,9 @@
 // Existing kv identifiers remain unchanged. Chunks are immutable; only a
 // complete, hash-verified value is published. Concurrent edits fail closed.
 function wrapDB(native){
- const expected=new Map(),writers=new Map();
+ const expected=new Map(),writers=new Map(),owned=new Set();
  const signature=s=>s.exists()?JSON.stringify(s.data()):null;
+ const conflict=()=>{const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';return error;};
  const wrapped={...native};
  wrapped.getDoc=async ref=>{
   const snap=await native.getDoc(ref);
@@ -14,14 +15,29 @@ function wrapDB(native){
   const hash=await sha256(bytes);if(hash!==meta.sha256||bytes.length!==meta.bytes)throw Error('El archivo no pasó la verificación de integridad.');
   return {exists:()=>true,data:()=>({...meta,v:new TextDecoder().decode(bytes)}),id:snap.id,ref:snap.ref};
  };
+ wrapped.ensureExpected=async ref=>{
+  if(ref.parent.id!=='kv')return null;
+  if(!expected.has(ref.id)){
+   const snap=await native.getDoc(ref);
+   expected.set(ref.id,signature(snap));
+  }
+  return expected.get(ref.id);
+ };
+ wrapped.setQueuedDoc=(ref,data,base,...args)=>{
+  if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
+  if(base===undefined){const error=Error('Este cambio pendiente fue creado por una versión anterior y no puede sobrescribir la nube automáticamente. Descargá Respaldo local para conciliarlo.');error.code='aca/legacy-queue';return Promise.reject(error);}
+  const immutable=structuredClone(data);
+  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args,{known:true,value:base}));
+  writers.set(ref.id,job);return job;
+ };
  wrapped.setDoc=(ref,data,...args)=>{
   if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
   // Same-browser writes are serialized, including retries.
   const immutable=structuredClone(data);
-  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args));
+  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args,{known:false}));
   writers.set(ref.id,job);return job;
  };
- async function write(ref,data,args){
+ async function write(ref,data,args,queuedBase){
   let stored=data;
   if(typeof data.v==='string'&&new TextEncoder().encode(data.v).length>=700000){
    const bytes=new TextEncoder().encode(data.v),revision=crypto.randomUUID(),count=Math.ceil(bytes.length/480000);
@@ -33,14 +49,18 @@ function wrapDB(native){
   }
   await native.runTransaction(native.fs,async tx=>{
    const before=await tx.get(ref),actual=signature(before);
-   if(expected.has(ref.id)?actual!==expected.get(ref.id):before.exists()){
-    const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';throw error;
-   }
+   let baseline;
+   if(queuedBase.known){
+    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedBase.value&&!owned.has(ref.id))throw conflict();
+    baseline=owned.has(ref.id)?expected.get(ref.id):queuedBase.value;
+   }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
+   if(actual!==baseline)throw conflict();
    // Retain previous contents, including file manifests, before replacing.
    if(before.exists())tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
   expected.set(ref.id,JSON.stringify(stored));
+  owned.add(ref.id);
  }
  // Physical deletes are disabled. Existing callers may remove references only.
  wrapped.deleteDoc=async()=>{throw Error('Borrado físico deshabilitado: los documentos y adjuntos se conservan.');};

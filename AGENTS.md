@@ -171,7 +171,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 25 pruebas funcionales aprobadas en la candidata v4.3.
+- 28 pruebas funcionales aprobadas en la candidata v4.3.1.
 - 20 pruebas de reglas aprobadas en Firestore Emulator.
 - 10 pruebas de regresión aprobadas contra la copia del respaldo.
 - El respaldo verificado contenía 67 documentos: 53 de Cipolletti, 12 de Colonia y 2 de otros CR.

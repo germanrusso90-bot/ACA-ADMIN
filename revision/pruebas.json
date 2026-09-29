@@ -1,5 +1,5 @@
 {
-  "passed": 25,
+  "passed": 28,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -10,6 +10,9 @@
     "Archivo grande fragmentado y recuperado íntegro",
     "Fragmento faltante detectado",
     "Conflicto de otra sesión conserva su versión",
+    "Cola con versión base sincroniza después de recargar",
+    "Cola anterior queda pendiente y no pisa la nube",
+    "Cola nueva detecta cambio remoto y conserva ambas versiones",
     "Respaldo anterior a modificar documento",
     "Borrado físico deshabilitado",
     "Solicitud pendiente no abre datos de estación",

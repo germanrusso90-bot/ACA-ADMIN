@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3 — revisión 22/09/2026';
+const APP_VERSION='v4.3.1 — revisión 29/09/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -366,7 +366,7 @@ async function sGet(k,sh=true){
   if(_cache[fk]!==undefined)return _cache[fk];
   // 2. localStorage con TTL
   const lv=lsGet(fk);
-  if(Object.prototype.hasOwnProperty.call(_syncQueue,fk)){_cache[fk]=_syncQueue[fk];return _syncQueue[fk];}
+  if(Object.prototype.hasOwnProperty.call(_syncQueue,fk)){const value=syncEntry(_syncQueue[fk]).value;_cache[fk]=value;return value;}
   // 3. Firebase con clave nueva (con prefijo cr3531:)
   // _fbOk distingue "consulté y no existe" de "no pude consultar".
   // Cachear un null por error de red hacía que loadYER creyera que el mes
@@ -478,8 +478,14 @@ function _fbRefresh(fk){
 // Todo lo que no llega a la nube queda encolado en el navegador (sin
 // vencimiento) y se reintenta solo. El indicador de abajo a la derecha
 // muestra siempre si hay algo pendiente, y permite forzar el envío.
-let _syncQueue={}, _syncing=false, _syncInit=false;
+let _syncQueue={}, _syncing=false, _syncInit=false, _syncErrors={};
 const _syncLS=()=>'_sync:v4:cr'+CURRENT_CR; // Las colas antiguas se conservan para revisión manual.
+
+function syncEntry(raw){
+  if(raw&&typeof raw==='object'&&raw.schema===2&&Object.prototype.hasOwnProperty.call(raw,'value')&&Object.prototype.hasOwnProperty.call(raw,'base'))return {value:raw.value,base:raw.base,legacy:false};
+  if(raw&&typeof raw==='object'&&raw.schema===1&&Object.prototype.hasOwnProperty.call(raw,'value'))return {value:raw.value,base:undefined,legacy:true};
+  return {value:raw,base:undefined,legacy:true};
+}
 
 function syncLoad(){
   try{ _syncQueue=JSON.parse(localStorage.getItem(_syncLS())||'{}')||{}; }catch(e){ _syncQueue={}; }
@@ -492,8 +498,13 @@ function syncPersist(){
   catch(e){alert('El navegador no pudo guardar el respaldo local. No cierres esta ventana hasta confirmar la sincronización.');}
 }
 function syncPend(){ return Object.keys(_syncQueue).length; }
-function syncEncolar(fk,v){ _syncQueue[fk]=v; syncPersist(); syncBadge(); }
-function syncQuitar(fk){ if(_syncQueue[fk]!==undefined){ delete _syncQueue[fk]; syncPersist(); syncBadge(); } }
+function syncEncolar(fk,v,base){
+  const previous=Object.prototype.hasOwnProperty.call(_syncQueue,fk)?syncEntry(_syncQueue[fk]):null;
+  const safeBase=previous?(previous.legacy?undefined:previous.base):base;
+  const entry=safeBase===undefined?{schema:1,value:v,queuedAt:Date.now()}:{schema:2,value:v,base:safeBase,queuedAt:Date.now()};
+  _syncQueue[fk]=entry;syncPersist();syncBadge();return entry;
+}
+function syncQuitar(fk){ if(_syncQueue[fk]!==undefined){ delete _syncQueue[fk];delete _syncErrors[fk];syncPersist();syncBadge();} }
 
 async function sincronizar(manual){
   if(_syncing) return false;
@@ -505,15 +516,20 @@ async function sincronizar(manual){
     const db=await getDB();
     for(const fk of keys){
       try{
-        const value=_syncQueue[fk];
-        await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:value,k:fk,updatedAt:Date.now()});
-        if(_syncQueue[fk]===value)delete _syncQueue[fk];
-      }catch(e){ ok=false; console.warn('sync pendiente',fk,e.message?.slice(0,70)); }
+        const pending=_syncQueue[fk],entry=syncEntry(pending);
+        if(entry.legacy){const error=Error('Cambio creado por la versión anterior: requiere respaldo y conciliación antes de reemplazar la nube.');error.code='aca/legacy-queue';throw error;}
+        await db.setQueuedDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v:entry.value,k:fk,updatedAt:Date.now()},entry.base);
+        if(_syncQueue[fk]===pending){delete _syncQueue[fk];delete _syncErrors[fk];}
+      }catch(e){ok=false;_syncErrors[fk]={code:e.code||'',message:e.message||'Error de sincronización'};console.warn('sync pendiente',fk,e.message?.slice(0,70));}
     }
   }catch(e){ ok=false; }
   _syncing=false; syncPersist(); syncBadge();
   if(manual){
+    const legacy=Object.values(_syncErrors).some(e=>e.code==='aca/legacy-queue');
+    const conflict=Object.values(_syncErrors).some(e=>e.code==='aca/conflict');
     alert(ok?'Listo: todo quedó guardado en la nube.'
+            :legacy?'Los cambios siguen guardados en este navegador, pero fueron creados por la versión anterior. Descargá “Respaldo local” y envialo al administrador para recuperarlos sin pisar información de la nube.'
+            :conflict?'Otra sesión modificó el mismo registro. Los cambios locales y la versión de la nube se conservaron; descargá “Respaldo local” para conciliarlos.'
             :'Todavía no se pudo guardar en la nube. Revisá la conexión y reintentá — mientras tanto los cambios siguen guardados en este navegador.');
   }
   return ok;
@@ -556,14 +572,23 @@ async function sSet(k,v,sh=true){
   const fk=fullKey(k);
   _cache[fk]=v;
   lsSet(fk,v,getTTL(fk));
-  syncEncolar(fk,v); // Antes de iniciar la escritura remota
+  const prior=Object.prototype.hasOwnProperty.call(_syncQueue,fk)?syncEntry(_syncQueue[fk]):null;
+  let db,ref,base=prior?(prior.legacy?undefined:prior.base):undefined;
   try{
-    const db=await getDB();
-    await db.setDoc(db.doc(db.fs,'kv',encodeKey(fk)),{v,k:fk,updatedAt:Date.now()});
-    if(_syncQueue[fk]===v)syncQuitar(fk);
+    db=await getDB();ref=db.doc(db.fs,'kv',encodeKey(fk));
+    if(!prior)base=await db.ensureExpected(ref);
   }catch(e){
+    console.warn('sSet no pudo fijar la versión base (queda en la cola)',fk,e.message?.slice(0,80));
+    syncEncolar(fk,v,base);
+    return false;
+  }
+  const pending=syncEncolar(fk,v,base); // Siempre persistir antes de escribir en la nube.
+  try{
+    await db.setQueuedDoc(ref,{v,k:fk,updatedAt:Date.now()},base);
+    if(_syncQueue[fk]===pending)syncQuitar(fk);
+  }catch(e){
+    _syncErrors[fk]={code:e.code||'',message:e.message||'Error de sincronización'};
     console.warn('sSet Firebase error (queda en la cola)',fk,e.message?.slice(0,80));
-    syncEncolar(fk,v); // se reintenta solo y el indicador lo muestra
     return false;
   }
   return true;
@@ -6677,8 +6702,9 @@ async function renderDivisionalNC(cr){
 // Existing kv identifiers remain unchanged. Chunks are immutable; only a
 // complete, hash-verified value is published. Concurrent edits fail closed.
 function wrapDB(native){
- const expected=new Map(),writers=new Map();
+ const expected=new Map(),writers=new Map(),owned=new Set();
  const signature=s=>s.exists()?JSON.stringify(s.data()):null;
+ const conflict=()=>{const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';return error;};
  const wrapped={...native};
  wrapped.getDoc=async ref=>{
   const snap=await native.getDoc(ref);
@@ -6690,14 +6716,29 @@ function wrapDB(native){
   const hash=await sha256(bytes);if(hash!==meta.sha256||bytes.length!==meta.bytes)throw Error('El archivo no pasó la verificación de integridad.');
   return {exists:()=>true,data:()=>({...meta,v:new TextDecoder().decode(bytes)}),id:snap.id,ref:snap.ref};
  };
+ wrapped.ensureExpected=async ref=>{
+  if(ref.parent.id!=='kv')return null;
+  if(!expected.has(ref.id)){
+   const snap=await native.getDoc(ref);
+   expected.set(ref.id,signature(snap));
+  }
+  return expected.get(ref.id);
+ };
+ wrapped.setQueuedDoc=(ref,data,base,...args)=>{
+  if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
+  if(base===undefined){const error=Error('Este cambio pendiente fue creado por una versión anterior y no puede sobrescribir la nube automáticamente. Descargá Respaldo local para conciliarlo.');error.code='aca/legacy-queue';return Promise.reject(error);}
+  const immutable=structuredClone(data);
+  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args,{known:true,value:base}));
+  writers.set(ref.id,job);return job;
+ };
  wrapped.setDoc=(ref,data,...args)=>{
   if(ref.parent.id!=='kv')return native.setDoc(ref,data,...args);
   // Same-browser writes are serialized, including retries.
   const immutable=structuredClone(data);
-  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args));
+  const job=(writers.get(ref.id)||Promise.resolve()).catch(()=>{}).then(()=>write(ref,immutable,args,{known:false}));
   writers.set(ref.id,job);return job;
  };
- async function write(ref,data,args){
+ async function write(ref,data,args,queuedBase){
   let stored=data;
   if(typeof data.v==='string'&&new TextEncoder().encode(data.v).length>=700000){
    const bytes=new TextEncoder().encode(data.v),revision=crypto.randomUUID(),count=Math.ceil(bytes.length/480000);
@@ -6709,14 +6750,18 @@ function wrapDB(native){
   }
   await native.runTransaction(native.fs,async tx=>{
    const before=await tx.get(ref),actual=signature(before);
-   if(expected.has(ref.id)?actual!==expected.get(ref.id):before.exists()){
-    const error=Error('Otro usuario o sesión cambió este registro. Se conservaron ambos datos: exportá el respaldo local y recargá antes de conciliar.');error.code='aca/conflict';throw error;
-   }
+   let baseline;
+   if(queuedBase.known){
+    if(expected.has(ref.id)&&expected.get(ref.id)!==queuedBase.value&&!owned.has(ref.id))throw conflict();
+    baseline=owned.has(ref.id)?expected.get(ref.id):queuedBase.value;
+   }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
+   if(actual!==baseline)throw conflict();
    // Retain previous contents, including file manifests, before replacing.
    if(before.exists())tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
   expected.set(ref.id,JSON.stringify(stored));
+  owned.add(ref.id);
  }
  // Physical deletes are disabled. Existing callers may remove references only.
  wrapped.deleteDoc=async()=>{throw Error('Borrado físico deshabilitado: los documentos y adjuntos se conservan.');};
@@ -6836,7 +6881,7 @@ async function resolveAccess(preferStation=false){
  if(!access||access.enabled!==true){await renderAccessRequest();return;}
  const dep=DEPENDENCIAS.find(d=>d.cr===access.cr&&d.role!=='divisional');
  if(!dep)throw Error('La estación asignada no es válida. Contactá al administrador.');
- CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncInit=false;
+ CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;
  CU={uid,username:AUTH_PERSON.email,name:dep.nombre,depNombre:dep.nombre,cr:dep.cr,role:'empleado'};
  showLoad(true);
  try{await loadEconomic();syncLoad();const raw=await sGet('periodos');APS=raw?JSON.parse(raw):[];await loadPeriod(CP);await loadYER();AT='us';usView=null;render();}finally{showLoad(false);}
@@ -6851,7 +6896,7 @@ async function renderAccessRequest(){
 }
 async function logoutSafe(){
  if(syncPend()&&!await sincronizar(true))return;
- clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncInit=false;_db=null;
+ clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;_db=null;
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
 async function renderAccessAdmin(){
@@ -6866,7 +6911,7 @@ async function renderAccessAdmin(){
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
- root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
  }catch(e){root.innerHTML=econStyle+`<section class="econ"><h2>No se pudo cargar la administración</h2><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){
