@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.1 — revisión 29/09/2026';
+const APP_VERSION='v4.3.2 — revisión 29/09/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -498,6 +498,7 @@ function syncPersist(){
   catch(e){alert('El navegador no pudo guardar el respaldo local. No cierres esta ventana hasta confirmar la sincronización.');}
 }
 function syncPend(){ return Object.keys(_syncQueue).length; }
+function legacyPendingKeys(){ return Object.keys(_syncQueue).filter(fk=>syncEntry(_syncQueue[fk]).legacy); }
 function syncEncolar(fk,v,base){
   const previous=Object.prototype.hasOwnProperty.call(_syncQueue,fk)?syncEntry(_syncQueue[fk]):null;
   const safeBase=previous?(previous.legacy?undefined:previous.base):base;
@@ -536,6 +537,31 @@ async function sincronizar(manual){
 }
 window.sincronizar=sincronizar;
 
+// Descarta únicamente cambios locales sin versión base creados por v4.2.
+// No realiza escrituras ni borrados en Firebase. La recarga posterior vuelve
+// a leer la versión vigente de la nube.
+function clearLegacyPendingLocal(){
+  const keys=legacyPendingKeys();
+  keys.forEach(fk=>{
+    delete _syncQueue[fk];
+    delete _syncErrors[fk];
+    delete _cache[fk];
+    lsDel(fk);
+  });
+  if(keys.length){syncPersist();syncBadge();}
+  return keys.length;
+}
+function discardLegacyPending(){
+  const n=legacyPendingKeys().length;
+  if(!n){toast('No hay cambios antiguos para descartar.');return;}
+  if(!confirm(`¿Descartar ${n} cambio${n>1?'s':''} pendiente${n>1?'s':''} de la versión anterior?\n\nSolo se borrarán de este navegador. Firebase y los archivos históricos no se modifican.`))return;
+  clearLegacyPendingLocal();
+  alert(`Se descartaron ${n} cambio${n>1?'s':''} local${n>1?'es':''}. La aplicación se recargará con la información guardada en Firebase.`);
+  location.reload();
+}
+window.clearLegacyPendingLocal=clearLegacyPendingLocal;
+window.discardLegacyPending=discardLegacyPending;
+
 function syncBadge(){
   let b=document.getElementById('sync-badge');
   if(!b){
@@ -550,8 +576,13 @@ function syncBadge(){
     b.innerHTML='<span>⟳ Sincronizando…</span>';
   } else if(n){
     b.style.background='#B3261E'; b.style.color='#fff';
-    b.innerHTML=`<span>⚠️ ${n} cambio${n>1?'s':''} sin guardar en la nube</span>
-      <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`;
+    const legacy=legacyPendingKeys().length;
+    b.innerHTML=legacy
+      ?`<span>⚠️ ${legacy} cambio${legacy>1?'s':''} de la versión anterior</span>
+        <button onclick="exportLocalBackup()" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Respaldo local</button>
+        <button onclick="discardLegacyPending()" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Descartar y recargar</button>`
+      :`<span>⚠️ ${n} cambio${n>1?'s':''} sin guardar en la nube</span>
+        <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`;
   } else {
     b.style.background='#E8FFF0'; b.style.color='#1B6B35';
     b.style.border='1px solid #A6E9C1';
