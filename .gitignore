@@ -4,6 +4,7 @@ node_modules/
 firebase-debug.log
 firestore-debug.log
 tmp/
+.tools/
 upload/
 check.js
 respaldo-*.json
