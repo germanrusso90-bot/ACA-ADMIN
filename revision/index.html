@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.3 — revisión 29/09/2026';
+const APP_VERSION='v4.3.4 — revisión 02/10/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -1149,6 +1149,33 @@ function prevMonth(p){
   const [y,m]=p.split('-').map(Number);
   return m===1?(y-1)+'-12':y+'-'+String(m-1).padStart(2,'0');
 }
+function nextMonth(p){
+  const [y,m]=p.split('-').map(Number);
+  return m===12?(y+1)+'-01':y+'-'+String(m+1).padStart(2,'0');
+}
+
+// Los primeros adjuntos de Full se guardaron con el período de pantalla
+// (un mes posterior al período de ventas), y una versión intermedia usó
+// file:full:comp:PERIODO para transferencias. Las claves viejas permanecen
+// intactas; las nuevas usan una única clave por período real y tipo.
+function fullFileKey(period,slot){return `file:full:${period}:${slot}`;}
+function fullFileCandidates(period,slot,storedKey=''){
+  const keys=[];
+  const add=key=>{if(key&&!keys.includes(key))keys.push(key);};
+  add(storedKey);
+  add(fullFileKey(period,slot));
+  if(slot==='comprobanteTransferencia')add('file:full:comp:'+period);
+  add('file:'+nextMonth(period)+':full.'+slot);
+  add('file:'+period+':full.'+slot);
+  return keys;
+}
+async function readFullFile(period,slot,storedKey=''){
+  for(const key of fullFileCandidates(period,slot,storedKey)){
+    const raw=await sGet(key,true);
+    if(raw)return {raw,key};
+  }
+  return null;
+}
 
 // ── CANON SERVICIOS: Litros SUPER (persistido globalmente) ───
 async function loadCanonLitros(){
@@ -1675,12 +1702,12 @@ function openFileViewer(f){
 const BSTYLE_VER='background:#FFF8E1;color:#7B5800;border:1px solid #FFD54F;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
 const BSTYLE_DEL='background:#FFEBEE;color:#B71C1C;border:1px solid #EF9A9A;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
 const BSTYLE_SUB='background:#4B2563;color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;';
-function renderFullFileBtn(slotId, fileMeta, locked){
+function renderFullFileBtn(slotId, fileMeta, locked, period){
   if(fileMeta){
     const delBtn = locked ? '' : `<button style="${BSTYLE_DEL}" data-delete="${slotId}">✕</button>`;
     return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
       <span style="font-size:12px;color:var(--pd);font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(fileMeta.fileName)}">📎 ${esc(fileMeta.fileName)}</span>
-      <button style="${BSTYLE_VER}" data-view="${slotId}" data-view-period="${CP}">👁 Ver</button>
+      <button style="${BSTYLE_VER}" data-view="${slotId}" data-view-period="${period}" data-file-key="${esc(fileMeta.storageKey||'')}">👁 Ver</button>
       ${delBtn}
     </div>`;
   }
@@ -1689,6 +1716,7 @@ function renderFullFileBtn(slotId, fileMeta, locked){
 }
 function renderFullRegistro(f){
   const locked = !!f.locked;
+  const filePeriod=f._editingPeriod||f._period||prevMonth(CP);
   const ro = locked ? 'readonly' : '';
   const roStyle = locked ? 'background:#F0FFF4;border-color:#C8E6C9;' : '';
   const bgColor = locked ? '#F0FFF4' : '#F8F5FB';
@@ -1715,7 +1743,7 @@ function renderFullRegistro(f){
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Factura ACA</div>
-        ${renderFullFileBtn('full.facturaACA', f.facturaACA, locked)}
+        ${renderFullFileBtn('full.facturaACA', f.facturaACA, locked, filePeriod)}
       </div>
 
       <div>
@@ -1726,7 +1754,7 @@ function renderFullRegistro(f){
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Comprobante de transferencia</div>
-        ${renderFullFileBtn('full.comprobanteTransferencia', f.comprobanteTransferencia, locked)}
+        ${renderFullFileBtn('full.comprobanteTransferencia', f.comprobanteTransferencia, locked, filePeriod)}
       </div>
 
       <div style="padding-bottom:2px;">${accionBtn}</div>
@@ -1817,7 +1845,7 @@ function renderFull(){
         <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;">${esc(row.fechaCancelacion||'—')}</td>
         <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
           ${row.comprobanteTransferencia
-            ?`<button style="${BSTYLE_VER}" data-view-full-comp="${row.period}">👁 Ver</button>`
+            ?`<button style="${BSTYLE_VER}" data-view-full-comp="${row.period}" data-file-key="${esc(row.comprobanteTransferencia.storageKey||'')}">👁 Ver</button>`
             :`<label style="${BSTYLE_SUB};cursor:pointer;font-size:11px;">📁<input type="file" data-upload-full-comp="${row.period}" accept=".pdf,.jpg,.jpeg,.png" hidden></label>`}
         </td>
         <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">${btnAccion}</td>
@@ -2691,8 +2719,10 @@ function attachGenericFiles(){
       showLoad(true);
       try{
         const du=await readDU(file);
-        await sSet('file:'+CP+':'+sid,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
-        setMeta(sid,{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()});
+        const fullPeriod=sid.startsWith('full.')?(PD.full._editingPeriod||PD.full._period||prevMonth(CP)):null;
+        const fileKey=fullPeriod?fullFileKey(fullPeriod,sid.slice('full.'.length)):'file:'+CP+':'+sid;
+        await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+        setMeta(sid,{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),...(fullPeriod?{period:fullPeriod,storageKey:fileKey}:{})});
         await saveP();toast('Archivo guardado ✓');
       }catch(err){alert('Error: '+err.message);}
       showLoad(false);renderTab();
@@ -2707,7 +2737,10 @@ function attachGenericFiles(){
       // Los archivos normales se guardan como file:PERIOD:sid
       // Detectar: si sid empieza con "canon:" o "tel:" la clave es file:sid
       let raw=null;
-      if(sid.startsWith('canon:')||sid.startsWith('tel:')){
+      if(sid.startsWith('full.')){
+        const found=await readFullFile(period,sid.slice('full.'.length),btn.getAttribute('data-file-key')||'');
+        raw=found?.raw||null;
+      } else if(sid.startsWith('canon:')||sid.startsWith('tel:')){
         raw=await sGet('file:'+sid,true);
       } else {
         raw=await sGet('file:'+period+':'+sid,true);
@@ -2722,7 +2755,12 @@ function attachGenericFiles(){
       if(!confirm('¿Eliminar este archivo?'))return;
       const sid=btn.getAttribute('data-delete');
       showLoad(true);
-      await sDel('file:'+CP+':'+sid,true);
+      if(sid.startsWith('full.')){
+        const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
+        const meta=sid==='full.facturaACA'?PD.full.facturaACA:PD.full.comprobanteTransferencia;
+        const found=await readFullFile(period,sid.slice('full.'.length),meta?.storageKey||'');
+        if(found)await sDel(found.key,true);
+      }else await sDel('file:'+CP+':'+sid,true);
       setMeta(sid,null);
       await saveP();showLoad(false);toast('Eliminado');renderTab();
     });
@@ -2768,8 +2806,10 @@ function attachFull(){
       const calc=parseVentas(buf);
       if(!calc){showLoad(false);alert('No se encontraron filas del Sector 2 o 21.');return;}
       const du=await readDU(file);
-      await sSet('file:'+CP+':full.ventas',JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
-      PD.full.ventas={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),...calc};
+      const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
+      const fileKey=fullFileKey(period,'ventas');
+      await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+      PD.full.ventas={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),period,storageKey:fileKey,...calc};
       await saveP();toast('Excel procesado ✓');
     }catch(err){alert('Error: '+err.message);}
     showLoad(false);renderTab();
@@ -2780,10 +2820,11 @@ function attachFull(){
     btn.addEventListener('click',async()=>{
       const sid=btn.getAttribute('data-view-excel');
       showLoad(true);
-      const raw=await sGet('file:'+CP+':'+sid,true);
+      const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
+      const found=await readFullFile(period,sid.slice('full.'.length),PD.full.ventas?.storageKey||'');
       showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo.');return;}
-      openExcelViewer(JSON.parse(raw));
+      if(!found){alert('No se pudo recuperar el archivo.');return;}
+      openExcelViewer(JSON.parse(found.raw));
     });
   });
 
@@ -2883,11 +2924,17 @@ function attachFull(){
       showLoad(true);
       try{
         const du=await readDU(file);
-        await sSet('file:full:comp:'+period,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
+        const fileKey=fullFileKey(period,'comprobanteTransferencia');
+        await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
         if(!PD.fullHistory)PD.fullHistory=[];
-        const row=PD.fullHistory.find(r=>r.period===period);
-        const meta={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
-        if(row){row.comprobanteTransferencia=meta;}
+        let row=PD.fullHistory.find(r=>r.period===period);
+        if(!row){
+          row={period,importe:null,cigarrillos:null,recuperar:null,nroFacturaACA:'',fechaCancelacion:'',interesMensual:'',diasAtrasados:'',comprobanteTransferencia:null,facturaACA:null,locked:false,ventas:null};
+          PD.fullHistory.push(row);
+          PD.fullHistory.sort((a,b)=>a.period.localeCompare(b.period));
+        }
+        const meta={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),period,storageKey:fileKey};
+        row.comprobanteTransferencia=meta;
         // También actualizar en PD.full si es el período actual
         if(period===prevMonth(CP)) PD.full.comprobanteTransferencia=meta;
         await saveP();toast('Comprobante subido ✓');
@@ -2901,10 +2948,11 @@ function attachFull(){
     btn.addEventListener('click',async()=>{
       const period=btn.getAttribute('data-view-full-comp');
       showLoad(true);
-      const raw=await sGet('file:full:comp:'+period,true);
+      const row=(PD.fullHistory||[]).find(r=>r.period===period);
+      const found=await readFullFile(period,'comprobanteTransferencia',btn.getAttribute('data-file-key')||row?.comprobanteTransferencia?.storageKey||'');
       showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo.');return;}
-      openFileViewer(JSON.parse(raw));
+      if(!found){alert('No se pudo recuperar el archivo.');return;}
+      openFileViewer(JSON.parse(found.raw));
     });
   });
 
@@ -2979,8 +3027,11 @@ function attachFull(){
   el.querySelector('#full-reg-del')?.addEventListener('click',async()=>{
     if(!confirm('¿Eliminar el registro de cancelación?\n(Se eliminarán también los archivos subidos)'))return;
     showLoad(true);
-    await sDel('file:'+CP+':full.facturaACA',true);
-    await sDel('file:'+CP+':full.comprobanteTransferencia',true);
+    const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
+    for(const [slot,meta] of [['facturaACA',PD.full.facturaACA],['comprobanteTransferencia',PD.full.comprobanteTransferencia]]){
+      const found=await readFullFile(period,slot,meta?.storageKey||'');
+      if(found)await sDel(found.key,true);
+    }
     PD.full.nroFacturaACA='';PD.full.fechaCancelacion='';
     PD.full.facturaACA=null;PD.full.comprobanteTransferencia=null;
     PD.full.locked=false;

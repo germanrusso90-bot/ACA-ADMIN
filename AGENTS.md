@@ -147,6 +147,7 @@ El archivo original subido por el usuario debe permanecer sin modificaciones en 
 8. Ejecutar la regresión con respaldo si se cambia carga, lectura, períodos, fórmulas o migración.
 9. Revisar visualmente formularios y pantallas modificadas.
 10. Publicar únicamente después de verificar el respaldo y coordinar el cambio.
+11. Antes de finalizar, actualizar el historial de este `AGENTS.md` con la fecha, el cambio realizado, los archivos afectados, las pruebas ejecutadas y si llegó o no a producción.
 
 ## Comandos de validación
 
@@ -171,7 +172,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 31 pruebas funcionales aprobadas en la candidata v4.3.3.
+- 33 pruebas funcionales aprobadas en la candidata v4.3.4.
 - 20 pruebas de reglas aprobadas en Firestore Emulator.
 - 10 pruebas de regresión aprobadas contra la copia del respaldo.
 - El respaldo verificado contenía 67 documentos: 53 de Cipolletti, 12 de Colonia y 2 de otros CR.
@@ -202,3 +203,22 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - Si una corrección afecta un período cerrado, crear una versión o registro rectificativo con trazabilidad.
 - No deducir condiciones contractuales a partir de un importe histórico aislado.
 - Mantener Cancelaciones y Checks comunes a todas las estaciones, pero probar con archivos reales antes de certificar cambios.
+
+## Historial de cambios
+
+### 2026-09-29
+
+- Se incorporó la obligación de documentar en este archivo todos los cambios, validaciones y despliegues del proyecto.
+- Se diagnosticó un error de recuperación de adjuntos de Full: la carga actual guarda comprobantes con una clave basada en el período de pantalla (`file:AAAA-MM:full.comprobanteTransferencia`), mientras que la vista histórica los busca con otra convención (`file:full:comp:AAAA-MM`).
+- El respaldo verificado confirma que los PDF/JPG históricos continúan guardados; el problema está en la búsqueda de la clave, no en la pérdida del archivo.
+- Estado al cierre de ese diagnóstico: corrección todavía no implementada.
+
+### 2026-10-02
+
+- Se implementó v4.3.4 para recuperar los adjuntos de Full guardados con las dos convenciones históricas de claves, sin migrarlos, borrarlos ni reescribirlos.
+- Los adjuntos nuevos de Full usan una clave única por período real y tipo; su clave queda registrada en los metadatos del comprobante.
+- Se corrigió la carga de comprobantes sobre filas históricas vacías para que también cree y conserve la referencia de la fila.
+- Archivos modificados: `index.html`, `revision/index.html`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
+- Validaciones aprobadas: sintaxis, formulario, 33 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
+- Para el corte hacia ChatGPT de escritorio, el repositorio debe incluir todo el árbol fuente: `revision/`, `assemble.py`, `formularios/`, reglas, pruebas y documentación. Los respaldos y comprobantes privados quedan excluidos.
+- Estado: candidata validada; publicación y verificación de producción pendientes dentro de este mismo corte.

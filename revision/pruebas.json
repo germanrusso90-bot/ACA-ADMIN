@@ -1,5 +1,5 @@
 {
-  "passed": 31,
+  "passed": 33,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -22,6 +22,8 @@
     "Administrador aprueba Gmail y CR solicitados",
     "Revocar cuenta no elimina documentos",
     "Full 10% y 12%, siempre sin cigarrillos",
+    "Full recupera comprobantes con claves históricas sin migrarlos",
+    "Full prioriza la clave registrada del adjunto",
     "Checks: números repetidos no cierran otra auditoría",
     "Fallo de lectura sin respaldo bloquea carga",
     "Cambio de vigencia no altera registro ya calculado",
