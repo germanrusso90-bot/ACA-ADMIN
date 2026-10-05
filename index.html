@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.3 — revisión 29/09/2026';
+const APP_VERSION='v4.3.4 — revisión 05/10/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -626,7 +626,8 @@ setInterval(()=>{ if(_syncInit&&syncPend()&&!_syncing) sincronizar(false); },300
 window.addEventListener('online',()=>{ if(_syncInit&&syncPend()) sincronizar(false); });
 // Avisar si se intenta cerrar con cambios sin subir
 window.addEventListener('beforeunload',e=>{
-  if(syncPend()){ e.preventDefault(); e.returnValue=''; return ''; }
+  if(_autoJob){ flushAutoSave(); }
+  if(syncPend()||_autoJob){ e.preventDefault(); e.returnValue=''; return ''; }
 });
 
 async function sSet(k,v,sh=true){
@@ -750,6 +751,7 @@ async function diagFirebase(){
 async function migrarClavesViejas(){alert('Migración automática deshabilitada. Las claves antiguas siguen disponibles en modo lectura.');}
 
 async function loadPeriod(p){
+  if(_autoJob)await flushAutoSave();
   const raw=await sGet('data:'+p,true);
   PD=raw?mergeDef(JSON.parse(raw)):defPD();
   CP=p;
@@ -822,6 +824,7 @@ async function loadPeriod(p){
   }
 }
 async function saveP(){
+  if(_autoJob&&_autoJob.p===CP&&_autoJob.data===PD){clearTimeout(_autoTimer);_autoTimer=null;_autoJob=null;} // este guardado ya incluye lo tipeado
   if(!await sSet('data:'+CP,JSON.stringify(PD),true))throw Error('Los cambios no están confirmados en la nube. Conservá esta ventana abierta.');
   if(!APS.includes(CP)){APS.push(CP);APS.sort();if(!await sSet('periodos',JSON.stringify(APS)))throw Error('Índice de períodos pendiente de sincronizar.');}
 }
@@ -830,6 +833,39 @@ async function savePeriod(p,data){
   await sSet('data:'+p,JSON.stringify(data),true);
 }
 function saveD(){return saveP();}
+
+// ── AUTOGUARDADO MIENTRAS SE ESCRIBE (v4.3.4) ─────────────────
+// Antes se guardaba en Firebase con CADA tecla: una transacción + un respaldo
+// por letra sobre el mismo documento. Firestore rechaza más de ~1 escritura
+// por segundo sostenida en un documento, así que algunas fallaban, salía un
+// alert por cada una y después la cola lo terminaba subiendo sola.
+// Ahora: se espera a que el usuario deje de escribir, se guarda UNA vez, y si
+// falla no se interrumpe con alert: el cambio queda en la cola, el indicador
+// de abajo a la derecha lo muestra y se reintenta solo.
+const AUTOSAVE_MS=1200;
+let _autoTimer=null,_autoJob=null;
+function autoSave(){
+  if(!PD||!CP)return;
+  const job={p:CP,data:PD};
+  if(_autoJob&&(_autoJob.p!==job.p||_autoJob.data!==job.data))flushAutoSave(); // cambió el período: guardar el anterior ya
+  _autoJob=job;
+  clearTimeout(_autoTimer);
+  _autoTimer=setTimeout(flushAutoSave,AUTOSAVE_MS);
+}
+async function flushAutoSave(){
+  clearTimeout(_autoTimer);_autoTimer=null;
+  const job=_autoJob;_autoJob=null;
+  if(!job)return true;
+  try{
+    const ok=await sSet('data:'+job.p,JSON.stringify(job.data),true);
+    if(ok&&job.data===PD&&!APS.includes(job.p)){APS.push(job.p);APS.sort();await sSet('periodos',JSON.stringify(APS));}
+    return ok;
+  }catch(e){console.warn('autoSave',e.message);return false;}
+}
+window.autoSave=autoSave;window.flushAutoSave=flushAutoSave;
+// Si el usuario se va de la pestaña o la cierra con un guardado en espera, mandarlo ya.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&_autoJob)flushAutoSave();});
+window.addEventListener('pagehide',()=>{if(_autoJob)flushAutoSave();});
 
 // ── EXCEL VENTAS ─────────────────────────────────────────────
 function parseVentas(ab){
@@ -1492,8 +1528,8 @@ async function renderUSExcel(usKey){
           if(int2!==null)rObj.intereses=pN(int2);
           if(nro!==null)rObj.nroFacturaACA=nro;
           if(fecha!==null)rObj.fecha=fecha;
-          await saveP();
-        })().catch(e=>alert(e.message));
+          autoSave();
+        })().catch(e=>console.warn('US autoguardado',e.message));
       });
     });
   });
@@ -2405,7 +2441,7 @@ function attachHotel(){
         const rec=calcRec(row);
         const td=document.getElementById('tel-rec-'+period);
         if(td)td.textContent=rec!==null?'$ '+fmt(rec):'—';
-        saveD();
+        autoSave();
       }
     });
   });
@@ -2497,7 +2533,7 @@ function attachHotel(){
         const disp=document.getElementById('canon-transf-display-'+period);
         if(disp) disp.textContent=ft>0?'$ '+fmtArg(ft-nc):'—';
       }
-      saveD(); // guardar sin renderTab
+      autoSave(); // guardar sin renderTab, al dejar de escribir
     });
   });
 
@@ -2864,7 +2900,7 @@ function attachFull(){
       PD.full.interesMensual=String(tasa);
       if(diasAtr)PD.full.diasAtrasados=String(diasAtr);
       PD.full.importe_interes=montoInt; // guardar para persistir
-      saveD();
+      autoSave();
     } else {
       if(icEl)icEl.value='';
       if(totEl)totEl.textContent='$ '+fmt(subtotal);
@@ -3012,14 +3048,14 @@ function attachVarios(){
     sel.addEventListener('change',e=>{
       const p=sel.getAttribute('data-vt').split('.');
       const row=PD.varios[p[1]].find(r=>r.id===p[2]);
-      if(row){row.tipo=e.target.value;saveD();}
+      if(row){row.tipo=e.target.value;autoSave();}
     });
   });
   el.querySelectorAll('[data-vm]').forEach(inp=>{
     inp.addEventListener('input',e=>{
       const p=inp.getAttribute('data-vm').split('.');
       const row=PD.varios[p[1]].find(r=>r.id===p[2]);
-      if(row){row.monto=pN(e.target.value);saveD();}
+      if(row){row.monto=pN(e.target.value);autoSave();}
     });
   });
 }
@@ -6976,7 +7012,7 @@ async function renderAccessRequest(){
 }
 async function logoutSafe(){
  if(syncPend()&&!await sincronizar(true))return;
- clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;_db=null;
+ clearTimeout(stimer);if(_autoJob)await flushAutoSave();clearTimeout(_autoTimer);_autoJob=null;await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;_db=null;
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
 async function renderAccessAdmin(){
