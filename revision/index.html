@@ -249,7 +249,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.4 — revisión 02/10/2026';
+const APP_VERSION='v4.3.6 — revisión 07/10/2026';
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
   {cr:'3531', nombre:'Cipolletti',        usuario:'Grusso1',    role:'empleado'},
@@ -327,6 +327,7 @@ async function getDB(){
 let _cache={};
 const LS_TTL_CORTO=5*60*1000;    // 5 min — datos que cambian seguido (periodos, data:CP)
 const LS_TTL_LARGO=60*60*1000;   // 1 hora — checks, historial (cambian poco)
+const LS_CACHE_MAX=250000;        // Evita duplicar adjuntos y snapshots grandes junto a la cola.
 
 function lsGet(key){
   try{
@@ -338,8 +339,12 @@ function lsGet(key){
   }catch(e){return null;}
 }
 function lsSet(key,v,ttl=LS_TTL_CORTO){
-  try{localStorage.setItem('_ttl:'+key,JSON.stringify({v,ts:Date.now(),ttl}));}
-  catch(e){/* localStorage lleno */}
+  try{
+    const packed=JSON.stringify({v,ts:Date.now(),ttl});
+    if(packed.length>LS_CACHE_MAX)return false;
+    localStorage.setItem('_ttl:'+key,packed);
+    return true;
+  }catch(e){return false;}
 }
 function lsDel(key){
   localStorage.removeItem('_ttl:'+key);
@@ -478,7 +483,7 @@ function _fbRefresh(fk){
 // Todo lo que no llega a la nube queda encolado en el navegador (sin
 // vencimiento) y se reintenta solo. El indicador de abajo a la derecha
 // muestra siempre si hay algo pendiente, y permite forzar el envío.
-let _syncQueue={}, _syncing=false, _syncInit=false, _syncErrors={};
+let _syncQueue={}, _syncing=false, _syncInit=false, _syncErrors={}, _syncWriting={}, _syncLocalOk=true;
 const _syncLS=()=>'_sync:v4:cr'+CURRENT_CR; // Las colas antiguas se conservan para revisión manual.
 
 function syncEntry(raw){
@@ -489,13 +494,52 @@ function syncEntry(raw){
 
 function syncLoad(){
   try{ _syncQueue=JSON.parse(localStorage.getItem(_syncLS())||'{}')||{}; }catch(e){ _syncQueue={}; }
+  _syncLocalOk=true;
   _syncInit=true;
   syncBadge();
   if(syncPend()) sincronizar(false);
 }
+function syncProtectedKeys(){
+  const protectedKeys=new Set(Object.keys(_syncQueue));
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key||!key.startsWith('_sync:v4:')||key===_syncLS())continue;
+    try{Object.keys(JSON.parse(localStorage.getItem(key)||'{}')).forEach(k=>protectedKeys.add(k));}catch(e){}
+  }
+  return protectedKeys;
+}
+function syncCacheCandidates(){
+  const protectedKeys=syncProtectedKeys(),now=Date.now(),items=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key||!key.startsWith('_ttl:'))continue;
+    const fk=key.slice(5);
+    if(protectedKeys.has(fk))continue;
+    const raw=localStorage.getItem(key)||'';
+    let expired=false;
+    try{const item=JSON.parse(raw);expired=!item||!Number.isFinite(item.ts)||!Number.isFinite(item.ttl)||item.ts+item.ttl<=now;}
+    catch(e){expired=true;}
+    const file=fk.includes(':file:');
+    if(expired||file)items.push({key,expired,file,size:raw.length});
+  }
+  return items.sort((a,b)=>Number(b.expired)-Number(a.expired)||Number(b.file)-Number(a.file)||b.size-a.size);
+}
+function tryStoreSync(raw){try{localStorage.setItem(_syncLS(),raw);return true;}catch(e){return false;}}
 function syncPersist(){
-  try{ localStorage.setItem(_syncLS(), JSON.stringify(_syncQueue)); }
-  catch(e){alert('El navegador no pudo guardar el respaldo local. No cierres esta ventana hasta confirmar la sincronización.');}
+  if(!syncPend()){
+    try{localStorage.removeItem(_syncLS());_syncLocalOk=true;return true;}
+    catch(e){_syncLocalOk=false;return false;}
+  }
+  const raw=JSON.stringify(_syncQueue);
+  if(tryStoreSync(raw)){_syncLocalOk=true;return true;}
+  // Solo se quitan copias de caché vencidas o adjuntos ya sin cambios
+  // pendientes. Nunca se toca Firebase ni otra cola de sincronización.
+  for(const item of syncCacheCandidates()){
+    try{localStorage.removeItem(item.key);}catch(e){}
+    if(tryStoreSync(raw)){_syncLocalOk=true;return true;}
+  }
+  _syncLocalOk=false;
+  return false;
 }
 function syncPend(){ return Object.keys(_syncQueue).length; }
 function legacyPendingKeys(){ return Object.keys(_syncQueue).filter(fk=>syncEntry(_syncQueue[fk]).legacy); }
@@ -506,7 +550,13 @@ function syncEncolar(fk,v,base){
   const entry=safeBase===undefined?{schema:1,value:v,queuedAt:Date.now()}:{schema:2,value:v,base:safeBase,queuedAt:Date.now()};
   _syncQueue[fk]=entry;syncPersist();syncBadge();return entry;
 }
-function syncQuitar(fk){ if(_syncQueue[fk]!==undefined){ delete _syncQueue[fk];delete _syncErrors[fk];syncPersist();syncBadge();} }
+function syncQuitar(fk,repaint=true){ if(_syncQueue[fk]!==undefined){ delete _syncQueue[fk];delete _syncErrors[fk];syncPersist();if(repaint)syncBadge();} }
+function syncWriteStart(fk){_syncWriting[fk]=(_syncWriting[fk]||0)+1;delete _syncErrors[fk];}
+function syncWriteEnd(fk){
+  if((_syncWriting[fk]||0)<=1)delete _syncWriting[fk];
+  else _syncWriting[fk]--;
+  syncBadge();
+}
 
 async function sincronizar(manual){
   if(_syncing) return false;
@@ -596,10 +646,14 @@ function syncBadge(){
     document.body.appendChild(b);
   }
   const n=syncPend();
-  if(_syncing){
+  const active=Object.keys(_syncQueue).filter(fk=>(_syncWriting[fk]||0)>0).length;
+  const hasError=Object.keys(_syncQueue).some(fk=>!!_syncErrors[fk]);
+  if(_syncing||(n&&active===n&&!hasError)){
+    b.style.border='none';
     b.style.background='#3D1F6E'; b.style.color='#fff';
-    b.innerHTML='<span>⟳ Sincronizando…</span>';
+    b.innerHTML=`<span>⟳ ${_syncing?'Sincronizando':'Guardando en la nube'}…</span>`;
   } else if(n){
+    b.style.border='none';
     b.style.background='#B3261E'; b.style.color='#fff';
     const legacy=legacyPendingKeys().length;
     const conflicts=conflictPendingKeys().length;
@@ -611,6 +665,9 @@ function syncBadge(){
       ?`<span>⚠️ ${conflicts} cambio${conflicts>1?'s':''} en conflicto con Firebase</span>
         <button onclick="exportLocalBackup()" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Respaldo local</button>
         <button onclick="resolvePendingConflicts()" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Guardar mis cambios</button>`
+      :!_syncLocalOk
+      ?`<span>⚠️ ${n} cambio${n>1?'s':''} pendiente${n>1?'s':''} sin respaldo local. No cierres esta ventana.</span>
+        <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`
       :`<span>⚠️ ${n} cambio${n>1?'s':''} sin guardar en la nube</span>
         <button onclick="sincronizar(true)" style="background:#fff;color:#B3261E;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;">Sincronizar ahora</button>`;
   } else {
@@ -643,16 +700,20 @@ async function sSet(k,v,sh=true){
     syncEncolar(fk,v,base);
     return false;
   }
+  syncWriteStart(fk);
   const pending=syncEncolar(fk,v,base); // Siempre persistir antes de escribir en la nube.
+  let ok=true;
   try{
     await db.setQueuedDoc(ref,{v,k:fk,updatedAt:Date.now()},base);
-    if(_syncQueue[fk]===pending)syncQuitar(fk);
+    if(_syncQueue[fk]===pending)syncQuitar(fk,false);
   }catch(e){
     _syncErrors[fk]={code:e.code||'',message:e.message||'Error de sincronización'};
     console.warn('sSet Firebase error (queda en la cola)',fk,e.message?.slice(0,80));
-    return false;
+    ok=false;
+  }finally{
+    syncWriteEnd(fk);
   }
-  return true;
+  return ok;
 }
 async function sDel(k){if(!await sSet(k,null))throw Error('No se pudo archivar el registro. Se conserva el original.');}
 function encodeKey(k){
@@ -661,7 +722,7 @@ function encodeKey(k){
 }
 
 // ── ESTADO ────────────────────────────────────────────────────
-let CU=null,CP=monthStr(),PD=null,AT='us',APS=[],stimer=null;
+let CU=null,CP=monthStr(),PD=null,AT='us',APS=[],stimer=null,_draftSave=null;
 let usView=null; // null=grilla, key=vista excel del ítem
 
 function monthStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
@@ -750,6 +811,7 @@ async function diagFirebase(){
 async function migrarClavesViejas(){alert('Migración automática deshabilitada. Las claves antiguas siguen disponibles en modo lectura.');}
 
 async function loadPeriod(p){
+  await flushSaveD();
   const raw=await sGet('data:'+p,true);
   PD=raw?mergeDef(JSON.parse(raw)):defPD();
   CP=p;
@@ -821,15 +883,40 @@ async function loadPeriod(p){
     }
   }
 }
+async function savePeriodState(period,payload){
+  if(!await sSet('data:'+period,payload,true))throw Error('Los cambios no están confirmados en la nube. Conservá esta ventana abierta.');
+  if(!APS.includes(period)){
+    const next=[...APS,period].sort();
+    if(!await sSet('periodos',JSON.stringify(next)))throw Error('Índice de períodos pendiente de sincronizar.');
+    APS=next;
+  }
+}
 async function saveP(){
-  if(!await sSet('data:'+CP,JSON.stringify(PD),true))throw Error('Los cambios no están confirmados en la nube. Conservá esta ventana abierta.');
-  if(!APS.includes(CP)){APS.push(CP);APS.sort();if(!await sSet('periodos',JSON.stringify(APS)))throw Error('Índice de períodos pendiente de sincronizar.');}
+  clearTimeout(stimer);stimer=null;_draftSave=null;
+  return savePeriodState(CP,JSON.stringify(PD));
 }
 async function savePeriod(p,data){
   // Guardar datos de un período específico (para preservar historial al cambiar de mes)
   await sSet('data:'+p,JSON.stringify(data),true);
 }
-function saveD(){return saveP();}
+function saveD(delay=700){
+  const draft={period:CP,payload:JSON.stringify(PD)};
+  _draftSave=draft;
+  clearTimeout(stimer);
+  stimer=setTimeout(async()=>{
+    if(_draftSave!==draft)return;
+    stimer=null;_draftSave=null;
+    try{await savePeriodState(draft.period,draft.payload);}
+    catch(e){console.warn('Autoguardado pendiente:',e.message?.slice(0,100));}
+  },delay);
+}
+async function flushSaveD(){
+  if(!_draftSave)return true;
+  const draft=_draftSave;
+  clearTimeout(stimer);stimer=null;_draftSave=null;
+  try{await savePeriodState(draft.period,draft.payload);return true;}
+  catch(e){console.warn('Autoguardado pendiente:',e.message?.slice(0,100));return false;}
+}
 
 // ── EXCEL VENTAS ─────────────────────────────────────────────
 function parseVentas(ab){
@@ -1500,27 +1587,23 @@ async function renderUSExcel(usKey){
 
   // ── Guardar (bloquea la fila) — excluye canon que tiene handler propio ──
   // Auto-guardar al escribir (evita perder datos al cambiar de pantalla)
-  let usAutoTimer=null;
   el.querySelectorAll('tr[data-row-period][data-locked="false"]').forEach(trEl=>{
     const period=trEl.getAttribute('data-row-period');
     trEl.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('input',()=>{
-        clearTimeout(usAutoTimer);
-        (async()=>{
-          const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():null;};
-          let idx=PD.us[usKey].findIndex(r=>r.period===period);
-          if(idx===-1){PD.us[usKey].push({period});idx=PD.us[usKey].length-1;}
-          const rObj=PD.us[usKey][idx];
-          const imp=g('importe'),iva=g('iva'),per=g('percepciones'),int2=g('intereses');
-          const nro=g('nroFacturaACA'),fecha=g('fecha');
-          if(imp!==null)rObj.importe=pN(imp);
-          if(iva!==null)rObj.iva=pN(iva);
-          if(per!==null)rObj.percepciones=pN(per);
-          if(int2!==null)rObj.intereses=pN(int2);
-          if(nro!==null)rObj.nroFacturaACA=nro;
-          if(fecha!==null)rObj.fecha=fecha;
-          await saveP();
-        })().catch(e=>alert(e.message));
+        const g=f=>{const i=trEl.querySelector(`input[data-field="${f}"]`);return i?i.value.trim():null;};
+        let idx=PD.us[usKey].findIndex(r=>r.period===period);
+        if(idx===-1){PD.us[usKey].push({period});idx=PD.us[usKey].length-1;}
+        const rObj=PD.us[usKey][idx];
+        const imp=g('importe'),iva=g('iva'),per=g('percepciones'),int2=g('intereses');
+        const nro=g('nroFacturaACA'),fecha=g('fecha');
+        if(imp!==null)rObj.importe=pN(imp);
+        if(iva!==null)rObj.iva=pN(iva);
+        if(per!==null)rObj.percepciones=pN(per);
+        if(int2!==null)rObj.intereses=pN(int2);
+        if(nro!==null)rObj.nroFacturaACA=nro;
+        if(fecha!==null)rObj.fecha=fecha;
+        saveD();
       });
     });
   });
@@ -7012,7 +7095,7 @@ async function resolveAccess(preferStation=false){
  if(!access||access.enabled!==true){await renderAccessRequest();return;}
  const dep=DEPENDENCIAS.find(d=>d.cr===access.cr&&d.role!=='divisional');
  if(!dep)throw Error('La estación asignada no es válida. Contactá al administrador.');
- CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;
+ CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;_syncInit=false;clearTimeout(stimer);stimer=null;_draftSave=null;
  CU={uid,username:AUTH_PERSON.email,name:dep.nombre,depNombre:dep.nombre,cr:dep.cr,role:'empleado'};
  showLoad(true);
  try{await loadEconomic();syncLoad();const raw=await sGet('periodos');APS=raw?JSON.parse(raw):[];await loadPeriod(CP);await loadYER();AT='us';usView=null;render();}finally{showLoad(false);}
@@ -7026,8 +7109,9 @@ async function renderAccessRequest(){
  document.getElementById('request-access')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{const cr=document.getElementById('request-cr').value;if(!DEPENDENCIAS.some(d=>d.cr===cr&&d.role!=='divisional'))throw Error('Elegí una estación.');await db.setDoc(ref,{uid:AUTH_PERSON.uid,email:AUTH_PERSON.email,cr,status:'pending',createdAt:Date.now()});await renderAccessRequest();}catch(e){document.getElementById('request-status').textContent=authError(e);b.disabled=false;}});
 }
 async function logoutSafe(){
+ await flushSaveD();
  if(syncPend()&&!await sincronizar(true))return;
- clearTimeout(stimer);await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncInit=false;_db=null;
+ clearTimeout(stimer);stimer=null;_draftSave=null;await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;_syncInit=false;_db=null;
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
 async function renderAccessAdmin(){
@@ -7042,7 +7126,7 @@ async function renderAccessAdmin(){
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
- root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
  }catch(e){root.innerHTML=econStyle+`<section class="econ"><h2>No se pudo cargar la administración</h2><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){

@@ -172,7 +172,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 33 pruebas funcionales aprobadas en la candidata v4.3.4.
+- 36 pruebas funcionales aprobadas en la candidata v4.3.6.
 - 20 pruebas de reglas aprobadas en Firestore Emulator.
 - 10 pruebas de regresión aprobadas contra la copia del respaldo.
 - El respaldo verificado contenía 67 documentos: 53 de Cipolletti, 12 de Colonia y 2 de otros CR.
@@ -222,3 +222,14 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - Validaciones aprobadas: sintaxis, formulario, 33 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
 - Para el corte hacia ChatGPT de escritorio, el repositorio debe incluir todo el árbol fuente: `revision/`, `assemble.py`, `formularios/`, reglas, pruebas y documentación. Los respaldos y comprobantes privados quedan excluidos.
 - Estado: candidata validada; publicación y verificación de producción pendientes dentro de este mismo corte.
+
+### 2026-10-07
+
+- Se identificó mediante captura el origen del aviso repetitivo “El navegador no pudo guardar el respaldo local”: el almacenamiento local estaba lleno por copias de caché grandes, aunque la escritura posterior en Firebase sí finalizaba correctamente.
+- Se implementó v4.3.6: el autoguardado agrupa pulsaciones durante 700 ms, conserva el último valor y fuerza el guardado pendiente antes de cambiar de período o cerrar sesión.
+- Durante una escritura normal el indicador muestra “Guardando en la nube”; el estado rojo queda reservado para fallos reales. Se eliminó el popup repetitivo por cuota local.
+- La aplicación ya no duplica en `localStorage` valores de caché mayores a 250.000 caracteres. Si falta espacio para una cola, elimina únicamente cachés vencidas o copias de adjuntos que no estén protegidas por ninguna cola pendiente; no borra documentos ni archivos de Firebase.
+- Si fallan al mismo tiempo el respaldo local y Firebase, se conserva la cola en memoria y aparece un aviso persistente para no cerrar la ventana y reintentar.
+- Archivos modificados: `index.html`, `revision/index.html`, `revision/access.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
+- Validaciones aprobadas: ensamblado, sintaxis, formulario, 36 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
+- Estado: candidata validada localmente; publicación y verificación en GitHub Pages pendientes.

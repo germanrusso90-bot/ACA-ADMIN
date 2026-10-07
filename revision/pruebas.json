@@ -1,8 +1,11 @@
 {
-  "passed": 33,
+  "passed": 36,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
+    "Autoguardado agrupa pulsaciones y conserva el último valor",
+    "Guardado en curso no se anuncia como fallo de nube",
+    "Cuota local llena se recupera sin popup ni borrar colas",
     "YER inválido no se sanea de manera destructiva",
     "YER porcentaje y pesos/litro",
     "Recuperos porcentaje, factura, mixto y litros",
