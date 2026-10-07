@@ -1,5 +1,5 @@
 {
-  "passed": 36,
+  "passed": 37,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -10,7 +10,8 @@
     "YER porcentaje y pesos/litro",
     "Recuperos porcentaje, factura, mixto y litros",
     "Rechazo de deducciones mayores que la base",
-    "Archivo grande fragmentado y recuperado íntegro",
+    "Archivo grande fragmentado, paralelo y recuperado íntegro",
+    "Carga larga muestra etapa y porcentaje",
     "Fragmento faltante detectado",
     "Conflicto de otra sesión conserva su versión",
     "Cola con versión base sincroniza después de recargar",

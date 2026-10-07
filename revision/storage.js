@@ -2,6 +2,23 @@
 // complete, hash-verified value is published. Concurrent edits fail closed.
 function wrapDB(native){
  const expected=new Map(),writers=new Map(),owned=new Set();
+ const CHUNK_CONCURRENCY=4;
+ const storageProgress=(ref,phase,current,total)=>{
+  if(typeof window==='undefined'||typeof window.dispatchEvent!=='function'||typeof window.CustomEvent!=='function')return;
+  window.dispatchEvent(new window.CustomEvent('aca-storage-progress',{detail:{key:ref.id,phase,current,total}}));
+ };
+ const mapChunks=async(count,worker,onProgress)=>{
+  const results=new Array(count);let completed=0;
+  for(let start=0;start<count;start+=CHUNK_CONCURRENCY){
+   const indexes=Array.from({length:Math.min(CHUNK_CONCURRENCY,count-start)},(_,offset)=>start+offset);
+   const settled=await Promise.allSettled(indexes.map(async index=>{
+    const value=await worker(index);results[index]=value;completed++;if(onProgress)onProgress(completed,count);
+   }));
+   const failed=settled.find(item=>item.status==='rejected');
+   if(failed)throw failed.reason;
+  }
+  return results;
+ };
  const stableValue=value=>{
   if(value===null||typeof value!=='object')return value;
   if(Array.isArray(value))return value.map(stableValue);
@@ -21,7 +38,7 @@ function wrapDB(native){
   if(ref.parent.id==='kv'&&!expected.has(ref.id))expected.set(ref.id,signature(snap));
   if(!snap.exists()||!snap.data().chunked)return snap;
   const meta=snap.data();if(meta.chunked!==1||!Number.isInteger(meta.count)||meta.count<1||meta.count>200)throw Error('Índice de archivo inválido.');
-  const parts=[];for(let i=0;i<meta.count;i++){const p=await native.getDoc(native.doc(native.fs,'kv',ref.id+'--chunk--'+meta.revision+'--'+i));if(!p.exists())throw Error('Archivo incompleto: falta una parte. No se modificó el original.');const d=p.data();if(d.revision!==meta.revision||d.index!==i)throw Error('Parte de archivo inválida.');parts.push(Uint8Array.from(atob(d.chunk),c=>c.charCodeAt(0)));}
+  const parts=await mapChunks(meta.count,async i=>{const p=await native.getDoc(native.doc(native.fs,'kv',ref.id+'--chunk--'+meta.revision+'--'+i));if(!p.exists())throw Error('Archivo incompleto: falta una parte. No se modificó el original.');const d=p.data();if(d.revision!==meta.revision||d.index!==i)throw Error('Parte de archivo inválida.');return Uint8Array.from(atob(d.chunk),c=>c.charCodeAt(0));},(current,total)=>storageProgress(ref,'read',current,total));
   const bytes=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let pos=0;parts.forEach(p=>{bytes.set(p,pos);pos+=p.length;});
   const hash=await sha256(bytes);if(hash!==meta.sha256||bytes.length!==meta.bytes)throw Error('El archivo no pasó la verificación de integridad.');
   return {exists:()=>true,data:()=>({...meta,v:new TextDecoder().decode(bytes)}),id:snap.id,ref:snap.ref};
@@ -59,10 +76,10 @@ function wrapDB(native){
   let stored=data;
   if(typeof data.v==='string'&&new TextEncoder().encode(data.v).length>=700000){
    const bytes=new TextEncoder().encode(data.v),revision=crypto.randomUUID(),count=Math.ceil(bytes.length/480000);
-   for(let i=0;i<count;i++){
+   await mapChunks(count,async i=>{
     const block=bytes.subarray(i*480000,(i+1)*480000);let str='';for(let j=0;j<block.length;j+=8000)str+=String.fromCharCode(...block.subarray(j,j+8000));
     await native.setDoc(native.doc(native.fs,'kv',ref.id+'--chunk--'+revision+'--'+i),{k:data.k,chunk:btoa(str),revision,index:i});
-   }
+   },(current,total)=>storageProgress(ref,'write',current,total));
    stored={...data,v:null,chunked:1,revision,count,bytes:bytes.length,sha256:await sha256(bytes)};
   }
   await native.runTransaction(native.fs,async tx=>{

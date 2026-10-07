@@ -172,7 +172,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 36 pruebas funcionales aprobadas en la candidata v4.3.6.
+- 37 pruebas funcionales aprobadas en la candidata v4.3.7.
 - 20 pruebas de reglas aprobadas en Firestore Emulator.
 - 10 pruebas de regresión aprobadas contra la copia del respaldo.
 - El respaldo verificado contenía 67 documentos: 53 de Cipolletti, 12 de Colonia y 2 de otros CR.
@@ -234,3 +234,9 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - Validaciones aprobadas: ensamblado, sintaxis, formulario, 36 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
 - Se integró el intento de autoguardado subido directamente a GitHub el 05/10/2026, conservando su protección al ocultar/cerrar la pestaña dentro de la solución v4.3.6 y manteniendo todo el árbol fuente.
 - Estado: v4.3.6 publicada en `main` el 07/10/2026. GitHub Pages completó el despliegue del commit `8e9561a` y la pantalla pública confirmó `v4.3.6 — revisión 07/10/2026`.
+- Se confirmó que una carga de Ventas Especiales no estaba bloqueada: los Excel reales pesan aproximadamente entre 10 y 12 MB y el programa conserva el original, por lo que debía fragmentarlo en unas 30 partes y subirlas secuencialmente.
+- Se preparó v4.3.7 para cargar y recuperar hasta cuatro fragmentos en paralelo, manteniendo el manifiesto final, la verificación SHA-256, la detección de conflictos y las claves existentes sin migraciones.
+- La pantalla de espera ahora informa la etapa de lectura, análisis, preparación, subida y guardado del período; durante archivos fragmentados muestra porcentaje y cantidad de partes, para no confundir una transferencia lenta con un bloqueo.
+- Archivos modificados: `index.html`, `revision/index.html`, `revision/storage.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
+- Validaciones aprobadas: ensamblado, sintaxis, formulario, 37 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra la copia íntegra del respaldo de 67 documentos.
+- Estado: candidata v4.3.7 validada localmente; publicación en `main` y comprobación de GitHub Pages pendientes.
