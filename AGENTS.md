@@ -226,10 +226,11 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 ### 2026-10-07
 
 - Se identificó mediante captura el origen del aviso repetitivo “El navegador no pudo guardar el respaldo local”: el almacenamiento local estaba lleno por copias de caché grandes, aunque la escritura posterior en Firebase sí finalizaba correctamente.
-- Se implementó v4.3.6: el autoguardado agrupa pulsaciones durante 700 ms, conserva el último valor y fuerza el guardado pendiente antes de cambiar de período o cerrar sesión.
+- Se implementó v4.3.6: el autoguardado agrupa pulsaciones durante 1 segundo, conserva el último valor y fuerza el guardado pendiente antes de cambiar de período, cerrar sesión, ocultar o abandonar la pestaña.
 - Durante una escritura normal el indicador muestra “Guardando en la nube”; el estado rojo queda reservado para fallos reales. Se eliminó el popup repetitivo por cuota local.
 - La aplicación ya no duplica en `localStorage` valores de caché mayores a 250.000 caracteres. Si falta espacio para una cola, elimina únicamente cachés vencidas o copias de adjuntos que no estén protegidas por ninguna cola pendiente; no borra documentos ni archivos de Firebase.
 - Si fallan al mismo tiempo el respaldo local y Firebase, se conserva la cola en memoria y aparece un aviso persistente para no cerrar la ventana y reintentar.
 - Archivos modificados: `index.html`, `revision/index.html`, `revision/access.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
 - Validaciones aprobadas: ensamblado, sintaxis, formulario, 36 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
+- Se integró el intento de autoguardado subido directamente a GitHub el 05/10/2026, conservando su protección al ocultar/cerrar la pestaña dentro de la solución v4.3.6 y manteniendo todo el árbol fuente.
 - Estado: candidata validada localmente; publicación y verificación en GitHub Pages pendientes.

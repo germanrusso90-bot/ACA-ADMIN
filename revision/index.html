@@ -683,8 +683,12 @@ setInterval(()=>{ if(_syncInit&&syncPend()&&!_syncing) sincronizar(false); },300
 window.addEventListener('online',()=>{ if(_syncInit&&syncPend()) sincronizar(false); });
 // Avisar si se intenta cerrar con cambios sin subir
 window.addEventListener('beforeunload',e=>{
-  if(syncPend()){ e.preventDefault(); e.returnValue=''; return ''; }
+  const hadDraft=!!_draftSave;
+  if(hadDraft)flushSaveD();
+  if(syncPend()||hadDraft){ e.preventDefault(); e.returnValue=''; return ''; }
 });
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&_draftSave)flushSaveD();});
+window.addEventListener('pagehide',()=>{if(_draftSave)flushSaveD();});
 
 async function sSet(k,v,sh=true){
   const fk=fullKey(k);
@@ -899,7 +903,7 @@ async function savePeriod(p,data){
   // Guardar datos de un período específico (para preservar historial al cambiar de mes)
   await sSet('data:'+p,JSON.stringify(data),true);
 }
-function saveD(delay=700){
+function saveD(delay=1000){
   const draft={period:CP,payload:JSON.stringify(PD)};
   _draftSave=draft;
   clearTimeout(stimer);
