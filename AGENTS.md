@@ -233,4 +233,4 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - Archivos modificados: `index.html`, `revision/index.html`, `revision/access.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
 - Validaciones aprobadas: ensamblado, sintaxis, formulario, 36 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra el respaldo completo de 67 documentos.
 - Se integró el intento de autoguardado subido directamente a GitHub el 05/10/2026, conservando su protección al ocultar/cerrar la pestaña dentro de la solución v4.3.6 y manteniendo todo el árbol fuente.
-- Estado: candidata validada localmente; publicación y verificación en GitHub Pages pendientes.
+- Estado: v4.3.6 publicada en `main` el 07/10/2026. GitHub Pages completó el despliegue del commit `8e9561a` y la pantalla pública confirmó `v4.3.6 — revisión 07/10/2026`.
