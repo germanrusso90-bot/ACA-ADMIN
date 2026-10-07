@@ -239,4 +239,4 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - La pantalla de espera ahora informa la etapa de lectura, análisis, preparación, subida y guardado del período; durante archivos fragmentados muestra porcentaje y cantidad de partes, para no confundir una transferencia lenta con un bloqueo.
 - Archivos modificados: `index.html`, `revision/index.html`, `revision/storage.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
 - Validaciones aprobadas: ensamblado, sintaxis, formulario, 37 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra la copia íntegra del respaldo de 67 documentos.
-- Estado: candidata v4.3.7 validada localmente; publicación en `main` y comprobación de GitHub Pages pendientes.
+- Estado: v4.3.7 publicada en `main` el 07/10/2026 mediante el commit `a9c984c`. GitHub Pages informó la compilación como `built` y la pantalla pública confirmó `v4.3.7 — revisión 07/10/2026`.
