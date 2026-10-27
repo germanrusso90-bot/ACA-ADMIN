@@ -347,6 +347,13 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
      - las publicadas eran idénticas a `firestore.rules` de v4.3.8;
      - publicación de las nuevas el 27/10/2026 16:11 UTC (compatibles con v4.3.8: aceptan sus escrituras);
      - se verificó que lo publicado coincide con el archivo y que el acceso anónimo sigue devolviendo 403.
-  3. **App:** `revision/index.html` copiada a `index.html` y subida.
-- Falta que las estaciones recarguen con Ctrl+F5 para dejar la v4.3.8.
+  3. **App:** `revision/index.html` copiada a `index.html` y subida en el commit `a02f879`. GitHub Pages la publicó y la pantalla pública confirmó `v4.3.9 — revisión 27/10/2026`.
+- Comprobado en el sitio publicado, sin iniciar sesión:
+  - compresión y descompresión gzip del navegador (146 KB → 15 KB, idéntico al volver);
+  - el SDK de Firestore 10.12.0 expone `Bytes`;
+  - la regla de una copia por día responde bien;
+  - pdf.js y SheetJS funcionan, sin errores de página.
+- Pendiente del titular y de las estaciones:
+  - recargar con Ctrl+F5 para dejar la v4.3.8;
+  - ingresar con Google y hacer una carga controlada de un adjunto y un Excel YER.
 - Pendiente de decisión: los 27,5 MB de fragmentos huérfanos y las versiones viejas siguen ocupando espacio. Sacarlos de la base exige una excepción explícita al principio de no borrar, con respaldo previo.
