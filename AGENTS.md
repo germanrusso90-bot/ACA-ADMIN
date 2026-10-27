@@ -178,7 +178,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 47 pruebas funcionales aprobadas en la candidata v4.3.10.
+- 49 pruebas funcionales aprobadas en la candidata v4.3.11.
 - 27 pruebas de reglas aprobadas en Firestore Emulator.
 - Regresión de v4.3.9 contra el mismo respaldo: 19/19 pantallas iguales a las de v4.3.8, adjuntos abiertos sin fallas y ninguna escritura al recorrerla.
 - Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
@@ -435,3 +435,42 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - unos días después, hacer privado el repositorio (apaga GitHub Pages);
   - quitar `germanrusso90-bot.github.io` de los dominios autorizados;
   - restringir la clave de API.
+
+### 2026-10-27 — v4.3.11 (accesibilidad y usabilidad, candidata)
+
+- Teclado:
+  - las tarjetas de Unidad Servicial, los meses de Cancelaciones y de Checks, las estaciones de la vista divisional y los indicadores de conciliación YER tienen `role="button"` y `tabindex="0"`;
+  - Enter y espacio las activan (manejador global en `revision/index.html`);
+  - foco visible con `:focus-visible`.
+- Nombres de campos:
+  - los campos dentro de tablas toman el nombre del encabezado de la columna y del período de la fila («IMPORTE — oct-25»), con `enhanceA11y` y un `MutationObserver` sobre `#app`;
+  - nombres explícitos para las comisiones YER, la fecha de cancelación de Full y los selectores de año y de estación;
+  - los encabezados de tabla vacíos dicen «Acciones» para lectores de pantalla, y los `th` del encabezado llevan `scope="col"`.
+- Estructura:
+  - `#app` pasa a ser `<main>`;
+  - barra superior `<header>` con `<h1>`;
+  - pestañas en `<nav aria-label="Secciones">` con `aria-current="page"`;
+  - títulos de sección `h2`; las pantallas de acceso y administración tienen `h1`;
+  - el aviso flotante y el indicador de guardado quedan en una región con nombre y son `role="status"`.
+- Contraste: `--m2` pasa de `#8a8198` a `#6e6580` y `--m` de `#807791` a `#6a6179`. Ahora cumplen al menos 4,5:1 sobre todos los fondos de la app (antes 3,2–3,7:1).
+- Avisos:
+  - el aviso flotante dura 4 s (antes 1,8 s) y lo anuncia el lector de pantalla;
+  - los `alert()` de la app y de `yer-rates.js` pasan a `showMessage()`: un `<dialog>` nativo con «Aceptar», que se cierra con Esc y devuelve una promesa;
+  - el único caso que dependía de la pausa de `alert()` (descartar cambios antiguos y recargar) recarga al cerrar el diálogo;
+  - `economic.js` conserva sus 7 `alert()`, porque también se usa en el formulario independiente de condiciones;
+  - los `confirm()` siguen igual; requieren pasar cada uso a asincrónico.
+- Movimiento reducido: con `prefers-reduced-motion` no hay animaciones ni transiciones.
+- Corrección de datos (`storage.js`): las copias de adjuntos se conservan siempre, también las de los adjuntos chicos (menos de 64 KB) guardados dentro del documento. Antes, si se reemplazaban el mismo día, no dejaban copia previa.
+- Validaciones:
+  - 49/49 pruebas funcionales;
+  - axe-core sobre todas las pestañas y una vista de Unidad Servicial: **0 fallas** (antes: 65 campos sin nombre, 39 contrastes insuficientes, sin `main` ni `h1`, encabezados vacíos y orden de títulos);
+  - recorrido solo con teclado: con Tab se llega a las tarjetas, Enter abre Teléfono, los campos se anuncian por columna y período, y el diálogo recibe el foco y se cierra con Esc;
+  - regresión con el respaldo real posterior a la limpieza (236 documentos) en el emulador: las 19 pantallas solo difieren en la versión y en «Acciones», 4/4 adjuntos, sin escrituras.
+- Publicación aprobada por el titular el 27/10/2026:
+  1. respaldo previo con dos lecturas coincidentes (236 documentos, sin cambios desde la limpieza);
+  2. `revision/index.html` copiada a `index.html` y publicada en `aca-admin.web.app`;
+  3. commit y push a `main`.
+- Verificado en línea:
+  - versión `v4.3.11`, todas las cabeceras y 0 violaciones de CSP;
+  - pdf.js, SheetJS y la compresión funcionan;
+  - `<main>`, región de avisos, `role="status"`, contraste `#6e6580` y `showMessage` presentes.

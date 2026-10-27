@@ -13,7 +13,7 @@
   --pd:#241338;--p:#4B2563;--pl:#7A4B9E;
   --y:#FFC72C;--yl:#FFF8E1;--y2:#FFE57F;
   --bg:#F4F1F8;--card:#fff;--text:#241338;
-  --m:#807791;--m2:#8a8198;--b:#E2DCEC;
+  --m:#6a6179;--m2:#6e6580;--b:#E2DCEC;
   --g:#1B6B35;--gb:#E8F5E9;--gbr:#81C784;
   --r:#B71C1C;--rb:#FFEBEE;--rbr:#EF9A9A;
   --radius:10px;
@@ -185,7 +185,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 .cards{display:flex;flex-direction:column;gap:14px;}
 .card{background:var(--card);border:1px solid var(--b);border-radius:var(--radius);overflow:hidden;}
 .card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:#F8F5FB;border-bottom:1px solid var(--b);}
-.card-header h3{margin:0;font-size:15px;color:var(--pd);}
+.card-header h2,.card-header h3{margin:0;font-size:15px;color:var(--pd);}
 .card-body{padding:14px 16px;}
 .badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;}
 .badge-ok{background:var(--gb);color:var(--g);}
@@ -242,15 +242,26 @@ table.ex input.ex-input.inp-date{width:100%;}
 #loading-progress{font-size:12px;font-weight:700;color:var(--m2);min-height:16px;}
 .spinner{width:42px;height:42px;border:4px solid #fff;border-top-color:var(--y);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+
+/* ACCESIBILIDAD */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+:focus-visible{outline:3px solid var(--pl);outline-offset:2px;}
+[role="button"][tabindex]{cursor:pointer;}
+.msg-dialog{margin:auto;border:none;border-radius:14px;padding:22px 24px;max-width:min(460px,calc(100vw - 32px));color:var(--text);box-shadow:0 12px 40px rgba(36,19,56,.35);}
+.msg-dialog::backdrop{background:rgba(36,19,56,.35);}
+.msg-dialog p{font-size:15px;line-height:1.5;white-space:pre-line;margin-bottom:16px;}
+.msg-dialog form{text-align:right;}
+.msg-dialog button{background:var(--p);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}}
 </style>
 </head>
 <body>
-<div id="app"></div>
-<div id="toast"></div>
+<main id="app"></main>
+<section id="estado-app" aria-label="Avisos y estado de guardado"><div id="toast" role="status" aria-live="polite"></div></section>
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.10 — revisión 27/10/2026';
+const APP_VERSION='v4.3.11 — revisión 27/10/2026';
 // ── BIBLIOTECAS ───────────────────────────────────────────────
 // Alojadas en vendor/ junto a la app, en versiones sin las vulnerabilidades
 // conocidas de pdf.js 3.11 y SheetJS 0.18. La candidata de revision/ las
@@ -307,6 +318,50 @@ function showMoveNotice(){
   let storage=null;try{storage=window.localStorage;}catch(e){}
   if(oldAddressRedirect(location.hostname,storage))location.replace(APP_URL);
   else if(location.hostname===OLD_HOST)showMoveNotice();
+}
+// ── ACCESIBILIDAD ─────────────────────────────────────────────
+// Los campos de las tablas toman su nombre del encabezado de la columna y del
+// período de la fila («Importe — sep-26»), y los encabezados vacíos reciben un
+// texto para lectores de pantalla. Se aplica a todo lo que se dibuja en #app,
+// también a lo que se redibuja después.
+const cellText=el=>(el?.textContent||'').replace(/\s+/g,' ').trim();
+function labelTableField(field){
+  if(field.labels?.length||field.hasAttribute('aria-label')||field.hasAttribute('aria-labelledby'))return;
+  const cell=field.closest('td,th'),table=cell?.closest('table');if(!table)return;
+  const head=table.tHead?.rows[0]||[...table.rows].find(r=>r.querySelector('th'));
+  const column=cellText(head?.cells[cell.cellIndex]),row=cell.cellIndex>0?cellText(cell.parentElement.cells[0]):'';
+  const name=[column,row].filter(Boolean).join(' — ');
+  if(name)field.setAttribute('aria-label',name);
+}
+function enhanceA11y(root){
+  if(!root)return;
+  root.querySelectorAll('input:not([type=hidden]):not([type=file]),select,textarea').forEach(labelTableField);
+  root.querySelectorAll('thead th').forEach(th=>{
+    if(!th.hasAttribute('scope'))th.setAttribute('scope','col');
+    if(!cellText(th)){const s=document.createElement('span');s.className='sr-only';s.textContent='Acciones';th.append(s);}
+  });
+}
+{
+  const app=document.getElementById('app');let queued=false;
+  new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;enhanceA11y(app);});}).observe(app,{childList:true,subtree:true});
+}
+// Tarjetas y celdas que responden al clic (role="button"): Enter o espacio las activan.
+document.addEventListener('keydown',e=>{
+  const t=e.target;
+  if(!t?.getAttribute||t.getAttribute('role')!=='button'||/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(t.tagName))return;
+  if(e.key==='Enter'||e.key===' '){e.preventDefault();t.click();}
+});
+// Mensajes en un <dialog> nativo en lugar de alert(): los anuncia el lector de
+// pantalla, no congelan la página y se cierran con Aceptar o Esc. El foco vuelve
+// solo al control que lo abrió. Devuelve una promesa que se cumple al cerrarlo.
+function showMessage(text){
+  const dialog=document.createElement('dialog'),p=document.createElement('p'),form=document.createElement('form'),ok=document.createElement('button');
+  dialog.className='msg-dialog';dialog.setAttribute('aria-label','Aviso');
+  p.textContent=String(text??'');form.method='dialog';ok.textContent='Aceptar';ok.autofocus=true;
+  form.append(ok);dialog.append(p,form);document.body.append(dialog);
+  const closed=new Promise(resolve=>dialog.addEventListener('close',()=>{dialog.remove();resolve();}));
+  if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+  return closed;
 }
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[
@@ -503,13 +558,13 @@ async function recuperarLiquidaciones(){
     }catch(e){}
   }
   if(!encontradas.length){
-    alert('No se encontraron liquidaciones en el respaldo de este navegador.\n\nProbá desde la computadora y el navegador donde hiciste la liquidación, sin borrar el historial de navegación.');
+    showMessage('No se encontraron liquidaciones en el respaldo de este navegador.\n\nProbá desde la computadora y el navegador donde hiciste la liquidación, sin borrar el historial de navegación.');
     return 0;
   }
   const yaEstan=new Set((YER.liqHistory||[]).map(l=>l.period||l.mesLabel));
   const nuevas=encontradas.filter(e=>!yaEstan.has(e.l.period||e.l.mesLabel));
   if(!nuevas.length){
-    alert(`Se encontraron ${encontradas.length} liquidación(es) en el respaldo local, pero ya están todas en el historial.`);
+    showMessage(`Se encontraron ${encontradas.length} liquidación(es) en el respaldo local, pero ya están todas en el historial.`);
     return 0;
   }
   const lista=nuevas.map(e=>'• '+(e.l.mesLabel||e.l.period)).join('\n');
@@ -520,7 +575,7 @@ async function recuperarLiquidaciones(){
   YER._sinConexion=false;
   const ok=await saveYER();
   renderTab();
-  alert(ok?`Se restauraron ${nuevas.length} liquidación(es) y se guardaron en la nube.`
+  showMessage(ok?`Se restauraron ${nuevas.length} liquidación(es) y se guardaron en la nube.`
           :`Se restauraron ${nuevas.length} liquidación(es) en pantalla, pero NO se pudieron guardar en la nube. No cierres el navegador y reintentá con el botón del cartel rojo.`);
   return nuevas.length;
 }
@@ -637,7 +692,7 @@ async function sincronizar(manual){
   if(manual){
     const legacy=Object.values(_syncErrors).some(e=>e.code==='aca/legacy-queue');
     const conflict=Object.values(_syncErrors).some(e=>e.code==='aca/conflict');
-    alert(ok?'Listo: todo quedó guardado en la nube.'
+    showMessage(ok?'Listo: todo quedó guardado en la nube.'
             :legacy?'Los cambios siguen guardados en este navegador, pero fueron creados por la versión anterior. Descargá “Respaldo local” y envialo al administrador para recuperarlos sin pisar información de la nube.'
             :conflict?'Firebase detectó una versión distinta. Cerrá otras pestañas de ACA y usá “Guardar mis cambios”; la versión anterior de la nube quedará respaldada automáticamente.'
             :'Todavía no se pudo guardar en la nube. Motivo: '+[...new Set(Object.values(_syncErrors).map(e=>e.code||e.message))].join(', ')+'. Los cambios siguen guardados en este navegador.');
@@ -665,8 +720,7 @@ function discardLegacyPending(){
   if(!n){toast('No hay cambios antiguos para descartar.');return;}
   if(!confirm(`¿Descartar ${n} cambio${n>1?'s':''} pendiente${n>1?'s':''} de la versión anterior?\n\nSolo se borrarán de este navegador. Firebase y los archivos históricos no se modifican.`))return;
   clearLegacyPendingLocal();
-  alert(`Se descartaron ${n} cambio${n>1?'s':''} local${n>1?'es':''}. La aplicación se recargará con la información guardada en Firebase.`);
-  location.reload();
+  showMessage(`Se descartaron ${n} cambio${n>1?'s':''} local${n>1?'es':''}. La aplicación se recargará con la información guardada en Firebase.`).then(()=>location.reload());
 }
 window.clearLegacyPendingLocal=clearLegacyPendingLocal;
 window.discardLegacyPending=discardLegacyPending;
@@ -687,7 +741,7 @@ async function resolvePendingConflicts(){
   }catch(e){
     keys.forEach(fk=>{if(_syncQueue[fk])_syncErrors[fk]={code:e.code||'',message:e.message||'No se pudo actualizar la versión base'};});
     _syncing=false;syncPersist();syncBadge();
-    alert('No se pudo preparar la resolución del conflicto. Motivo: '+(e.code||e.message||'error desconocido')+'.');
+    showMessage('No se pudo preparar la resolución del conflicto. Motivo: '+(e.code||e.message||'error desconocido')+'.');
     return false;
   }
   _syncing=false;syncBadge();
@@ -699,9 +753,9 @@ function syncBadge(){
   let b=document.getElementById('sync-badge');
   if(!b){
     b=document.createElement('div');
-    b.id='sync-badge';
+    b.id='sync-badge';b.setAttribute('role','status');
     b.style.cssText='position:fixed;right:14px;bottom:14px;z-index:9998;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;display:flex;gap:10px;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,.18);font-family:inherit;';
-    document.body.appendChild(b);
+    (document.getElementById('estado-app')||document.body).appendChild(b);
   }
   const n=syncPend();
   const active=Object.keys(_syncQueue).filter(fk=>(_syncWriting[fk]||0)>0).length;
@@ -860,7 +914,7 @@ window.addEventListener('aca-storage-progress',event=>{
   const {phase,current,total}=event.detail||{};
   setLoadStatus(phase==='read'?'Recuperando el archivo guardado…':'Subiendo el archivo a la nube…',current,total);
 });
-function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
+function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),4000);}
 
 // ── DIAGNÓSTICO FIREBASE ─────────────────────────────────────
 async function diagFirebase(){
@@ -880,11 +934,11 @@ async function diagFirebase(){
     const msg=`CLAVES CON PREFIJO (${nuevas.length}):\n${nuevas.map(k=>`  ✓ ${k.k} (${k.size}ch)`).join('\n')}\n\nCLAVES SIN PREFIJO - VIEJAS (${viejas.length}):\n${viejas.map(k=>`  ⚠️ ${k.k} (${k.size}ch)`).join('\n')||'  (ninguna)'}`;
     const migrar=viejas.length>0&&confirm(`${msg}\n\n¿Migrar ahora las ${viejas.length} claves viejas al CR ${CURRENT_CR}?`);
     if(migrar)await migrarClavesViejas(viejas,db);
-    else alert(msg);
-  }catch(e){alert('Error: '+e.message);}
+    else showMessage(msg);
+  }catch(e){showMessage('Error: '+e.message);}
 }
 
-async function migrarClavesViejas(){alert('Migración automática deshabilitada. Las claves antiguas siguen disponibles en modo lectura.');}
+async function migrarClavesViejas(){showMessage('Migración automática deshabilitada. Las claves antiguas siguen disponibles en modo lectura.');}
 
 async function loadPeriod(p){
   await flushSaveD();
@@ -1073,7 +1127,7 @@ function openExcelViewer(f){
       document.body.appendChild(a);a.click();a.remove();
     });
     wrap.addEventListener('click',e=>{if(e.target===wrap)closeFileViewer();});
-  }catch(e){alert('No se pudo mostrar el archivo: '+e.message);}
+  }catch(e){showMessage('No se pudo mostrar el archivo: '+e.message);}
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────
@@ -1083,26 +1137,26 @@ function attachLogin(){document.getElementById('google-login').onclick=googleLog
 function renderShell(){
   // Divisional ve su propio tablero
   if(CU.role==='divisional'){
-    return`<div class="topbar">
-      <div class="brand">ACA <span>Divisional</span></div>
+    return`<header class="topbar">
+      <h1 class="brand">ACA <span>Divisional</span></h1>
       <div class="user-info"><span>Divisional — CR 2402</span>${IS_ACCESS_ADMIN?'<button class="btn-ghost" onclick="openAdminPanel()">Administrar accesos</button>':''}<button class="btn-ghost" onclick="exportLocalBackup()">Respaldo local</button><button class="btn-ghost" id="logout-btn">Salir</button></div>
-    </div>
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="div-checks">✅ Checks por Dependencia</button>
-    </div>
+    </header>
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab-btn active" data-tab="div-checks" aria-current="page">✅ Checks por Dependencia</button>
+    </nav>
     <div id="tab-content"></div>`;
   }
   const tabs=[{key:'liquidacion',label:'Recuperos configurables'},{key:'us',label:'Unidad Servicial'},{key:'full',label:'Full'},{key:'hotel',label:'Hotel'},{key:'yer',label:'YER'},{key:'cancel',label:'Cancelaciones'},{key:'checks',label:'✅ Checks'}];
   if(CU.role==='admin'){tabs.push({key:'varios',label:'Varios'});tabs.push({key:'resumen',label:'Resumen'});}
-  return`<div class="topbar">
-    <div class="brand">ACA <span>Recuperos</span></div>
+  return`<header class="topbar">
+    <h1 class="brand">ACA <span>Recuperos</span></h1>
     <div class="user-info">
       <span>${esc(CU.depNombre||CU.name)} <small style="opacity:.6;font-size:10px">CR ${CU.cr||''} · ${APP_VERSION}</small></span>
       <button hidden onclick="diagFirebase()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-weight:700;margin-right:6px">🔍 Diag</button>
       ${IS_ACCESS_ADMIN?'<button class="btn-ghost" onclick="openAdminPanel()">Administrar accesos</button>':''}<button class="btn-ghost" onclick="exportLocalBackup()">Respaldo local</button><button class="btn-ghost" id="logout-btn">Salir</button>
     </div>
-  </div>
-  <div class="tabs">${tabs.map(t=>`<button class="tab-btn ${AT===t.key?'active':''}" data-tab="${t.key}">${t.label}</button>`).join('')}</div>
+  </header>
+  <nav class="tabs" aria-label="Secciones">${tabs.map(t=>`<button class="tab-btn ${AT===t.key?'active':''}" data-tab="${t.key}"${AT===t.key?' aria-current="page"':''}>${t.label}</button>`).join('')}</nav>
   <div id="tab-content"></div>`;
 }
 function attachShell(){
@@ -1110,7 +1164,7 @@ function attachShell(){
   document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       AT=btn.getAttribute('data-tab');usView=null;
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));
+      document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.toggle('active',b===btn);if(b===btn)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
       renderTab();
     });
   });
@@ -1160,7 +1214,7 @@ function renderUSGrid(){
     const curr=rows.find(r=>r.period===period);
     const dateLabel=curr&&curr.fecha?curr.fecha:(curr&&curr.fechaCancelacion?curr.fechaCancelacion:'Sin cargar');
     const periodLabel2=periodLabel(period);
-    html+=`<div class="us-tile ${done?'done':'pending'}" data-open-us="${it.key}">
+    html+=`<div class="us-tile ${done?'done':'pending'}" data-open-us="${it.key}" role="button" tabindex="0">
       <div class="tile-icon">${it.icon}</div>
       <div class="tile-title">${esc(it.label)}</div>
       <div class="tile-period">${done?dateLabel:periodLabel2+' — Pendiente'}</div>
@@ -1290,7 +1344,7 @@ async function recuperarUS(){
   const mejor={};
   encontrados.forEach(e=>{ const id=e.key+'|'+e.row.period; if(!mejor[id]||e.origen>mejor[id].origen) mejor[id]=e; });
   const lista=Object.values(mejor);
-  if(!lista.length){ alert('No se encontraron datos de Unidad Servicial en los meses anteriores.'); return 0; }
+  if(!lista.length){ showMessage('No se encontraron datos de Unidad Servicial en los meses anteriores.'); return 0; }
   const detalle=lista.map(e=>`• ${e.label} — ${periodLabel(e.row.period)}${e.row.importe!=null?' ($ '+fmtArg(e.row.importe)+')':''}`).join('\n');
   if(!confirm(`Se encontraron estos datos en meses anteriores:\n\n${detalle}\n\n¿Incorporarlos al historial actual?`)) return 0;
   lista.forEach(e=>{
@@ -1301,7 +1355,7 @@ async function recuperarUS(){
   });
   await saveP();
   renderTab();
-  alert(`Se recuperaron ${lista.length} registro(s).`);
+  showMessage(`Se recuperaron ${lista.length} registro(s).`);
   return lista.length;
 }
 window.recuperarUS=recuperarUS;
@@ -1728,7 +1782,7 @@ async function renderUSExcel(usKey){
   el.querySelectorAll('[data-upload-us]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0];if(!file)return;
-      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande (máx 3,5 MB)');return;}
       const key=inp.getAttribute('data-upload-us');
       const period=inp.getAttribute('data-upload-period');
       // Guardar campos manuales antes de renderizar para no perderlos
@@ -1756,7 +1810,7 @@ async function renderUSExcel(usKey){
         if(rowIdx===-1){PD.us[key].push({period});rowIdx=PD.us[key].length-1;}
         PD.us[key][rowIdx].facturaServicio={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
         await saveP();toast('Factura subida ✓ — '+file.name);
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);renderTab();
     });
   });
@@ -1783,7 +1837,7 @@ async function renderUSExcel(usKey){
       showLoad(true);
       const raw=await sGet('file:'+fk,true);
       showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      if(!raw){showMessage('No se pudo recuperar el archivo.');return;}
       const f=JSON.parse(raw);
       openFileViewer(f);
     });
@@ -1907,7 +1961,7 @@ function renderFullRegistro(f){
 
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Fecha cancelación</div>
-        <input id="full-fecha-cancel" type="date" value="${esc(f.fechaCancelacion||'')}" ${ro}
+        <input id="full-fecha-cancel" type="date" aria-label="Fecha de cancelación" value="${esc(f.fechaCancelacion||'')}" ${ro}
           style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;${roStyle}">
       </div>
 
@@ -2095,7 +2149,7 @@ function renderFull(){
   }).join('');
 
   return `<div class="cards"><div class="card">
-    <div class="card-header"><h3>Recupero Full</h3></div>
+    <div class="card-header"><h2>Recupero Full</h2></div>
     <div class="card-body" style="padding:0;">
       <div style="overflow-x:auto;">
         <table style="border-collapse:collapse;width:100%;min-width:900px;">
@@ -2313,7 +2367,7 @@ function renderHotel(){
   }).join('');
 
   const canonHtml=`<div class="card" style="order:-1;">
-    <div class="card-header"><h3>🏨 Canon Alojamiento</h3></div>
+    <div class="card-header"><h2>🏨 Canon Alojamiento</h2></div>
     <div class="card-body" style="padding:0;">
       <div style="overflow-x:auto;">
         <table style="border-collapse:collapse;width:100%;min-width:900px;">
@@ -2389,7 +2443,7 @@ function renderHotel(){
   }).join('');
 
   const telHtml=`<div class="card">
-    <div class="card-header"><h3>📞 Teléfono Hotel</h3></div>
+    <div class="card-header"><h2>📞 Teléfono Hotel</h2></div>
     <div class="card-body" style="padding:0;">
       <div style="overflow-x:auto;">
         ${renderSearchBar('hotel-tel-search','Buscar por período, N° factura, fecha...',telRows.length)}
@@ -2443,8 +2497,8 @@ function attachHotel(){
   el.querySelectorAll('[data-canon-upload-row]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0]; if(!file) return;
-    if(file.size>MAX_FILE){alert('Máximo 3,5 MB.');return;}
-      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+    if(file.size>MAX_FILE){showMessage('Máximo 3,5 MB.');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande (máx 3,5 MB)');return;}
       const slotKey=inp.getAttribute('data-canon-upload-row');
       const period=inp.getAttribute('data-canon-period');
       // Guardar campos manuales ANTES de todo para no perderlos al re-renderizar
@@ -2482,7 +2536,7 @@ function attachHotel(){
           toast('Comprobante cargado ✓');
         }
         await saveP();
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);
       renderTab();
     });
@@ -2633,7 +2687,7 @@ function attachHotel(){
   el.querySelectorAll('[data-tel-upload]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0];if(!file)return;
-      if(file.size>MAX_FILE){alert('Archivo muy grande');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande');return;}
       const period=inp.getAttribute('data-tel-upload');
       const fileKey=`hotel.tel:${period}:fs`;
       showLoad(true);
@@ -2644,7 +2698,7 @@ function attachHotel(){
         if(!row){row={period};PD.hotel.telHistory.push(row);}
         row.facturaServicio={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
         await saveP();toast('Factura subida ✓');
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);renderTab();
     });
   });
@@ -2698,7 +2752,7 @@ function renderVarios(){
   VARIOS_ITEMS.forEach(it=>{
     const rows=PD.varios[it.key];
     const rhtml=rows.length?rows.map(r=>renderVRow(it.key,r)).join(''):'<p style="color:var(--m2);margin:0;font-size:13px;">Sin comprobantes.</p>';
-    html+=`<div class="card"><div class="card-header"><h3>${esc(it.label)}</h3><button class="btn-add" data-va="${it.key}">+ Agregar</button></div><div class="card-body varios-rows">${rhtml}</div></div>`;
+    html+=`<div class="card"><div class="card-header"><h2>${esc(it.label)}</h2><button class="btn-add" data-va="${it.key}">+ Agregar</button></div><div class="card-body varios-rows">${rhtml}</div></div>`;
   });
   return html+`</div>`;
 }
@@ -2728,7 +2782,7 @@ function renderResumen(){
     return`<tr><td>${it.icon} ${it.label}</td><td>${rowDone(curr||{})?`<span style="color:var(--g);">✓</span> ${curr.nroFacturaACA} — ${curr.fecha}`:'<span style="color:var(--r);">Pendiente</span>'}</td><td style="text-align:right">${fmtM(rec)}</td></tr>`;
   }).join('');
   return`<div class="cards">
-    <div class="card"><div class="card-header"><h3>Estado del período ${CP}</h3></div><div class="card-body">
+    <div class="card"><div class="card-header"><h2>Estado del período ${CP}</h2></div><div class="card-body">
       <table class="resumen-table"><tr><th>Ítem</th><th>Estado</th><th>Monto</th></tr>
         ${usRows}
         <tr><td>Full</td><td>${fullOk?'✓ Calculado':'Sin excel'}</td><td style="text-align:right">${fullOk?'$ '+fmt(fullM):'—'}</td></tr>
@@ -2738,7 +2792,7 @@ function renderResumen(){
         <tr class="tr-total"><td colspan="2">Total (Full + Varios)</td><td style="text-align:right">$ ${fmt(fullM+vT)}</td></tr>
       </table>
     </div></div>
-    <div class="card"><div class="card-header"><h3>Historial de períodos</h3></div>
+    <div class="card"><div class="card-header"><h2>Historial de períodos</h2></div>
     <div class="card-body" id="hist-body"><p style="color:var(--m2)">Cargando…</p></div></div>
   </div>`;
 }
@@ -2860,7 +2914,7 @@ function attachGenericFiles(){
     inp.addEventListener('change',async e=>{
       const sid=inp.getAttribute('data-upload');
       const file=e.target.files[0];if(!file)return;
-      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande (máx 3,5 MB)');return;}
       // Si es un archivo de Full, preservar campos manuales
       if(sid.startsWith('full.')){
         const nro=el.querySelector('#full-nro-aca')?.value.trim()||'';
@@ -2880,7 +2934,7 @@ function attachGenericFiles(){
         await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
         setMeta(sid,{fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),...(fullPeriod?{period:fullPeriod,storageKey:fileKey}:{})});
         await saveP();toast('Archivo guardado ✓');
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);renderTab();
     });
   });
@@ -2902,7 +2956,7 @@ function attachGenericFiles(){
         raw=await sGet('file:'+period+':'+sid,true);
       }
       showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo. Puede que no esté guardado en Firebase todavía.');return;}
+      if(!raw){showMessage('No se pudo recuperar el archivo. Puede que no esté guardado en Firebase todavía.');return;}
       openFileViewer(JSON.parse(raw));
     });
   });
@@ -2946,7 +3000,7 @@ function attachFull(){
   const xi=el.querySelector('#full-xl');
   if(xi)xi.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
-    if(file.size>MAX_FILE){alert('Archivo muy grande.');return;}
+    if(file.size>MAX_FILE){showMessage('Archivo muy grande.');return;}
     // Guardar campos manuales antes de procesar para no perderlos
     const nro=el.querySelector('#full-nro-aca')?.value.trim()||'';
     const fecha=el.querySelector('#full-fecha-cancel')?.value||'';
@@ -2961,14 +3015,14 @@ function attachFull(){
       const buf=await file.arrayBuffer();
       await loadXLSX();
       const calc=parseVentas(buf);
-      if(!calc){showLoad(false);alert('No se encontraron filas del Sector 2 o 21.');return;}
+      if(!calc){showLoad(false);showMessage('No se encontraron filas del Sector 2 o 21.');return;}
       const du=await readDU(file);
       const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
       const fileKey=fullFileKey(period,'ventas');
       await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:du}),true);
       PD.full.ventas={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString(),period,storageKey:fileKey,...calc};
       await saveP();toast('Excel procesado ✓');
-    }catch(err){alert('Error: '+err.message);}
+    }catch(err){showMessage('Error: '+err.message);}
     showLoad(false);renderTab();
   });
 
@@ -2980,8 +3034,8 @@ function attachFull(){
       const period=PD.full._editingPeriod||PD.full._period||prevMonth(CP);
       const found=await readFullFile(period,sid.slice('full.'.length),PD.full.ventas?.storageKey||'');
       showLoad(false);
-      if(!found){alert('No se pudo recuperar el archivo.');return;}
-      try{await loadXLSX();}catch(e){alert(e.message);return;}
+      if(!found){showMessage('No se pudo recuperar el archivo.');return;}
+      try{await loadXLSX();}catch(e){showMessage(e.message);return;}
       openExcelViewer(JSON.parse(found.raw));
     });
   });
@@ -3041,7 +3095,7 @@ function attachFull(){
   el.querySelector('#full-man-confirm')?.addEventListener('click',async()=>{
     const tot=pN(manTotal?.value)||0;
     const cig=pN(manCig?.value)||0;
-    if(!tot){alert('Ingresá el total de ventas.');return;}
+    if(!tot){showMessage('Ingresá el total de ventas.');return;}
     const base=fullBase(tot,cig);
     PD.full.ventas={fileName:'Carga manual',size:0,uploadedAt:new Date().toISOString(),
       totalVentas:tot,cigarrillos:cig,base,recupero12:base*fullRate(),manual:true};
@@ -3077,7 +3131,7 @@ function attachFull(){
   el.querySelectorAll('[data-upload-full-comp]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0];if(!file)return;
-      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande (máx 3,5 MB)');return;}
       const period=inp.getAttribute('data-upload-full-comp');
       showLoad(true);
       try{
@@ -3096,7 +3150,7 @@ function attachFull(){
         // También actualizar en PD.full si es el período actual
         if(period===prevMonth(CP)) PD.full.comprobanteTransferencia=meta;
         await saveP();toast('Comprobante subido ✓');
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);renderTab();
     });
   });
@@ -3109,7 +3163,7 @@ function attachFull(){
       const row=(PD.fullHistory||[]).find(r=>r.period===period);
       const found=await readFullFile(period,'comprobanteTransferencia',btn.getAttribute('data-file-key')||row?.comprobanteTransferencia?.storageKey||'');
       showLoad(false);
-      if(!found){alert('No se pudo recuperar el archivo.');return;}
+      if(!found){showMessage('No se pudo recuperar el archivo.');return;}
       openFileViewer(JSON.parse(found.raw));
     });
   });
@@ -3695,7 +3749,7 @@ function renderYER(){
     return `<div style="background:#fff;border:2px solid var(--b);border-radius:10px;padding:14px;text-align:center;">
       <div style="font-size:11px;font-weight:800;color:var(--m2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">${c.label}</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
-        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" readonly
+        <input type="number" step="0.001" data-pct="${c.key}" value="${val}" readonly aria-label="Comisión ${c.label} (${rate.mode==='pesos_litro'?'pesos por litro':'porcentaje'})"
           style="width:80px;padding:8px;border:1.5px solid var(--b);border-radius:7px;font-size:18px;font-weight:700;text-align:center;${bgl}">
         <span style="font-size:16px;font-weight:700;color:var(--m2);">${rate.mode==='pesos_litro'?'$/L':'%'}</span>
       </div>
@@ -4229,7 +4283,7 @@ function buildLiqContent(liq){
     // El snapshot se guarda en una variable y NO dentro del atributo onclick:
     // embebido rompía el HTML por las comillas del JSON y podía pesar megas
     // con miles de despachos.
-    const kpiClick=(tipo,titulo)=>`onclick="liqDetalleVista('${tipo}')"`;
+    const kpiClick=(tipo,titulo)=>`onclick="liqDetalleVista('${tipo}')" role="button" tabindex="0"`;
 
     const kpiStyle=(bg,border,color,clickable)=>
       `background:${bg};border:1px solid ${border};border-radius:8px;padding:12px;text-align:center;${clickable?'cursor:pointer;transition:transform .1s,box-shadow .1s;':''}`;
@@ -4602,7 +4656,7 @@ function imprimirLiqYER(_reintento){
       setTimeout(()=>imprimirLiqYER(true),300);
       return;
     }
-    alert('No hay una liquidación en pantalla para imprimir. Abrila desde el historial con el botón "Ver".');
+    showMessage('No hay una liquidación en pantalla para imprimir. Abrila desde el historial con el botón "Ver".');
     return;
   }
   const cont=src.cloneNode(true);
@@ -4629,7 +4683,7 @@ window.imprimirLiqYER=imprimirLiqYER;
 let _liqVista=null;
 function liqDetalleVista(tipo){
   if(!_liqVista||!_liqVista.snapshot){
-    alert('Esta liquidación se guardó antes de que el sistema archivara el detalle, así que solo tiene el resumen.\n\nDe acá en adelante, cada liquidación guarda el desglose completo de operaciones.');
+    showMessage('Esta liquidación se guardó antes de que el sistema archivara el detalle, así que solo tiene el resumen.\n\nDe acá en adelante, cada liquidación guarda el desglose completo de operaciones.');
     return;
   }
   liqDetalleMostrar(tipo,_liqVista.mesLabel,_liqVista.snapshot);
@@ -4638,7 +4692,7 @@ window.liqDetalleVista=liqDetalleVista;
 
 function liqDetalleMostrar(tipo, mesLabel, snapshot){
   if(!snapshot){
-    alert('Esta liquidación no tiene snapshot disponible. Solo se guardó el resumen.');
+    showMessage('Esta liquidación no tiene snapshot disponible. Solo se guardó el resumen.');
     return;
   }
   const rows=snapshot.rows||[];
@@ -4974,7 +5028,7 @@ function attachYER(){
   });
   el.querySelector('#yer-ventas-input')?.addEventListener('change',async e=>{
     const file=e.target.files[0]; if(!file) return;
-    if(file.size>MAX_YER_FILE){alert('Máximo 25 MB para Excel YER.');return;}
+    if(file.size>MAX_YER_FILE){showMessage('Máximo 25 MB para Excel YER.');return;}
     showLoad(true,'Leyendo Ventas Especiales…');
     try{
       const ab=await file.arrayBuffer();
@@ -4983,7 +5037,7 @@ function attachYER(){
       const rows=processVentasExcel(ab);
       if(!rows||rows.length===0){
         showLoad(false);
-        alert('No se encontraron operaciones YER en el archivo.\nVerificá que el Excel contenga filas del Sector 2 o 21.');
+        showMessage('No se encontraron operaciones YER en el archivo.\nVerificá que el Excel contenga filas del Sector 2 o 21.');
         return;
       }
       const sourceKey='file:yer:ventas:'+CP+':'+crypto.randomUUID();
@@ -4994,7 +5048,7 @@ function attachYER(){
       YER.rows=rows; YER.ventasFile={fileName:file.name,size:file.size,fileKey:sourceKey};
       setLoadStatus('Guardando el período YER…');
       if(!await saveYER())throw Error('Período pendiente de guardar.');toast(YER.rows.length+' operaciones YER cargadas');
-    }catch(err){alert('Error procesando Ventas Especiales:\n'+err.message);}
+    }catch(err){showMessage('Error procesando Ventas Especiales:\n'+err.message);}
     showLoad(false); renderTab();
   });
   el.querySelector('#yer-del-ventas')?.addEventListener('click',async()=>{
@@ -5003,10 +5057,10 @@ function attachYER(){
   });
   el.querySelector('#yer-everilio-input')?.addEventListener('change',async e=>{
     const file=e.target.files[0]; if(!file) return;
-    if(file.size>MAX_YER_FILE){alert('Máximo 25 MB para Excel YER.');return;}
+    if(file.size>MAX_YER_FILE){showMessage('Máximo 25 MB para Excel YER.');return;}
     showLoad(true,'Leyendo Everilio…');
     try{ const ab=await file.arrayBuffer();setLoadStatus('Analizando las operaciones del Excel…');await loadXLSX();const rows=processEverilioExcel(ab);if(!rows.length)throw Error('El Excel no contiene registros válidos. Se conserva la carga anterior.');const sourceKey='file:yer:everilio:'+CP+':'+crypto.randomUUID();setLoadStatus('Preparando el Excel original…');const dataUrl=await readDU(file);setLoadStatus('Subiendo el Excel original a la nube…');if(!await sSet(sourceKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl})))throw Error('No se guardó el Excel original.');YER.evRows=rows;YER.everilioFile={fileName:file.name,size:file.size,fileKey:sourceKey};setLoadStatus('Guardando el período YER…');if(!await saveYER())throw Error('Pendiente de guardar el período.');toast(YER.evRows.length+' registros Everilio cargados'); }
-    catch(err){alert('Error: '+err.message);}
+    catch(err){showMessage('Error: '+err.message);}
     showLoad(false); renderTab();
   });
   el.querySelector('#yer-del-everilio')?.addEventListener('click',async()=>{
@@ -5053,11 +5107,11 @@ function renderCancelGrid(){
 
   let html=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-      <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">📋 Cancelaciones</h3>
+      <h2 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">📋 Cancelaciones</h2>
       <div style="display:flex;align-items:center;gap:12px;">
         <div>
           <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-right:8px;">AÑO</label>
-          <select id="cancel-anio-sel" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
+          <select id="cancel-anio-sel" aria-label="Año" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
             ${anios.map(y=>`<option value="${y}" ${y===cancelAnio?'selected':''}>${y}</option>`).join('')}
           </select>
         </div>
@@ -5078,7 +5132,7 @@ function renderCancelGrid(){
       ?`<span style="background:var(--g);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">${count} reg.</span>`
       :`<span style="background:var(--r);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:4px;">Sin datos</span>`;
 
-    html+=`<div data-cancel-mes="${period}" style="background:${bg};border:2px solid ${border};border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;"
+    html+=`<div data-cancel-mes="${period}" role="button" tabindex="0" style="background:${bg};border:2px solid ${border};border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;"
       onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
       onmouseout="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:16px;font-weight:800;color:${labelColor};margin-bottom:8px;">${MESES_LABELS[m-1]}</div>
@@ -5366,7 +5420,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
     const tipoComp=el.querySelector('#cancel-tipo-comp')?.value||'FACTURA';
     const nroComp=el.querySelector('#cancel-nro')?.value.trim()||'';
     const importe=pN(el.querySelector('#cancel-importe')?.value)||null;
-    if(!tipo){alert('Seleccioná un tipo.');return;}
+    if(!tipo){showMessage('Seleccioná un tipo.');return;}
     const id=Math.random().toString(36).slice(2,10);
     PD.cancelaciones.push({id,tipo,periodo:cancelView,fechaReg:fecha,tipoComp,nroComp,importe,archivo:null,locked:false});
     showLoad(true);await saveP();showLoad(false);
@@ -5405,7 +5459,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
   el.querySelectorAll('[data-cancel-upload]').forEach(inp=>{
     inp.addEventListener('change',async e=>{
       const file=e.target.files[0];if(!file)return;
-      if(file.size>MAX_FILE){alert('Archivo muy grande (máx 3,5 MB)');return;}
+      if(file.size>MAX_FILE){showMessage('Archivo muy grande (máx 3,5 MB)');return;}
       const id=inp.getAttribute('data-cancel-upload');
       showLoad(true);
       try{
@@ -5414,7 +5468,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
         const r=PD.cancelaciones.find(x=>x.id===id);
         if(r) r.archivo={fileName:file.name,size:file.size,uploadedAt:new Date().toISOString()};
         await saveP();toast('Archivo subido ✓');
-      }catch(err){alert('Error: '+err.message);}
+      }catch(err){showMessage('Error: '+err.message);}
       showLoad(false);renderTab();
     });
   });
@@ -5426,7 +5480,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
       showLoad(true);
       const raw=await sGet('file:cancel:'+id,true);
       showLoad(false);
-      if(!raw){alert('No se pudo recuperar el archivo.');return;}
+      if(!raw){showMessage('No se pudo recuperar el archivo.');return;}
       openFileViewer(JSON.parse(raw));
     });
   });
@@ -5440,7 +5494,7 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
 // ══════════════════════════════════════════════════════════════
 // ── EXCEL NC (uso desde dependencia individual) ───────────────
 function exportNCExcel(todasNC, nombre){
-  if(typeof XLSX==='undefined'){alert('Error: librería Excel no disponible');return;}
+  if(typeof XLSX==='undefined'){showMessage('Error: librería Excel no disponible');return;}
   const rows=[['Período','Pregunta','Observación','Sector','Auditor','Estado','Detalle cierre']];
   todasNC.forEach(x=>rows.push([
     x.mesLabel||x.periodo||'',
@@ -5692,10 +5746,10 @@ function renderChecksGrid(){
   const subView=checksView; // null=grilla
 
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-    <h3 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">✅ Checks de Seguridad MAS</h3>
+    <h2 style="font-size:18px;font-weight:800;color:var(--pd);margin:0;">✅ Checks de Seguridad MAS</h2>
     <div style="display:flex;gap:8px;align-items:center;">
       <label style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;">AÑO</label>
-      <select id="checks-anio-sel" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
+      <select id="checks-anio-sel" aria-label="Año" style="padding:8px 14px;border:1.5px solid var(--p);border-radius:7px;font-size:14px;font-weight:700;color:var(--pd);cursor:pointer;">
         ${anios.map(y=>`<option value="${y}" ${y===checksAnio?'selected':''}>${y}</option>`).join('')}
       </select>
     </div>
@@ -5713,7 +5767,7 @@ function renderChecksGrid(){
 
   for(let m=1;m<=12;m++){
     const period=`${checksAnio}-${String(m).padStart(2,'0')}`;
-    html+=`<div data-checks-mes="${period}" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
+    html+=`<div data-checks-mes="${period}" role="button" tabindex="0" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
       onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
       onmouseout="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;" id="check-tile-label-${period}">${MESES_LABELS[m-1]}</div>
@@ -6097,7 +6151,7 @@ async function attachNCHandlers(container){
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
         const{updated,found}=findAndUpdateNC(raw,n,item=>{item.detalle=det;item.detalleAt=new Date().toISOString();},checkIndex);
-        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!found){showLoad(false);showMessage('No se identificó una única no conformidad. Recargá el listado.');return;}
         if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('Detalle guardado ✓');
       }
@@ -6117,7 +6171,7 @@ async function attachNCHandlers(container){
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
         const{updated,found}=findAndUpdateNC(raw,n,item=>{item.cerrada=true;item.detallecierre=det;item.fechaCierre=new Date().toISOString();},checkIndex);
-        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!found){showLoad(false);showMessage('No se identificó una única no conformidad. Recargá el listado.');return;}
         if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('No conformidad cerrada ✓');
         const card=container.querySelector(`#nc-card-${periodo}-${checkIndex}-${n}`);
@@ -6141,7 +6195,7 @@ async function attachNCHandlers(container){
       const raw=await sGet(`check:${periodo}`,true);
       if(raw){
         const{updated,found}=findAndUpdateNC(raw,n,item=>{delete item.cerrada;delete item.detallecierre;delete item.fechaCierre;},checkIndex);
-        if(!found){showLoad(false);alert('No se identificó una única no conformidad. Recargá el listado.');return;}
+        if(!found){showLoad(false);showMessage('No se identificó una única no conformidad. Recargá el listado.');return;}
         if(!await sSet(`check:${periodo}`,updated,true)){showLoad(false);return;}
         toast('NC reabierta — vuelve a Pendientes ✓');
         // Actualizar fila visualmente
@@ -6237,7 +6291,7 @@ async function attachChecks(){
     let gridHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
     for(let m=1;m<=12;m++){
       const period=`${checksAnio}-${String(m).padStart(2,'0')}`;
-      gridHtml+=`<div data-checks-mes="${period}" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
+      gridHtml+=`<div data-checks-mes="${period}" role="button" tabindex="0" style="background:var(--rb);border:2px solid var(--rbr);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .15s;user-select:none;" id="check-tile-${period}"
         onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'"
         onmouseout="this.style.transform='';this.style.boxShadow=''">
         <div style="font-size:16px;font-weight:800;color:var(--r);margin-bottom:8px;" id="check-tile-label-${period}">${MESES_LABELS[m-1]}</div>
@@ -6389,7 +6443,7 @@ async function attachChecks(){
       window._checksEditIdx=checkArr.length-1;
       el.innerHTML=await renderChecksMes(period,'editar');
       attachChecks();
-    }catch(err){alert('Error al procesar PDF: '+err.message);}
+    }catch(err){showMessage('Error al procesar PDF: '+err.message);}
     showLoad(false);
   });
 
@@ -6437,7 +6491,7 @@ async function attachChecks(){
     modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
     modal.querySelector('#nc-manual-guardar').addEventListener('click',async()=>{
       const pregunta=modal.querySelector('#nc-manual-pregunta').value.trim();
-      if(!pregunta){alert('Ingresá una descripción');return;}
+      if(!pregunta){showMessage('Ingresá una descripción');return;}
       const obs=modal.querySelector('#nc-manual-obs').value.trim();
       const sector=modal.querySelector('#nc-manual-sector').value.trim();
       const auditor=modal.querySelector('#nc-manual-auditor').value;
@@ -6478,7 +6532,7 @@ async function attachChecks(){
     const MESES_LABELS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const[yy,mm]=period.split('-');
     const mesLabel=`${MESES_LABELS[parseInt(mm)-1]} ${yy}`;
-    try{await loadXLSX();}catch(e){alert(e.message);return;}
+    try{await loadXLSX();}catch(e){showMessage(e.message);return;}
     exportNCExcel(nc.map(x=>({...x,mesLabel})),`${mesLabel}_${CU.depNombre||CU.cr||''}`);
   });
 
@@ -6544,7 +6598,7 @@ async function attachChecks(){
       window._checksEditIdx=idx;
       el.innerHTML=await renderChecksMes(period,'editar');
       attachChecks();
-    }catch(err){alert('Error al procesar el PDF: '+err.message);}
+    }catch(err){showMessage('Error al procesar el PDF: '+err.message);}
     showLoad(false);
   });
 
@@ -6563,7 +6617,7 @@ async function attachChecks(){
       toast('Memo adjunto ✓');
       el.innerHTML=await renderChecksMes(period);
       attachChecks();
-    }catch(err){alert('Error: '+err.message);}
+    }catch(err){showMessage('Error: '+err.message);}
     showLoad(false);
   });
 
@@ -6723,7 +6777,7 @@ async function exportDivJPG(el, nombre){
 
 // ── EXPORT EXCEL COMPLETO (todas las dependencias) ────────────
 function exportResumenExcel(results){
-  if(typeof XLSX==='undefined'){alert('Error: librería XLSX no disponible');return;}
+  if(typeof XLSX==='undefined'){showMessage('Error: librería XLSX no disponible');return;}
   // Hoja 1: Resumen por dependencia
   const rows1=[['CR','Dependencia','Último Check','NC Pendientes','NC Totales','Estado']];
   results.forEach(d=>{
@@ -6762,7 +6816,7 @@ async function renderDivisionalTablero(){
 
   const cards=results.map(d=>{
     const c=ncColor(d.pendientes);
-    return`<div data-div-cr="${d.cr}" style="background:${c.bg};border:2px solid ${c.border};border-radius:14px;padding:18px 16px;cursor:pointer;transition:all .15s;user-select:none"
+    return`<div data-div-cr="${d.cr}" role="button" tabindex="0" style="background:${c.bg};border:2px solid ${c.border};border-radius:14px;padding:18px 16px;cursor:pointer;transition:all .15s;user-select:none"
       onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.12)'"
       onmouseout="this.style.transform='';this.style.boxShadow=''">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
@@ -6803,7 +6857,7 @@ async function renderDivisionalTablero(){
   </div></div>`;
 
   el.querySelector('#div-exp-xlsx')?.addEventListener('click',async()=>{
-    try{await loadXLSX();}catch(e){alert(e.message);return;}
+    try{await loadXLSX();}catch(e){showMessage(e.message);return;}
     if(window._divResults)exportResumenExcel(window._divResults);
   });
   el.querySelector('#div-exp-pdf')?.addEventListener('click',()=>{
@@ -6951,7 +7005,7 @@ async function renderDivisionalNC(cr){
   el.querySelector('#div-back')?.addEventListener('click',()=>{divView=null;renderDivisionalTablero();});
 
   el.querySelector('#div-nc-xlsx')?.addEventListener('click',async()=>{
-    try{await loadXLSX();}catch(e){alert(e.message);return;}
+    try{await loadXLSX();}catch(e){showMessage(e.message);return;}
     const data=getFiltered();
     const rows=[['Período','No Conformidad','Observación','Sector','Estado','Detalle','Auditor']];
     data.forEach(x=>rows.push([x.mesLabel,x.pregunta,x.obs||'',x.sector||'',x.cerrada?'Cerrada':'Pendiente',x.detallecierre||x.detalle||'',x.auditor||'']));
@@ -7129,7 +7183,7 @@ function wrapDB(native){
    }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
    if(actual!==baseline)throw conflict();
    // One previous version per document and day: the first change of the day keeps
-   // how it was left before. Lightweight references to files are always kept.
+   // how it was left before. Attachments and file references are always kept.
    if(before.exists()&&keepPreviousCopy(before.data()))tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
@@ -7141,7 +7195,7 @@ function wrapDB(native){
  return wrapped;
 }
 function keepPreviousCopy(previous,now=Date.now()){
- if(previous.blob||previous.chunked||!Number.isFinite(previous.updatedAt))return true;
+ if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
  return new Date(previous.updatedAt).toDateString()!==new Date(now).toDateString();
 }
 async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');}
@@ -7159,7 +7213,7 @@ const gunzipBytes=bytes=>transformBytes(bytes,new DecompressionStream('gzip'));
 
 const ECON_VERSION=1;
 let ECON=[];
-const econStyle=`<style>.econ{max-width:1100px;margin:20px auto;padding:24px;background:white;border-radius:16px;font:15px 'Segoe UI',sans-serif;color:#241338}.econ h2,.econ h3{margin:12px 0}.econ p{margin:10px 0;line-height:1.5}.econ label{display:block;margin:10px 0}.econ input,.econ select,.econ textarea{padding:9px;border:1px solid #bcb1c7;border-radius:6px;max-width:100%;box-sizing:border-box}.econ input:not([type=checkbox]),.econ textarea{width:100%}.econ button{padding:10px 15px;margin:6px;background:#4b2563;color:white;border:0;border-radius:7px;cursor:pointer}.econ fieldset{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:10px}.econ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.econ .note{background:#fff8df;padding:12px}.econ table{width:100%;border-collapse:collapse}.econ td,.econ th{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{.econ button,.topbar,.tabs{display:none}}</style>`;
+const econStyle=`<style>.econ{max-width:1100px;margin:20px auto;padding:24px;background:white;border-radius:16px;font:15px 'Segoe UI',sans-serif;color:#241338}.econ h1,.econ h2,.econ h3{margin:12px 0}.econ h1{font-size:1.5em}.econ p{margin:10px 0;line-height:1.5}.econ label{display:block;margin:10px 0}.econ input,.econ select,.econ textarea{padding:9px;border:1px solid #bcb1c7;border-radius:6px;max-width:100%;box-sizing:border-box}.econ input:not([type=checkbox]),.econ textarea{width:100%}.econ button{padding:10px 15px;margin:6px;background:#4b2563;color:white;border:0;border-radius:7px;cursor:pointer}.econ fieldset{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:10px}.econ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.econ .note{background:#fff8df;padding:12px}.econ table{width:100%;border-collapse:collapse}.econ td,.econ th{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{.econ button,.topbar,.tabs{display:none}}</style>`;
 const FUELS=['infinia_diesel','super','infinia','diesel500'];
 function blankEconomic(cr='3611'){return {schema:1,cr,vigencia:'',responsable:'',email:'',observaciones:'',full:{enabled:true,pct:null,excludeCigarettes:true},yer:Object.fromEntries(FUELS.map(f=>[f,{mode:"porcentaje",value:null}])),concepts:[['energia','Energía eléctrica','us'],['aguas','Agua','us'],['telefono','Teléfono','us'],['canon','Canon servicios','us'],['hotel','Hotel','hotel']].map(([id,name,area])=>({id,name,area,enabled:true,mode:id==='canon'?'litros':id==='hotel'?'factura':'porcentaje',pct:null,litros:null,vat:0,deductIVA:false,deductPercepciones:false,deductIntereses:false,base:'',medidor:'',notes:''}))};}
 function checkEconomic(c){
@@ -7235,7 +7289,7 @@ function yerRate(key){
  const value=Number(YER.pcts?.[key]??0);if(!Number.isFinite(value)||value<0||value>100)throw Error('Porcentaje inválido para '+key);
  return {mode:'porcentaje',value};
 }
-async function viewYERSource(field){try{const meta=YER[field];if(!meta?.fileKey)throw Error('Este registro histórico no contiene el Excel original.');const raw=await sGet(meta.fileKey);if(!raw)throw Error('Archivo no encontrado.');await loadXLSX();openExcelViewer(JSON.parse(raw));}catch(e){alert(e.message);}}
+async function viewYERSource(field){try{const meta=YER[field];if(!meta?.fileKey)throw Error('Este registro histórico no contiene el Excel original.');const raw=await sGet(meta.fileKey);if(!raw)throw Error('Archivo no encontrado.');await loadXLSX();openExcelViewer(JSON.parse(raw));}catch(e){showMessage(e.message);}}
 function exportLocalBackup(){
  if(!CU?.cr)throw Error('Entrá a tu estación antes de exportar.');
  const values={};Object.keys(localStorage).filter(k=>k.startsWith('_ttl:cr'+CU.cr+':')||(k==='_sync:cr'+CU.cr||k==='_sync:v4:cr'+CU.cr)||k.startsWith('cr'+CU.cr+':')).forEach(k=>values[k]=localStorage.getItem(k));
@@ -7278,7 +7332,7 @@ async function resolveAccess(preferStation=false){
 async function renderAccessRequest(){
  CU=null;const db=await getDB();const ref=db.doc(db.fs,'accessRequests',AUTH_PERSON.uid);const snap=await db.getDoc(ref);const request=snap.exists()?snap.data():null;
  const status=request?.status;const depOptions=DEPENDENCIAS.filter(d=>d.role!=='divisional').map(d=>`<option value="${d.cr}">${esc(d.nombre)} · CR ${d.cr}</option>`).join('');
- document.getElementById('app').innerHTML=econStyle+`<section class="econ" style="max-width:620px"><h2>${status==='pending'?'Solicitud pendiente de autorización':status==='rejected'?'Solicitud rechazada':status==='approved'?'Acceso no habilitado':'Solicitar acceso a una estación'}</h2><p>${esc(AUTH_PERSON.email)}</p>${request?`<p>Estación solicitada: ${esc(request.cr)}. ${status==='pending'?'El administrador debe aprobar tu solicitud antes de que puedas ver datos o archivos.':'Contactá al administrador para revisar tu acceso.'}</p>`:`<form id="request-access"><label>Estación<select id="request-cr" required><option value="">Seleccioná tu estación</option>${depOptions}</select></label><button>Enviar solicitud</button></form>`}<p id="request-status" role="status"></p><button id="request-refresh">Consultar estado</button><button id="request-logout">Salir</button><details><summary>Identificador de cuenta</summary><p>${esc(AUTH_PERSON.uid)}</p></details></section>`;
+ document.getElementById('app').innerHTML=econStyle+`<section class="econ" style="max-width:620px"><h1>${status==='pending'?'Solicitud pendiente de autorización':status==='rejected'?'Solicitud rechazada':status==='approved'?'Acceso no habilitado':'Solicitar acceso a una estación'}</h1><p>${esc(AUTH_PERSON.email)}</p>${request?`<p>Estación solicitada: ${esc(request.cr)}. ${status==='pending'?'El administrador debe aprobar tu solicitud antes de que puedas ver datos o archivos.':'Contactá al administrador para revisar tu acceso.'}</p>`:`<form id="request-access"><label>Estación<select id="request-cr" required><option value="">Seleccioná tu estación</option>${depOptions}</select></label><button>Enviar solicitud</button></form>`}<p id="request-status" role="status"></p><button id="request-refresh">Consultar estado</button><button id="request-logout">Salir</button><details><summary>Identificador de cuenta</summary><p>${esc(AUTH_PERSON.uid)}</p></details></section>`;
  document.getElementById('request-logout').onclick=logoutSafe;
  document.getElementById('request-refresh').onclick=()=>resolveAccess().catch(e=>document.getElementById('request-status').textContent=authError(e));
  document.getElementById('request-access')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{const cr=document.getElementById('request-cr').value;if(!DEPENDENCIAS.some(d=>d.cr===cr&&d.role!=='divisional'))throw Error('Elegí una estación.');await db.setDoc(ref,{uid:AUTH_PERSON.uid,email:AUTH_PERSON.email,cr,status:'pending',createdAt:Date.now()});await renderAccessRequest();}catch(e){document.getElementById('request-status').textContent=authError(e);b.disabled=false;}});
@@ -7301,19 +7355,19 @@ async function logoutSafe(){
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
 async function renderAccessAdmin(){
- const root=document.getElementById('app');root.innerHTML=econStyle+'<section class="econ"><h2>Accesos y condiciones económicas</h2><p>Cargando solicitudes…</p></section>';
+ const root=document.getElementById('app');root.innerHTML=econStyle+'<section class="econ"><h1>Accesos y condiciones económicas</h1><p>Cargando solicitudes…</p></section>';
  try{
  const db=await getDB();const [requests,users]=await Promise.all([db.getDocs(db.collection(db.fs,'accessRequests')),db.getDocs(db.collection(db.fs,'access'))]);
  const reqs=requests.docs.map(d=>({id:d.id,...d.data()}));const accounts=users.docs.map(d=>({id:d.id,...d.data()}));
  const options=DEPENDENCIAS.filter(d=>d.role!=='divisional').map(d=>`<option value="${d.cr}">${esc(d.nombre)} · ${d.cr}</option>`).join('');
- root.innerHTML=econStyle+`<section class="econ"><h2>Accesos y condiciones económicas</h2><p>${esc(CU.username)} · Administrador</p><button id="adm-my-station">Mi estación</button><button id="adm-refresh">Actualizar</button><button id="adm-logout">Salir</button><h3>Solicitudes</h3>${reqs.length?'':'<p>Todavía no hay solicitudes.</p>'}<div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>Estación solicitada</th><th>Estado</th><th>Decisión</th></tr></thead><tbody>${reqs.map(r=>`<tr><td>${esc(r.email)}</td><td>${esc(r.cr)}</td><td>${esc(({pending:'Pendiente',approved:'Aprobada',rejected:'Rechazada'})[r.status]||r.status)}</td><td>${r.status!=='approved'?`<button data-approve="${esc(r.id)}">Aprobar</button>`:''}${r.status==='pending'?`<button data-reject="${esc(r.id)}">Rechazar</button>`:''}</td></tr>`).join('')}</tbody></table></div><h3>Cuentas autorizadas</h3><div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>CR</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${accounts.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.cr)}</td><td>${u.enabled?'Habilitada':'Revocada'}</td><td><button data-toggle="${esc(u.id)}">${u.enabled?'Revocar':'Habilitar'}</button></td></tr>`).join('')}</tbody></table></div><h3>Cargar condiciones</h3><p>Elegí la estación para importar su formulario. Esta sección no abre sus operaciones.</p><select id="adm-cr">${options}</select><button id="adm-conditions">Abrir condiciones</button><p id="adm-status" role="status"></p><div id="adm-economic"></div></section>`;
+ root.innerHTML=econStyle+`<section class="econ"><h1>Accesos y condiciones económicas</h1><p>${esc(CU.username)} · Administrador</p><button id="adm-my-station">Mi estación</button><button id="adm-refresh">Actualizar</button><button id="adm-logout">Salir</button><h3>Solicitudes</h3>${reqs.length?'':'<p>Todavía no hay solicitudes.</p>'}<div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>Estación solicitada</th><th>Estado</th><th>Decisión</th></tr></thead><tbody>${reqs.map(r=>`<tr><td>${esc(r.email)}</td><td>${esc(r.cr)}</td><td>${esc(({pending:'Pendiente',approved:'Aprobada',rejected:'Rechazada'})[r.status]||r.status)}</td><td>${r.status!=='approved'?`<button data-approve="${esc(r.id)}">Aprobar</button>`:''}${r.status==='pending'?`<button data-reject="${esc(r.id)}">Rechazar</button>`:''}</td></tr>`).join('')}</tbody></table></div><h3>Cuentas autorizadas</h3><div style="overflow:auto"><table><thead><tr><th>Gmail</th><th>CR</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${accounts.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.cr)}</td><td>${u.enabled?'Habilitada':'Revocada'}</td><td><button data-toggle="${esc(u.id)}">${u.enabled?'Revocar':'Habilitar'}</button></td></tr>`).join('')}</tbody></table></div><h3>Cargar condiciones</h3><p>Elegí la estación para importar su formulario. Esta sección no abre sus operaciones.</p><select id="adm-cr" aria-label="Estación">${options}</select><button id="adm-conditions">Abrir condiciones</button><p id="adm-status" role="status"></p><div id="adm-economic"></div></section>`;
  root.querySelector('#adm-my-station').onclick=()=>resolveAccess(true).catch(e=>root.querySelector('#adm-status').textContent=e.message);root.querySelector('#adm-refresh').onclick=renderAccessAdmin;root.querySelector('#adm-logout').onclick=logoutSafe;
  async function action(fn){try{await fn();await renderAccessAdmin();}catch(e){root.querySelector('#adm-status').textContent=e.message;}}
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
  root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
- }catch(e){root.innerHTML=econStyle+`<section class="econ"><h2>No se pudo cargar la administración</h2><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
+ }catch(e){root.innerHTML=econStyle+`<section class="econ"><h1>No se pudo cargar la administración</h1><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){
  if(!IS_ACCESS_ADMIN)throw Error('Solo el administrador puede cargar condiciones.');

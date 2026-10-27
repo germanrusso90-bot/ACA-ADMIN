@@ -1,5 +1,5 @@
 {
-  "passed": 47,
+  "passed": 49,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -44,6 +44,8 @@
     "Bibliotecas alojadas en vendor/, sin las versiones vulnerables",
     "PDF de terceros se abre sin evaluar código y sin consumir el original",
     "Salir borra la caché de la estación y conserva colas y otras estaciones",
+    "Accesibilidad: campos de tabla con nombre, encabezado vacío nombrado y tarjeta con teclado",
+    "Mensaje en diálogo accesible que se cierra y avisa al terminar",
     "Dirección vieja lleva a la nueva, salvo con cambios sin subir",
     "Formulario cuatro modalidades YER y recupero adicional",
     "Formulario incompleto no se acepta",

@@ -7,7 +7,7 @@ function yerRate(key){
  const value=Number(YER.pcts?.[key]??0);if(!Number.isFinite(value)||value<0||value>100)throw Error('Porcentaje inválido para '+key);
  return {mode:'porcentaje',value};
 }
-async function viewYERSource(field){try{const meta=YER[field];if(!meta?.fileKey)throw Error('Este registro histórico no contiene el Excel original.');const raw=await sGet(meta.fileKey);if(!raw)throw Error('Archivo no encontrado.');await loadXLSX();openExcelViewer(JSON.parse(raw));}catch(e){alert(e.message);}}
+async function viewYERSource(field){try{const meta=YER[field];if(!meta?.fileKey)throw Error('Este registro histórico no contiene el Excel original.');const raw=await sGet(meta.fileKey);if(!raw)throw Error('Archivo no encontrado.');await loadXLSX();openExcelViewer(JSON.parse(raw));}catch(e){showMessage(e.message);}}
 function exportLocalBackup(){
  if(!CU?.cr)throw Error('Entrá a tu estación antes de exportar.');
  const values={};Object.keys(localStorage).filter(k=>k.startsWith('_ttl:cr'+CU.cr+':')||(k==='_sync:cr'+CU.cr||k==='_sync:v4:cr'+CU.cr)||k.startsWith('cr'+CU.cr+':')).forEach(k=>values[k]=localStorage.getItem(k));

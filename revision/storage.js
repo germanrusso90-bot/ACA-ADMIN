@@ -154,7 +154,7 @@ function wrapDB(native){
    }else baseline=expected.has(ref.id)?expected.get(ref.id):null;
    if(actual!==baseline)throw conflict();
    // One previous version per document and day: the first change of the day keeps
-   // how it was left before. Lightweight references to files are always kept.
+   // how it was left before. Attachments and file references are always kept.
    if(before.exists()&&keepPreviousCopy(before.data()))tx.set(native.doc(native.fs,'kv',ref.id+'--backup--'+crypto.randomUUID()),{...before.data(),backupOf:ref.id});
    tx.set(ref,stored,...args);
   });
@@ -166,7 +166,7 @@ function wrapDB(native){
  return wrapped;
 }
 function keepPreviousCopy(previous,now=Date.now()){
- if(previous.blob||previous.chunked||!Number.isFinite(previous.updatedAt))return true;
+ if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
  return new Date(previous.updatedAt).toDateString()!==new Date(now).toDateString();
 }
 async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');}
