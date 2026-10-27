@@ -295,5 +295,15 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
      - las publicadas eran idénticas a `firestore.rules` de `main` (v4.3.7);
      - `firebase deploy --only firestore:rules` sobre `aca-admin`, publicado el 27/10/2026 15:31 UTC;
      - se verificó que lo publicado coincide con el archivo y que el acceso anónimo sigue devolviendo 403.
-  4. **App:** `revision/index.html` copiada a `index.html` y subida junto con `vendor/`.
+  4. **App:** `revision/index.html` copiada a `index.html` y subida junto con `vendor/` en el commit `f9f22b5`. GitHub Pages lo publicó y la pantalla pública confirmó `v4.3.8 — revisión 27/10/2026`.
+- Comprobado en el sitio publicado, sin iniciar sesión:
+  - los archivos de `vendor/` se sirven como JavaScript y son idénticos a los verificados;
+  - pdf.js leyó un PDF de prueba y SheetJS cargó la 0.20.3;
+  - ninguna biblioteca se descarga antes de ingresar.
+- Lighthouse en línea:
+  - celular: rendimiento 100 (antes 68), LCP 1,4 s (antes 5,1 s);
+  - computadora: rendimiento 100, LCP 0,3 s;
+  - 109 KB (antes 378 KB).
+- El único 404 es `/favicon.ico` en la raíz de github.io, que ya faltaba antes.
+- Pendiente del titular: ingresar con Google en producción, abrir Cipolletti, revisar los históricos, abrir adjuntos y hacer una carga controlada de un PDF y un Excel.
 - Visto en las pruebas, ya existía en v4.3.7: si se toca «Salir» mientras Checks todavía lee meses, la consola muestra un aviso de lectura cancelada. No escribe ni pierde nada.
