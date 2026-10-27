@@ -43,28 +43,44 @@ service cloud.firestore {
     && validCR(request.resource.data.cr);
    allow delete: if false;
   }
-  // Previous versions and file fragments are write-once. An identical retry of
-  // a write that already landed is accepted; any change is rejected.
-  function immutableCopy(id) { return id.matches('.*--(chunk|part|backup)--.*'); }
+  // Previous versions, file fragments and blobs are write-once. An identical retry
+  // of a write that already landed is accepted; any change is rejected.
+  function immutableCopy(id) { return id.matches('.*--(chunk|part|backup|blob)--.*'); }
+  // Content-addressed blobs (v4.3.9): a manifest per SHA-256 and its parts.
+  function blobHead(id) { return id.matches('cr[0-9]{4}--blob--[0-9a-f]{64}'); }
+  function blobPart(id) { return id.matches('cr[0-9]{4}--blob--[0-9a-f]{64}--part--[0-9]{1,3}'); }
   // Shapes written by storage.js: values up to 700,000 characters (larger ones
-  // are fragmented) and fragments of 480,000 bytes in base64.
+  // are fragmented or packed), fragments of 480,000 bytes in base64, packed
+  // values and blob parts of up to 900,000 bytes.
   function kvShape(id, d) {
-   return (id.matches('.*--chunk--.*')
+   return (blobPart(id)
+     && d.keys().hasOnly(['k','index','data'])
+     && d.index is int && d.data is bytes && d.data.size() <= 900000)
+    || (blobHead(id)
+     && d.keys().hasOnly(['k','enc','bytes','stored','count','partSize','sha256'])
+     && d.enc in ['gzip','none'] && d.count is int && d.count >= 1 && d.count <= 200)
+    || (id.matches('.*--chunk--.*')
      && d.keys().hasOnly(['k','chunk','revision','index'])
      && d.chunk is string && d.chunk.size() <= 640000)
-    || (!id.matches('.*--chunk--.*') && immutableCopy(id) && d.keys().size() <= 16)
+    || (!id.matches('.*--(chunk|blob)--.*') && immutableCopy(id) && d.keys().size() <= 16)
     || (!immutableCopy(id)
-     && d.keys().hasOnly(['v','k','updatedAt','chunked','revision','count','bytes','sha256'])
+     && d.keys().hasOnly(['v','k','updatedAt','chunked','revision','count','bytes','sha256','fmt','enc','z','blob'])
      && (!('v' in d) || d.v == null || (d.v is string && d.v.size() <= 700000))
-     && (!('count' in d) || (d.count is int && d.count >= 1 && d.count <= 200)));
+     && (!('count' in d) || (d.count is int && d.count >= 1 && d.count <= 200))
+     && (!('z' in d) || (d.z is bytes && d.z.size() <= 900000 && d.enc == 'gzip'))
+     && (!('blob' in d) || (d.blob is string && d.blob.matches('[0-9a-f]{64}'))));
   }
+  // A version older than v4.3.9 reads packed documents as empty: it must not
+  // overwrite them.
+  function packed(d) { return ('z' in d) || ('blob' in d); }
   function canWriteKv(id) { return (admin() && config(id)) || (ownKey(id) && !config(id)); }
   match /kv/{id} {
    allow get: if ownKey(id) || legacy(id) || (admin() && config(id));
    allow list: if false;
    allow create: if canWriteKv(id) && kvShape(id, request.resource.data);
    allow update: if canWriteKv(id) && kvShape(id, request.resource.data)
-    && (!immutableCopy(id) || request.resource.data == resource.data);
+    && (!immutableCopy(id) || request.resource.data == resource.data)
+    && (!packed(resource.data) || request.resource.data.get('fmt', 0) == 2);
    allow delete: if false;
   }
  }

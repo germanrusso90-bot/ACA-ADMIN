@@ -113,8 +113,12 @@ Los cigarrillos siempre se descuentan.
 - YER de Colonia mantiene sus claves originales.
 - Las operaciones no YER nuevas de Colonia usan `cr3611:operativo-v2:*` para no leer los datos de prueba antiguos.
 - Cipolletti conserva compatibilidad con claves heredadas.
-- Valores grandes se fragmentan y verifican mediante SHA-256. El manifiesto se publica al final.
-- Antes de reemplazar un documento se conserva su versión previa.
+- Hasta v4.3.8, los valores grandes se fragmentaban (`--chunk--`) y se verificaban con SHA-256. Esos documentos se siguen leyendo igual y no se migran.
+- Desde v4.3.9 (`revision/storage.js`, escrituras nuevas):
+  - los valores de 64 KB o más se guardan comprimidos con gzip como `Bytes` dentro del mismo documento (`enc`, `z`, `bytes`, `sha256`);
+  - el contenido de los adjuntos (`dataUrl`) va a un blob por estación (`crXXXX--blob--<sha256>` y sus `--part--N`), comprimido cuando conviene. El documento del adjunto guarda nombre, tipo y la huella (`blob`). El mismo archivo se guarda una sola vez, y una subida cortada se completa con el mismo nombre al reintentar;
+  - todas las escrituras llevan `fmt: 2`. Las reglas no dejan que una versión anterior sobrescriba un documento comprimido, porque lo leería como vacío.
+- Copia previa: una por documento y por día. La primera modificación del día conserva cómo había quedado antes; los cambios del mismo día no generan copias nuevas. Las referencias a archivos y a fragmentos siempre conservan copia.
 - Las colas antiguas de sincronización no deben reproducirse automáticamente en Colonia.
 
 ## Archivos y estructura de trabajo
@@ -173,8 +177,9 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 40 pruebas funcionales aprobadas en la candidata v4.3.8.
-- 24 pruebas de reglas aprobadas en Firestore Emulator.
+- 46 pruebas funcionales aprobadas en la candidata v4.3.9.
+- 27 pruebas de reglas aprobadas en Firestore Emulator.
+- Regresión de v4.3.9 contra el mismo respaldo: 19/19 pantallas iguales a las de v4.3.8, adjuntos abiertos sin fallas y ninguna escritura al recorrerla.
 - Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
   - 19/19 pantallas iguales a las de v4.3.7;
   - adjuntos abiertos sin fallas;
@@ -307,3 +312,41 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - El único 404 es `/favicon.ico` en la raíz de github.io, que ya faltaba antes.
 - Pendiente del titular: ingresar con Google en producción, abrir Cipolletti, revisar los históricos, abrir adjuntos y hacer una carga controlada de un PDF y un Excel.
 - Visto en las pruebas, ya existía en v4.3.7: si se toca «Salir» mientras Checks todavía lee meses, la consola muestra un aviso de lectura cancelada. No escribe ni pierde nada.
+
+### 2026-10-27 — v4.3.9 (almacenamiento)
+
+- Origen, medido sobre el respaldo del 27/10/2026 (558 documentos, unos 230 MB):
+  - 63 MB de versiones viejas de los datos de YER: cada guardado de un mes de más de 700 KB volvía a fragmentarlo entero;
+  - 48 MB de versiones reemplazadas de archivos;
+  - 27,5 MB de fragmentos huérfanos de dos subidas cortadas de Ventas Especiales (2 y 7 de octubre);
+  - 48 MB de archivos vigentes y 18 MB de copias previas de YER.
+  - 157 copias previas: con «una por día» habrían sido 16.
+- Cambios (aprobados por el titular: «archivos comprimidos sin duplicados y menos copias del autoguardado»):
+  - compresión gzip de los valores de 64 KB o más;
+  - blobs por huella para el contenido de los adjuntos;
+  - una copia previa por documento y por día;
+  - marca `fmt: 2`;
+  - reglas para los formatos nuevos, más la protección contra versiones anteriores.
+  - Lo existente no se migra ni se borra.
+- Medido con la misma carga real en el emulador local (v4.3.8 → v4.3.9):
+  - volver a subir los 43 adjuntos reales de Cipolletti: 47,7 MB → 7,8 MB;
+  - el mismo Excel YER de 13,8 MB subido dos veces: +18,5 MB → +0 MB;
+  - 10 autoguardados del YER de julio (918 KB): 30 documentos y 12,0 MB → 1 documento y 0,17 MB;
+  - los 43 archivos se leen idénticos.
+  - Desde la pantalla, el Excel YER de prueba de 2 MB pasó de 8 fragmentos y 3,8 s a 1 blob y 2,0 s.
+- Archivos modificados:
+  - `revision/storage.js`;
+  - `revision/index.html` (importa `Bytes` y la versión);
+  - `revision/firestore.rules` y `firestore.rules`;
+  - `revision/pruebas.cjs`, `revision/pruebas-reglas.cjs` y sus `.json`;
+  - `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
+- Validaciones aprobadas: ensamblado, sintaxis, formulario, 46/46 pruebas funcionales y 27/27 de reglas, regresión con datos reales (19/19 pantallas) y recorrido en Chrome (PDF, Excel YER, autoguardado y salida).
+- Publicación aprobada por el titular el 27/10/2026, en este orden:
+  1. **Respaldo** con la sesión de Firebase CLI del titular: 561 documentos, dos lecturas coincidentes, guardado en `ACA-RECUPEROS/respaldos-privados/`.
+  2. **Reglas:**
+     - las publicadas eran idénticas a `firestore.rules` de v4.3.8;
+     - publicación de las nuevas el 27/10/2026 16:11 UTC (compatibles con v4.3.8: aceptan sus escrituras);
+     - se verificó que lo publicado coincide con el archivo y que el acceso anónimo sigue devolviendo 403.
+  3. **App:** `revision/index.html` copiada a `index.html` y subida.
+- Falta que las estaciones recarguen con Ctrl+F5 para dejar la v4.3.8.
+- Pendiente de decisión: los 27,5 MB de fragmentos huérfanos y las versiones viejas siguen ocupando espacio. Sacarlos de la base exige una excepción explícita al principio de no borrar, con respaldo previo.

@@ -1,5 +1,5 @@
 {
-  "passed": 40,
+  "passed": 46,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -10,7 +10,13 @@
     "YER porcentaje y pesos/litro",
     "Recuperos porcentaje, factura, mixto y litros",
     "Rechazo de deducciones mayores que la base",
-    "Archivo grande fragmentado, paralelo y recuperado íntegro",
+    "Archivo heredado en fragmentos se sigue leyendo íntegro",
+    "Archivo grande nuevo: blob comprimido, partes en paralelo y lectura íntegra",
+    "Dato grande se guarda comprimido dentro del documento y se lee igual",
+    "Mismo archivo subido dos veces se guarda una sola vez",
+    "Parte alterada de un archivo se detecta y no se lee",
+    "Valor chico se guarda como texto, marcado con el formato nuevo",
+    "Copia previa: una por documento y por día; referencias a archivos siempre",
     "Carga larga muestra etapa y porcentaje",
     "Fragmento faltante detectado",
     "Conflicto de otra sesión conserva su versión",
