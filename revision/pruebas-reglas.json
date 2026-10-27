@@ -1,5 +1,5 @@
 {
-  "passed": 20,
+  "passed": 24,
   "tests": [
     "Sin sesión: lectura y escritura denegadas",
     "Correo sin verificar: acceso denegado",
@@ -20,7 +20,11 @@
     "Aprobación por administrador en lote y acceso posterior",
     "Revocación deniega la siguiente lectura sin borrar datos",
     "Borrado físico de operaciones denegado",
-    "Listado de solicitudes y cuentas reservado al administrador"
+    "Listado de solicitudes y cuentas reservado al administrador",
+    "Copia previa: se crea, admite reintento idéntico y no se puede alterar",
+    "Fragmento de archivo: formato fijo, tamaño acotado e inalterable",
+    "Documento operativo: formato de la app y valor de hasta 700.000 caracteres",
+    "Administrador no se asigna ni cambia su propio acceso a estaciones"
   ],
   "scope": "Reglas compiladas y ejecutadas en emulador Firestore local con usuarios simulados; sin producción y sin login Google real."
 }

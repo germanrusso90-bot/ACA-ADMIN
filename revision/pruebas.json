@@ -1,5 +1,5 @@
 {
-  "passed": 37,
+  "passed": 40,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -35,6 +35,9 @@
     "Hotel mixto y porcentaje descuentan NC y rechazan exceso",
     "Hotel guarda factura y NC separadas; valida referencia y conserva adjunto",
     "Recupero importe total menos IVA menos percepciones",
+    "Bibliotecas alojadas en vendor/, sin las versiones vulnerables",
+    "PDF de terceros se abre sin evaluar código y sin consumir el original",
+    "Salir borra la caché de la estación y conserva colas y otras estaciones",
     "Formulario cuatro modalidades YER y recupero adicional",
     "Formulario incompleto no se acepta",
     "Formulario completo exporta valores por producto y medidor"

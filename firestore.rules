@@ -32,7 +32,10 @@ service cloud.firestore {
   match /access/{uid} {
    allow get: if verified() && (request.auth.uid == uid || admin());
    allow list: if admin();
+   // The administrator cannot grant or move their own station access: that
+   // would give them the general read access they must not have.
    allow create, update: if admin()
+    && uid != request.auth.uid
     && request.resource.data.keys().hasOnly(['email','cr','enabled','approvedBy','updatedAt'])
     && request.resource.data.email is string
     && request.resource.data.enabled is bool
@@ -40,10 +43,28 @@ service cloud.firestore {
     && validCR(request.resource.data.cr);
    allow delete: if false;
   }
+  // Previous versions and file fragments are write-once. An identical retry of
+  // a write that already landed is accepted; any change is rejected.
+  function immutableCopy(id) { return id.matches('.*--(chunk|part|backup)--.*'); }
+  // Shapes written by storage.js: values up to 700,000 characters (larger ones
+  // are fragmented) and fragments of 480,000 bytes in base64.
+  function kvShape(id, d) {
+   return (id.matches('.*--chunk--.*')
+     && d.keys().hasOnly(['k','chunk','revision','index'])
+     && d.chunk is string && d.chunk.size() <= 640000)
+    || (!id.matches('.*--chunk--.*') && immutableCopy(id) && d.keys().size() <= 16)
+    || (!immutableCopy(id)
+     && d.keys().hasOnly(['v','k','updatedAt','chunked','revision','count','bytes','sha256'])
+     && (!('v' in d) || d.v == null || (d.v is string && d.v.size() <= 700000))
+     && (!('count' in d) || (d.count is int && d.count >= 1 && d.count <= 200)));
+  }
+  function canWriteKv(id) { return (admin() && config(id)) || (ownKey(id) && !config(id)); }
   match /kv/{id} {
    allow get: if ownKey(id) || legacy(id) || (admin() && config(id));
    allow list: if false;
-   allow create, update: if (admin() && config(id)) || (ownKey(id) && !config(id));
+   allow create: if canWriteKv(id) && kvShape(id, request.resource.data);
+   allow update: if canWriteKv(id) && kvShape(id, request.resource.data)
+    && (!immutableCopy(id) || request.resource.data == resource.data);
    allow delete: if false;
   }
  }

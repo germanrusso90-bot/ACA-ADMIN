@@ -132,6 +132,7 @@ Los cigarrillos siempre se descuentan.
 - `revision/pruebas-reglas.cjs`: pruebas de reglas con Firestore Emulator.
 - La regresión contra el respaldo real se conserva en el entorno privado de auditoría, sin publicar el respaldo en GitHub.
 - `respaldo/respaldo-aca.html`: respaldo de lectura de `kv` con doble lectura y verificación.
+- `vendor/`: pdf.js (build legacy) y SheetJS alojados junto a la app, en carpetas con la versión en el nombre. Se cargan a demanda desde `revision/index.html` (`loadPdfjs`, `loadXLSX`); para actualizarlos, agregar la carpeta nueva y cambiar la ruta.
 
 El archivo original subido por el usuario debe permanecer sin modificaciones en `upload/index.html`.
 
@@ -172,11 +173,19 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 37 pruebas funcionales aprobadas en la candidata v4.3.7.
-- 20 pruebas de reglas aprobadas en Firestore Emulator.
-- 10 pruebas de regresión aprobadas contra la copia del respaldo.
-- El respaldo verificado contenía 67 documentos: 53 de Cipolletti, 12 de Colonia y 2 de otros CR.
-- Se verificaron 42 adjuntos de forma estructural: 28 PDF, 5 XLSX y 9 JPEG. Esto no equivale a revisión visual de todos los archivos.
+- 40 pruebas funcionales aprobadas en la candidata v4.3.8.
+- 24 pruebas de reglas aprobadas en Firestore Emulator.
+- Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
+  - 19/19 pantallas iguales a las de v4.3.7;
+  - adjuntos abiertos sin fallas;
+  - 26 PDF con el mismo resultado de `parseHotelPDF`, `parseCheckPDF` y la búsqueda de totales;
+  - 10 Excel con las mismas celdas y los mismos resultados de `processVentasExcel`, `processEverilioExcel` y `parseVentas`;
+  - 9 JPEG iguales.
+- Las 10 regresiones privadas anteriores (última corrida: v4.3.7) no están en este equipo.
+- El respaldo del 27/10/2026 contiene 558 documentos (unos 230 MB):
+  - Cipolletti: 306 (64 datos, 142 fragmentos y 100 copias previas);
+  - Colonia: 250 (16 datos, 177 fragmentos y 57 copias previas);
+  - otros CR: 2.
 
 Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsoletas.
 
@@ -240,3 +249,51 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 - Archivos modificados: `index.html`, `revision/index.html`, `revision/storage.js`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`.
 - Validaciones aprobadas: ensamblado, sintaxis, formulario, 37 pruebas funcionales, 20 pruebas de reglas y 10 regresiones contra la copia íntegra del respaldo de 67 documentos.
 - Estado: v4.3.7 publicada en `main` el 07/10/2026 mediante el commit `a9c984c`. GitHub Pages informó la compilación como `built` y la pantalla pública confirmó `v4.3.7 — revisión 07/10/2026`.
+
+### 2026-10-27
+
+- Auditoría completa de la v4.3.7 publicada (base de datos y escala a 14 estaciones, seguridad, privacidad, accesibilidad, usabilidad, rendimiento y Core Web Vitals) con las guías Modern Web Guidance de Google y `Requisitos-frontend.md`.
+- Informe privado fuera del repositorio: `ACA-RECUPEROS/auditoria/2026-10-27-auditoria.md`. No subirlo mientras el repositorio sea público.
+- Copia de trabajo del repositorio en `ACA-RECUPEROS/ACA-ADMIN/` (clon de `main`, sin cambios de código).
+- Validaciones: 37/37 pruebas funcionales y 20/20 de reglas en el emulador; 6 pruebas de reglas adicionales solo en el emulador (no incorporadas); axe-core y recorrido con teclado en todas las pestañas sobre emulador con datos ficticios; Lighthouse sobre el sitio publicado. Producción solo se leyó.
+- Pendientes de decisión del titular: mudar el hosting a Firebase Hosting para hacer privado el repositorio, política de copias del autoguardado, conservación del Excel original de YER, plan cuando se llene el GB gratuito, Excel de Colonia como base del modelo por estación.
+- Estado: sin cambios de código ni despliegue.
+
+### 2026-10-27 — v4.3.8 (etapa urgente de la auditoría)
+
+- pdf.js 3.11.174 (CVE-2024-4367) reemplazado por pdf.js 6.4.299, build legacy para computadoras con navegadores viejos, alojado en `vendor/`. Se carga solo al leer un PDF. Todas las lecturas pasan por `openPdf`, con `isEvalSupported:false` y una copia de los bytes, porque pdf.js transfiere el original a su worker.
+- SheetJS 0.18.5 (CVE-2023-30533 y CVE-2024-22363) reemplazado por 0.20.3, descargado de `cdn.sheetjs.com` y alojado en `vendor/`. Se precarga sin bloquear después de ingresar a la estación. Cada lectura, visor o exportación de Excel espera `loadXLSX()`.
+- Ninguna biblioteca bloquea la pantalla de ingreso. Lighthouse local: celular 80 → 97 (LCP 3,8 → 1,2 s); computadora 97 → 100; 372 → 103 KB.
+- Reglas:
+  - las copias previas (`--backup--`) y los fragmentos (`--chunk--`, `--part--`) solo se crean; se acepta un reintento idéntico, pero no un cambio;
+  - los documentos operativos solo admiten los campos que escribe `storage.js` y valores de hasta 700.000 caracteres;
+  - los fragmentos admiten como máximo 640.000 caracteres;
+  - el administrador ya no puede crear ni modificar su propio `access/{uid}`. Su acceso a una estación se cambia desde la consola de Firebase.
+- Próxima etapa: control del espacio que usa cada estación, junto con el rediseño del almacenamiento.
+- «Salir» borra la caché local (`_ttl:crXXXX:*`) de la estación y del CR que estaba abierto en administración. Se conservan las claves que figuren en cualquier cola de sincronización, las colas mismas y las claves de formato viejo (`crXXXX:*`).
+- Archivos modificados:
+  - `revision/index.html`, `revision/economic.js`, `revision/yer-rates.js`, `revision/access.js`;
+  - `revision/firestore.rules` y `firestore.rules` (iguales);
+  - `revision/formulario-condiciones.html` (regenerado);
+  - `revision/pruebas.cjs`, `revision/pruebas-reglas.cjs` y sus `.json`;
+  - `revision/package.json` y `revision/package-lock.json`;
+  - `vendor/` (nuevo) y este `AGENTS.md`.
+- `index.html` de la raíz se actualizó al publicar. No cambió `formularios/formulario-colonia.html`, que no usa ese código.
+- Validaciones aprobadas: ensamblado, sintaxis, formulario, 40/40 pruebas funcionales y 24/24 de reglas. En Windows, `assemble.py` se corrió con `PYTHONUTF8=1`; sin eso, Python lee con cp1252 y falla.
+- Prueba completa en Chrome contra el emulador con las reglas nuevas y datos ficticios:
+  - ingreso;
+  - lectura de un PDF con pdf.js 6;
+  - factura de Hotel;
+  - Excel YER de 2 MB (2.689 operaciones, 8 fragmentos);
+  - dos autoguardados con su copia previa;
+  - «Salir» sin caché.
+- La v4.3.7 publicada también funcionó completa con las reglas nuevas: se pueden publicar primero las reglas y después la app.
+- Publicación aprobada por el titular el 27/10/2026, en este orden:
+  1. **Respaldo completo** con la sesión de Firebase CLI del titular, solo lectura: dos lecturas coincidentes con SHA-256, más accesos y reglas vigentes. Se guardó fuera del repositorio, en `ACA-RECUPEROS/respaldos-privados/`. La herramienta `respaldo/respaldo-aca.html` ya no funciona: lee sin sesión y las reglas actuales lo impiden.
+  2. **Regresión con ese respaldo** en el emulador local: sin diferencias (ver «Estado de pruebas conocido»).
+  3. **Reglas:**
+     - las publicadas eran idénticas a `firestore.rules` de `main` (v4.3.7);
+     - `firebase deploy --only firestore:rules` sobre `aca-admin`, publicado el 27/10/2026 15:31 UTC;
+     - se verificó que lo publicado coincide con el archivo y que el acceso anónimo sigue devolviendo 403.
+  4. **App:** `revision/index.html` copiada a `index.html` y subida junto con `vendor/`.
+- Visto en las pruebas, ya existía en v4.3.7: si se toca «Salir» mientras Checks todavía lee meses, la consola muestra un aviso de lectura cancelada. No escribe ni pierde nada.

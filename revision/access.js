@@ -24,6 +24,7 @@ async function resolveAccess(preferStation=false){
  if(!dep)throw Error('La estación asignada no es válida. Contactá al administrador.');
  CURRENT_CR=dep.cr;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;_syncInit=false;clearTimeout(stimer);stimer=null;_draftSave=null;
  CU={uid,username:AUTH_PERSON.email,name:dep.nombre,depNombre:dep.nombre,cr:dep.cr,role:'empleado'};
+ loadXLSX().catch(()=>{}); // Precarga sin bloquear; cada carga de Excel vuelve a esperarla.
  showLoad(true);
  try{await loadEconomic();syncLoad();const raw=await sGet('periodos');APS=raw?JSON.parse(raw):[];await loadPeriod(CP);await loadYER();AT='us';usView=null;render();}finally{showLoad(false);}
 }
@@ -35,9 +36,20 @@ async function renderAccessRequest(){
  document.getElementById('request-refresh').onclick=()=>resolveAccess().catch(e=>document.getElementById('request-status').textContent=authError(e));
  document.getElementById('request-access')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{const cr=document.getElementById('request-cr').value;if(!DEPENDENCIAS.some(d=>d.cr===cr&&d.role!=='divisional'))throw Error('Elegí una estación.');await db.setDoc(ref,{uid:AUTH_PERSON.uid,email:AUTH_PERSON.email,cr,status:'pending',createdAt:Date.now()});await renderAccessRequest();}catch(e){document.getElementById('request-status').textContent=authError(e);b.disabled=false;}});
 }
+// En una computadora compartida no deben quedar importes ni períodos de la
+// estación después de salir. Se llega acá con la cola ya sincronizada, y las
+// claves que figuren en cualquier cola local se conservan igual.
+function clearStationCache(cr){
+ if(!/^\d{4}$/.test(String(cr||'')))return 0;
+ const protectedKeys=syncProtectedKeys(),prefix='_ttl:cr'+cr+':',keys=[];
+ for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(prefix)&&!protectedKeys.has(k.slice(5)))keys.push(k);}
+ keys.forEach(k=>localStorage.removeItem(k));
+ return keys.length;
+}
 async function logoutSafe(){
  await flushSaveD();
  if(syncPend()&&!await sincronizar(true))return;
+ try{new Set([CU?.cr,CURRENT_CR]).forEach(clearStationCache);}catch(e){console.warn('No se pudo limpiar la caché local:',e.message);}
  clearTimeout(stimer);stimer=null;_draftSave=null;await window.acaSignOut?.();AUTH_PERSON=null;IS_ACCESS_ADMIN=false;CU=null;PD=null;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;_syncInit=false;_db=null;
  document.getElementById('sync-badge')?.remove();document.getElementById('aviso-guardado')?.remove();render();
 }
