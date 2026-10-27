@@ -187,7 +187,8 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
   - 10 Excel con las mismas celdas y los mismos resultados de `processVentasExcel`, `processEverilioExcel` y `parseVentas`;
   - 9 JPEG iguales.
 - Las 10 regresiones privadas anteriores (última corrida: v4.3.7) no están en este equipo.
-- El respaldo del 27/10/2026 contiene 558 documentos (unos 230 MB):
+- Después de la limpieza aprobada del 27/10/2026, la base tiene 236 documentos (unos 100 MB); ver el historial de esa fecha.
+- Antes de la limpieza, el respaldo del 27/10/2026 contenía 558 documentos (unos 230 MB):
   - Cipolletti: 306 (64 datos, 142 fragmentos y 100 copias previas);
   - Colonia: 250 (16 datos, 177 fragmentos y 57 copias previas);
   - otros CR: 2.
@@ -357,3 +358,35 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - recargar con Ctrl+F5 para dejar la v4.3.8;
   - ingresar con Google y hacer una carga controlada de un adjunto y un Excel YER.
 - Pendiente de decisión: los 27,5 MB de fragmentos huérfanos y las versiones viejas siguen ocupando espacio. Sacarlos de la base exige una excepción explícita al principio de no borrar, con respaldo previo.
+
+### 2026-10-27 — Limpieza aprobada de la base (excepción puntual)
+
+- **Excepción explícita del titular**, puntual y por única vez, a los principios 1 y 9: «Apruebo la opción B más sacar una de las dos copias idénticas del Excel de Cipolletti, como excepción puntual a la regla de no borrar». Los principios siguen vigentes para todo lo demás.
+- Qué se sacó (325 documentos, 125,7 MB):
+  - 45 fragmentos huérfanos e incompletos de tres subidas cortadas de Ventas Especiales (Colonia 02/10, Cipolletti 07/10);
+  - las versiones intermedias del mismo día, aplicando hacia atrás la regla de v4.3.9 (una copia por documento y por día):
+    - Colonia, datos YER: 54 copias y 108 fragmentos;
+    - Cipolletti, datos YER: 27 copias;
+    - Cipolletti, meses: 59 copias;
+  - una de las dos copias idénticas (misma SHA-256) del Excel de Ventas Especiales de octubre de Cipolletti, que ningún dato vigente usaba: el documento y sus 31 fragmentos. Se conserva la copia del 07/10 13:26.
+- **No se tocaron:**
+  - las versiones vigentes;
+  - las copias de adjuntos;
+  - los fragmentos de documentos vigentes o de copias conservadas;
+  - los datos de prueba de Colonia que no son YER;
+  - las cuentas, los accesos y las reglas.
+- Respaldo previo con dos lecturas coincidentes (561 documentos) y plan con el contenido completo de cada documento sacado. Ambos guardados fuera del repositorio, en dos discos físicos distintos, con las copias verificadas por SHA-256.
+- Ensayo previo en el emulador local con los datos reales:
+  - 21/21 pantallas iguales antes y después;
+  - 0 referencias rotas;
+  - un documento modificado después del plan no se borra;
+  - la reversión devuelve el contenido idéntico al original.
+- Ejecución con la cuenta de propietario, de 16:44 a 17:01 UTC, con cada borrado condicionado al `updateTime` del respaldo:
+  - el primer intento fue rechazado entero por el límite de ancho de banda de Firestore, sin borrar nada;
+  - se pasó a lotes de unos 1,5 MB con reintentos, borrando primero las referencias y después los fragmentos.
+- Verificación en producción:
+  - 236 documentos y unos 100 MB, con 0 referencias rotas;
+  - los 236 restantes, idénticos al respaldo (misma fecha y mismo contenido);
+  - respaldo posterior de 236 documentos, también en los dos discos.
+- **Reversión:** se restauran desde el plan los documentos sacados. Solo se crean los que no existen y el contenido queda exacto; los restaurados tienen fecha de creación nueva. Herramientas fuera del repositorio.
+- Pendiente del titular: ingresar con Google y revisar Cipolletti, Colonia, los históricos y los adjuntos.
