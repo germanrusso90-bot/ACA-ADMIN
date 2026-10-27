@@ -10,3 +10,4 @@ check.js
 respaldo-*.json
 *.env
 .env*
+dist/

@@ -4,7 +4,7 @@
 
 Aplicación web para calcular, documentar y conservar recuperos económicos por estación ACA. Debe soportar condiciones particulares por CR, archivos adjuntos, historial, liquidaciones YER y acceso con Google.
 
-Sitio actual: `https://germanrusso90-bot.github.io/ACA-ADMIN/`
+Sitio actual: `https://aca-admin.web.app/` (Firebase Hosting, desde el 27/10/2026). La dirección anterior, `https://germanrusso90-bot.github.io/ACA-ADMIN/`, queda solo hasta que el repositorio pase a privado.
 
 Backend: Firebase proyecto `aca-admin` (Authentication + Cloud Firestore).
 
@@ -123,7 +123,8 @@ Los cigarrillos siempre se descuentan.
 
 ## Archivos y estructura de trabajo
 
-- `index.html`: copia publicada por GitHub Pages.
+- `index.html`: copia publicada. `scripts/build-hosting.cjs` arma `dist/` solo con este archivo y `vendor/`; es lo único que se publica.
+- `firebase.json` (raíz) y `.firebaserc`: Firebase Hosting del proyecto `aca-admin`, con las cabeceras de seguridad y de caché. Las reglas se siguen publicando desde `revision/`.
 - `revision/index.html`: candidata ensamblada. Después de validar, copiarla a la raíz para publicar.
 - `revision/storage.js`: persistencia, fragmentación, integridad, conflictos y respaldo previo.
 - `revision/economic.js`: condiciones, fórmulas, formulario e historial económico.
@@ -197,7 +198,14 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
 
 ## Despliegue
 
-- Hosting actual: GitHub Pages. Vercel no es necesario en esta etapa.
+- Hosting actual: Firebase Hosting, plan gratuito, en `https://aca-admin.web.app/`. Vercel no es necesario.
+- Para publicar la app: copiar `revision/index.html` a `index.html` y ejecutar `npx --prefix revision firebase deploy --only hosting --project aca-admin` desde la raíz. El paso previo arma `dist/`.
+- Cabeceras (`firebase.json`):
+  - CSP con orígenes permitidos, `object-src 'none'`, `base-uri 'none'` y `frame-ancestors 'none'`;
+  - `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` y COOP `same-origin-allow-popups` (necesario para el ingreso con Google);
+  - HSTS, que agrega Firebase.
+- La CSP todavía admite `'unsafe-inline'` en scripts, porque la app usa `onclick` en línea. Quitarlo exige pasar esos manejadores a `addEventListener`.
+- Si se agrega una biblioteca o un servicio externo, sumarlo a la CSP y probar con `verify-csp` antes de publicar.
 - No reemplazar producción sin respaldo y prueba de ingreso Google.
 - Si cambian reglas y cliente, coordinar el orden para evitar una ventana incompatible.
 - Después de publicar: forzar recarga, ingresar con Google, abrir Cipolletti, revisar recuperos históricos, abrir adjuntos y realizar una carga controlada.
@@ -390,3 +398,21 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - respaldo posterior de 236 documentos, también en los dos discos.
 - **Reversión:** se restauran desde el plan los documentos sacados. Solo se crean los que no existen y el contenido queda exacto; los restaurados tienen fecha de creación nueva. Herramientas fuera del repositorio.
 - Pendiente del titular: ingresar con Google y revisar Cipolletti, Colonia, los históricos y los adjuntos.
+
+### 2026-10-27 — Mudanza a Firebase Hosting
+
+- Primer despliegue de `https://aca-admin.web.app/` (antes respondía «Site Not Found»), con `firebase.json`, `.firebaserc` y `scripts/build-hosting.cjs`. Solo se publican `index.html` (v4.3.9) y `vendor/`. `dist/` queda fuera de Git.
+- Antes de publicar se probaron los recorridos con la CSP y las cabeceras reales, sobre el emulador y con datos ficticios: ingreso, las 7 pestañas, factura PDF, visor de adjuntos, Excel YER y su visor, y salida. Hubo 0 violaciones de CSP.
+  - El emulador de Hosting no aplica las cabeceras de `firebase.json`; para esta prueba se usó un servidor local que sí las aplica.
+- Verificado en `aca-admin.web.app`:
+  - están todas las cabeceras (HSTS la agrega Firebase), sin violaciones de CSP;
+  - `vendor/` se sirve con caché de un año y la página sin caché;
+  - pdf.js lee un PDF y SheetJS carga, sin errores;
+  - la candidata, el formulario, el respaldo, la documentación y las reglas no se publican (404).
+- `aca-admin.web.app` ya figuraba entre los dominios autorizados de Authentication.
+- Pendiente:
+  - prueba de ingreso real del titular;
+  - redirigir GitHub Pages a la dirección nueva y avisar a las estaciones;
+  - hacer privado el repositorio, que desactiva GitHub Pages en el plan gratuito;
+  - quitar `germanrusso90-bot.github.io` de los dominios autorizados;
+  - restringir la clave de API a los dominios nuevos.

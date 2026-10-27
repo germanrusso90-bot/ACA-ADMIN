@@ -2,7 +2,7 @@
 
 Aplicación web para calcular y conservar recuperos económicos por estación ACA.
 
-Producción: <https://germanrusso90-bot.github.io/ACA-ADMIN/>
+Producción: <https://aca-admin.web.app/> (Firebase Hosting).
 
 ## Continuar desde ChatGPT/Codex de escritorio
 
@@ -17,10 +17,12 @@ Producción: <https://germanrusso90-bot.github.io/ACA-ADMIN/>
 - `AGENTS.md`: contexto, decisiones, seguridad, pruebas e historial.
 - `revision/`: módulos fuente, candidata ensamblada y pruebas.
 - `assemble.py`: ensambla los módulos y genera los archivos derivados.
-- `index.html`: versión publicada por GitHub Pages.
+- `index.html`: versión publicada. Se sube con `npx --prefix revision firebase deploy --only hosting --project aca-admin`, que publica solo `index.html` y `vendor/`.
+- `firebase.json`: Firebase Hosting con cabeceras de seguridad (CSP, HSTS, `nosniff`, etc.).
+- `vendor/`: pdf.js y SheetJS alojados junto a la app.
+- `respaldo/respaldo-aca.html`: ya no funciona con las reglas actuales (lee sin sesión). El respaldo se hace con la sesión de Firebase CLI del propietario, fuera del repositorio.
 - `formularios/`: formulario específico de condiciones económicas.
 - `firestore.rules`: reglas activas/propuestas de Firestore.
-- `respaldo/respaldo-aca.html`: herramienta de respaldo autorizada.
 - `acceso-google.html`: verificación aislada del ingreso con Google.
 
 ## Validación habitual
