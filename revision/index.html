@@ -250,7 +250,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.9 — revisión 27/10/2026';
+const APP_VERSION='v4.3.10 — revisión 27/10/2026';
 // ── BIBLIOTECAS ───────────────────────────────────────────────
 // Alojadas en vendor/ junto a la app, en versiones sin las vulnerabilidades
 // conocidas de pdf.js 3.11 y SheetJS 0.18. La candidata de revision/ las
@@ -281,6 +281,32 @@ async function openPdf(data){
   const lib=await loadPdfjs();
   const bytes=data instanceof ArrayBuffer?new Uint8Array(data.slice(0)):new Uint8Array(data);
   return lib.getDocument({data:bytes,isEvalSupported:false}).promise;
+}
+// ── DIRECCIÓN ─────────────────────────────────────────────────
+// La app se mudó a Firebase Hosting el 27/10/2026. La dirección anterior lleva
+// a la nueva, salvo que este navegador tenga cambios sin subir: esos se suben
+// primero desde acá (la cola local depende de la dirección) y la próxima vez
+// que se abra ya redirige. Las colas antiguas, que no se sincronizan, no cuentan.
+const APP_URL='https://aca-admin.web.app/',OLD_HOST='germanrusso90-bot.github.io';
+function oldAddressRedirect(host,storage){
+  if(host!==OLD_HOST)return false;
+  if(!storage)return true;
+  try{
+    for(let i=0;i<storage.length;i++){const k=storage.key(i);if(k&&k.startsWith('_sync:v4:')&&!['','{}'].includes(storage.getItem(k)||''))return false;}
+  }catch(e){return true;}
+  return true;
+}
+function showMoveNotice(){
+  const n=document.createElement('div');n.id='aviso-mudanza';n.setAttribute('role','status');
+  n.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:600;background:#FFF8E1;color:#241338;border-top:2px solid #FFC72C;padding:10px 16px;font-size:14px;text-align:center;';
+  const a=document.createElement('a');a.href=APP_URL;a.textContent='aca-admin.web.app';
+  n.append('La app se mudó. Ingresá para subir los cambios pendientes de esta computadora y después usá ',a,'.');
+  document.body.append(n);
+}
+{
+  let storage=null;try{storage=window.localStorage;}catch(e){}
+  if(oldAddressRedirect(location.hostname,storage))location.replace(APP_URL);
+  else if(location.hostname===OLD_HOST)showMoveNotice();
 }
 // ── DEPENDENCIAS ──────────────────────────────────────────────
 const DEPENDENCIAS=[

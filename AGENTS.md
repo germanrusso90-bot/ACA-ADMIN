@@ -178,7 +178,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 46 pruebas funcionales aprobadas en la candidata v4.3.9.
+- 47 pruebas funcionales aprobadas en la candidata v4.3.10.
 - 27 pruebas de reglas aprobadas en Firestore Emulator.
 - Regresión de v4.3.9 contra el mismo respaldo: 19/19 pantallas iguales a las de v4.3.8, adjuntos abiertos sin fallas y ninguna escritura al recorrerla.
 - Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
@@ -416,3 +416,22 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - hacer privado el repositorio, que desactiva GitHub Pages en el plan gratuito;
   - quitar `germanrusso90-bot.github.io` de los dominios autorizados;
   - restringir la clave de API a los dominios nuevos.
+
+### 2026-10-27 — v4.3.10 (redirección desde GitHub Pages)
+
+- El titular probó el ingreso real con Google en `aca-admin.web.app`: ve Cipolletti y los históricos, y abren los adjuntos. La consola no registró violaciones de CSP.
+- `revision/index.html`:
+  - en `germanrusso90-bot.github.io`, la app lleva a `https://aca-admin.web.app/`, salvo que ese navegador tenga una cola `_sync:v4:` con cambios sin subir;
+  - en ese caso se queda, muestra un aviso con el enlace y deja ingresar para sincronizar; la próxima apertura ya redirige;
+  - las colas antiguas, que no se sincronizan, no frenan la redirección. En la dirección nueva no hace nada.
+- Validaciones:
+  - ensamblado, sintaxis, formulario y 47/47 pruebas funcionales;
+  - en Chrome, simulando las dos direcciones sin salir a la red: redirige sin pendientes, se queda y avisa con pendientes, y no actúa en la dirección nueva.
+- Publicación:
+  - Firebase Hosting primero (v4.3.10 en `aca-admin.web.app`);
+  - después `index.html` en `main`, que activa la redirección en GitHub Pages.
+- Pendiente:
+  - avisar a las estaciones;
+  - unos días después, hacer privado el repositorio (apaga GitHub Pages);
+  - quitar `germanrusso90-bot.github.io` de los dominios autorizados;
+  - restringir la clave de API.
