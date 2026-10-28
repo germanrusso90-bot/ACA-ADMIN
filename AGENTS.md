@@ -178,7 +178,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 49 pruebas funcionales aprobadas en la candidata v4.3.11.
+- 52 pruebas funcionales aprobadas en v4.3.12.
 - 27 pruebas de reglas aprobadas en Firestore Emulator.
 - Regresión de v4.3.9 contra el mismo respaldo: 19/19 pantallas iguales a las de v4.3.8, adjuntos abiertos sin fallas y ninguna escritura al recorrerla.
 - Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
@@ -474,3 +474,30 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - versión `v4.3.11`, todas las cabeceras y 0 violaciones de CSP;
   - pdf.js, SheetJS y la compresión funcionan;
   - `<main>`, región de avisos, `role="status"`, contraste `#6e6580` y `showMessage` presentes.
+
+### 2026-10-28 — v4.3.12 (Cancelaciones: Canon servicios resta y todo en mayúsculas)
+
+- Pedido del titular: en Cancelaciones, «Canon servicios» resta en la cuenta.
+- Antes, la lista de tipos que restan (`SERVICIOS`, `CUOCAM`, `SERVICLUB`, `RETENCIONES`) estaba copiada en 6 lugares (vista del mes, sus tres totales, historial e impresión) y no incluía `CANON SERVICIOS`, que por eso sumaba.
+- Ahora hay una sola constante, `CANCEL_TIPOS_NEG`, que incluye `CANON SERVICIOS` y se usa en los 6 lugares.
+- Datos reales (respaldo del 27/10): ninguna estación tenía registros `CANON SERVICIOS` en Cancelaciones, así que no cambia ningún total ya cargado (Cipolletti incluida).
+- Mayúsculas (decisión del titular, 28/10, para todas las estaciones, Cipolletti incluida): el tipo se compara sin distinguir mayúsculas ni espacios de más, con `cancelEsNegativo(tipo)` en los 6 lugares. «Servicios», «serviclub» o « Canon  Servicios » restan igual que en mayúscula.
+- Efecto en Cipolletti (respaldo del 27/10): solo 3 registros cambian («Servicios» ×2 y «Serviclub» ×1), todos del documento de junio de 2026 con el formato antiguo (`mes`/`anio`, sin `periodo`). Esos registros no entran en ninguna vista de mes, en sus totales ni en la impresión, que filtran por `periodo`; solo se ven en el Historial de ese documento, que ahora los muestra en rojo con «−». El Historial no tiene totales, así que **no cambia ningún total ya mostrado**. Agosto a octubre ya usaban mayúsculas.
+- Los 10 registros con formato antiguo del documento de junio de 2026 no aparecen en ninguna vista de mes (no tienen `periodo`). El titular indicó que lo anterior no le interesa: importa que esté bien de aquí en adelante. No se tocan.
+- Todo en mayúsculas (decisión del titular, 28/10): en Cancelaciones, tipo, comprobante y N° de comprobante se guardan normalizados con `cancelTexto` (sin espacios de más y en mayúsculas). El campo N° muestra mayúsculas mientras se escribe (`autocapitalize="characters"`). Las vistas de mes, el historial y la impresión muestran esos tres campos en mayúsculas, también los de registros viejos, sin reescribir lo guardado. Tipo y comprobante ya se elegían de listas en mayúsculas. La impresión ahora escapa esos textos.
+- Pruebas nuevas con `renderCancelMes` y `renderCancelHistorial` reales:
+  - Canon: con YER 1000, Canon 300, Servicios 100 y Varios 50 da ingresos 1050, descuentos 400 y neto 650, y la fila de Canon muestra «− $ 300».
+  - Mayúsculas: con YER 1000, «Servicios» 100 y «Serviclub» 50 da ingresos 1000, descuentos 150 y neto 850; «Varios» y «YER No Lubricante» siguen sumando.
+  - Mayúsculas al cargar: «Servicios», «Factura» y «a-12» se ven como SERVICIOS, FACTURA y A-12 sin cambiar el registro; un N° « b-7 » cargado desde el formulario real se guarda como «B-7».
+  - 52/52 pruebas funcionales.
+- Hecho por subagentes (Sonnet) y revisado.
+- Archivos modificados: `revision/index.html`, `index.html`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`. Reglas sin cambios.
+- Publicación aprobada por el titular el 28/10/2026:
+  1. respaldo previo con dos lecturas coincidentes (238 documentos), guardado fuera del repositorio. Las reglas publicadas eran idénticas a `firestore.rules`, así que no se volvieron a publicar;
+  2. `revision/index.html` copiada a `index.html` y publicada en `aca-admin.web.app`;
+  3. commit y push a `main`.
+- Verificado en línea:
+  - la página publicada es idéntica a `index.html`, con la versión `v4.3.12`;
+  - todas las cabeceras están presentes y la consola no muestra errores ni violaciones de CSP;
+  - `cancelTexto` y `cancelEsNegativo` responden como en las pruebas.
+- Pendiente de las estaciones: recargar con Ctrl+F5.

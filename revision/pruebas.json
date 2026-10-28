@@ -1,5 +1,5 @@
 {
-  "passed": 49,
+  "passed": 52,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -47,6 +47,9 @@
     "Accesibilidad: campos de tabla con nombre, encabezado vacío nombrado y tarjeta con teclado",
     "Mensaje en diálogo accesible que se cierra y avisa al terminar",
     "Dirección vieja lleva a la nueva, salvo con cambios sin subir",
+    "Cancelaciones: Canon servicios resta como los demás cargos",
+    "Cancelaciones: el tipo no distingue mayúsculas ni espacios",
+    "Cancelaciones: todo se muestra y se guarda en mayúsculas",
     "Formulario cuatro modalidades YER y recupero adicional",
     "Formulario incompleto no se acepta",
     "Formulario completo exporta valores por producto y medidor"

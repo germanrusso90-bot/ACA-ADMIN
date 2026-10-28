@@ -261,7 +261,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.11 — revisión 27/10/2026';
+const APP_VERSION='v4.3.12 — revisión 28/10/2026';
 // ── BIBLIOTECAS ───────────────────────────────────────────────
 // Alojadas en vendor/ junto a la app, en versiones sin las vulnerabilidades
 // conocidas de pdf.js 3.11 y SheetJS 0.18. La candidata de revision/ las
@@ -4898,6 +4898,12 @@ const CANCEL_TIPOS=[
   'CUOCAM','REINTEGRO PROMO 20% BOXES','YER LUBRICANTE','LUBRICANTES POR COMBO',
   'OBJETIVO PLUS','YER','FILTROS YER','INCÓGNITO 100%','CANON SERVICIOS','SERVICIOS','SOMOS EQUIPO','RETENCIONES','VARIOS'
 ];
+// Tipos que restan en Cancelaciones (cargos y retenciones). Una sola lista para pantalla, historial e impresión.
+const CANCEL_TIPOS_NEG=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES','CANON SERVICIOS'];
+// Texto de Cancelaciones normalizado: sin espacios de más y en mayúsculas.
+function cancelTexto(v){return String(v??'').trim().replace(/\s+/g,' ').toUpperCase();}
+// Mayúsculas, minúsculas y espacios de más no cambian el tipo («Servicios» = «SERVICIOS»).
+function cancelEsNegativo(tipo){return CANCEL_TIPOS_NEG.includes(cancelTexto(tipo));}
 const CANCEL_ESTADOS=['Pendiente','Pagada','Parcial','Impugnada'];
 
 const CANCEL_COMP_TIPOS=['FACTURA','RECIBO','NOTA DE CRÉDITO','NOTA DE DÉBITO','OTROS'];
@@ -5152,7 +5158,7 @@ function renderCancelMes(period){
 
   const trs=regs.map((r,i)=>{
     const locked=!!r.locked;
-    const esNegativo=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo);
+    const esNegativo=cancelEsNegativo(r.tipo);
     const rowBg=esNegativo?(i%2===0?'#FFF0F0':'#FFE8E8'):locked?(i%2===0?'#F8FFF8':'#F0FFF4'):(i%2===0?'#FFFFF0':'#FFFDE0');
     const importeDisplay=r.importe!=null
       ? (esNegativo
@@ -5161,11 +5167,11 @@ function renderCancelMes(period){
       : '—';
     return `<tr style="background:${rowBg}" data-cancel-id="${r.id}">
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(cancelTexto(r.tipo))}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
-        <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
+        <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(cancelTexto(r.tipoComp))}</span>
       </td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;font-family:monospace;">${esc(r.nroComp||'—')}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;font-family:monospace;">${esc(cancelTexto(r.nroComp)||'—')}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${importeDisplay}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
         ${r.archivo
@@ -5219,7 +5225,7 @@ function renderCancelMes(period){
           </div>
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">N° Comprobante</div>
-            <input id="cancel-nro" type="text" placeholder="Ej: 654-1234" style="width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
+            <input id="cancel-nro" type="text" placeholder="Ej: 654-1234" autocapitalize="characters" style="text-transform:uppercase;width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:7px;font-size:13px;">
           </div>
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--m2);text-transform:uppercase;margin-bottom:4px;">Importe $</div>
@@ -5245,11 +5251,11 @@ function renderCancelMes(period){
         </div>
         <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
           <div style="font-size:13px;color:var(--m2);">
-            Total ingresos: <strong style="color:var(--g);">$ ${fmtArg(regs.filter(r=>!['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
+            Total ingresos: <strong style="color:var(--g);">$ ${fmtArg(regs.filter(r=>!cancelEsNegativo(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
             &nbsp;|&nbsp;
-            Descuentos: <strong style="color:var(--r);">− $ ${fmtArg(regs.filter(r=>['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
+            Descuentos: <strong style="color:var(--r);">− $ ${fmtArg(regs.filter(r=>cancelEsNegativo(r.tipo)).reduce((a,r)=>a+(r.importe||0),0))}</strong>
             &nbsp;|&nbsp;
-            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>a+(['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo)?-(r.importe||0):(r.importe||0)),0))}</strong>
+            Neto: <strong style="color:var(--pd);">$ ${fmtArg(regs.reduce((a,r)=>a+(cancelEsNegativo(r.tipo)?-(r.importe||0):(r.importe||0)),0))}</strong>
           </div>
           <button id="cancel-imprimir-btn" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Imprimir resumen</button>
         </div>`
@@ -5264,7 +5270,7 @@ function renderCancelHistorial(){
     b.periodo?.localeCompare(a.periodo)||b.fechaReg?.localeCompare(a.fechaReg)||0);
   const th=`padding:9px 10px;background:var(--y);color:var(--pd);font-size:11px;text-transform:uppercase;font-weight:800;border:1px solid #C9A800;text-align:center;`;
   const trs=todos.map((r,i)=>{
-    const esNegativo=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'].includes(r.tipo);
+    const esNegativo=cancelEsNegativo(r.tipo);
     const rowBg=esNegativo?(i%2===0?'#FFF0F0':'#FFE8E8'):(i%2===0?'#FFFFF0':'#FFFDE0');
     const importeDisplay=r.importe!=null
       ? (esNegativo
@@ -5274,11 +5280,11 @@ function renderCancelHistorial(){
     return `<tr class="cancel-hist-row" style="background:${rowBg}">
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;white-space:nowrap;">${r.periodo?cancelPeriodLabel(r.periodo):'—'}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">${esc(r.fechaReg||'—')}</td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(r.tipo)}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;font-weight:700;${esNegativo?'color:var(--r);':''}">${esc(cancelTexto(r.tipo))}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:12px;text-align:center;">
-        <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(r.tipoComp)}</span>
+        <span style="background:var(--p);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(cancelTexto(r.tipoComp))}</span>
       </td>
-      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;font-family:monospace;">${esc(r.nroComp||'—')}</td>
+      <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:center;font-family:monospace;">${esc(cancelTexto(r.nroComp)||'—')}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;font-size:13px;text-align:right;">${importeDisplay}</td>
       <td style="padding:7px 10px;border:1px solid #D4C830;text-align:center;">
         ${r.archivo?`<button style="${BSTYLE_VER}" data-cancel-ver="${r.id}">👁 Ver</button>`:'—'}
@@ -5326,20 +5332,19 @@ function attachCancel(){
       .sort((a,b)=>(a.fechaReg||'').localeCompare(b.fechaReg||''));
     const titulo=`Cancelaciones — ${cancelPeriodLabel(period)}`;
     const fmt=v=>v!=null?'$ '+new Intl.NumberFormat('es-AR',{minimumFractionDigits:2}).format(v):'—';
-    const TIPOS_NEG=['SERVICIOS','CUOCAM','SERVICLUB','RETENCIONES'];
-    const totalPos=regs.filter(r=>!TIPOS_NEG.includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
-    const totalRet=regs.filter(r=>TIPOS_NEG.includes(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
+    const totalPos=regs.filter(r=>!cancelEsNegativo(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
+    const totalRet=regs.filter(r=>cancelEsNegativo(r.tipo)).reduce((a,r)=>a+(r.importe||0),0);
     const neto=totalPos-totalRet;
     const rows=regs.map((r,i)=>{
-      const esRet=TIPOS_NEG.includes(r.tipo);
+      const esRet=cancelEsNegativo(r.tipo);
       const bg=i%2===0?'#fff':'#f9f9f9';
       const color=esRet?'color:#dc2626;font-weight:700':'color:#1B6B35;font-weight:700';
       const imp=esRet?`<span style="${color}">− ${fmt(r.importe)}</span>`:`<span style="${color}">${fmt(r.importe)}</span>`;
       return`<tr style="background:${bg}">
         <td>${r.fechaReg||'—'}</td>
-        <td style="${esRet?'color:#dc2626;font-weight:700':''}">${r.tipo}</td>
-        <td>${r.tipoComp||'—'}</td>
-        <td>${r.nroComp||'—'}</td>
+        <td style="${esRet?'color:#dc2626;font-weight:700':''}">${esc(cancelTexto(r.tipo))}</td>
+        <td>${esc(cancelTexto(r.tipoComp)||'—')}</td>
+        <td>${esc(cancelTexto(r.nroComp)||'—')}</td>
         <td style="text-align:right">${r.importe!=null?imp:'—'}</td>
       </tr>`;
     }).join('');
@@ -5415,10 +5420,10 @@ td{padding:6px 10px;border-bottom:1px solid #eee;font-size:11px}
 
   // Agregar
   el.querySelector('#cancel-form-add')?.addEventListener('click',async()=>{
-    const tipo=el.querySelector('#cancel-tipo')?.value;
+    const tipo=cancelTexto(el.querySelector('#cancel-tipo')?.value);
     const fecha=el.querySelector('#cancel-fecha')?.value||'';
-    const tipoComp=el.querySelector('#cancel-tipo-comp')?.value||'FACTURA';
-    const nroComp=el.querySelector('#cancel-nro')?.value.trim()||'';
+    const tipoComp=cancelTexto(el.querySelector('#cancel-tipo-comp')?.value)||'FACTURA';
+    const nroComp=cancelTexto(el.querySelector('#cancel-nro')?.value);
     const importe=pN(el.querySelector('#cancel-importe')?.value)||null;
     if(!tipo){showMessage('Seleccioná un tipo.');return;}
     const id=Math.random().toString(36).slice(2,10);
