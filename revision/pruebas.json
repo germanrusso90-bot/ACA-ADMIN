@@ -1,5 +1,5 @@
 {
-  "passed": 52,
+  "passed": 62,
   "tests": [
     "Login sin contraseñas",
     "Parseo decimal numérico y argentino; cero preservado",
@@ -50,6 +50,16 @@
     "Cancelaciones: Canon servicios resta como los demás cargos",
     "Cancelaciones: el tipo no distingue mayúsculas ni espacios",
     "Cancelaciones: todo se muestra y se guarda en mayúsculas",
+    "Condiciones anteriores se validan iguales, con tipos, aviso y grupo por defecto",
+    "Energía: total menos IVA en cuatro facturas (importes de prueba)",
+    "Registros: conceptos de una misma factura de recupero con subtotal, sin total general",
+    "Registro con tipo obligatorio, fecha del aviso y detalle recortado",
+    "Historial del Excel: valida formato, CR, períodos e identificadores",
+    "Historial: botón sin condiciones del período, filtros y recupero sin las filas que no se recuperan",
+    "Historial: la nota del archivo no repite el aviso fijo y se muestra si dice otra cosa",
+    "Período sin condiciones: mensaje distinto para la estación y para el administrador",
+    "Historial: el administrador lo importa con resumen, doble confirmación al reemplazar y copia previa",
+    "Historial de unos 150 KB del administrador: comprimido en el mismo documento, sin blobs",
     "Formulario cuatro modalidades YER y recupero adicional",
     "Formulario incompleto no se acepta",
     "Formulario completo exporta valores por producto y medidor"

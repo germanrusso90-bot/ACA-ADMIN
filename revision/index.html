@@ -261,7 +261,7 @@ table.ex input.ex-input.inp-date{width:100%;}
 <script>
 // ── USUARIOS ──────────────────────────────────────────────────
 // ── VERSIÓN — actualizar en cada deploy para verificar qué versión carga el navegador
-const APP_VERSION='v4.3.12 — revisión 28/10/2026';
+const APP_VERSION='v4.3.13 — revisión 28/10/2026';
 // ── BIBLIOTECAS ───────────────────────────────────────────────
 // Alojadas en vendor/ junto a la app, en versiones sin las vulnerabilidades
 // conocidas de pdf.js 3.11 y SheetJS 0.18. La candidata de revision/ las
@@ -7200,7 +7200,8 @@ function wrapDB(native){
  return wrapped;
 }
 function keepPreviousCopy(previous,now=Date.now()){
- if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
+ // Las condiciones y el historial importado (del administrador) siempre conservan copia.
+ if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||/^cr\d{4}:economic:versions(:|$)/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
  return new Date(previous.updatedAt).toDateString()!==new Date(now).toDateString();
 }
 async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');}
@@ -7218,9 +7219,25 @@ const gunzipBytes=bytes=>transformBytes(bytes,new DecompressionStream('gzip'));
 
 const ECON_VERSION=1;
 let ECON=[];
-const econStyle=`<style>.econ{max-width:1100px;margin:20px auto;padding:24px;background:white;border-radius:16px;font:15px 'Segoe UI',sans-serif;color:#241338}.econ h1,.econ h2,.econ h3{margin:12px 0}.econ h1{font-size:1.5em}.econ p{margin:10px 0;line-height:1.5}.econ label{display:block;margin:10px 0}.econ input,.econ select,.econ textarea{padding:9px;border:1px solid #bcb1c7;border-radius:6px;max-width:100%;box-sizing:border-box}.econ input:not([type=checkbox]),.econ textarea{width:100%}.econ button{padding:10px 15px;margin:6px;background:#4b2563;color:white;border:0;border-radius:7px;cursor:pointer}.econ fieldset{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:10px}.econ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.econ .note{background:#fff8df;padding:12px}.econ table{width:100%;border-collapse:collapse}.econ td,.econ th{padding:10px;text-align:left;border-bottom:1px solid #ddd}@media print{.econ button,.topbar,.tabs{display:none}}</style>`;
+const econStyle=`<style>.econ{max-width:1100px;margin:20px auto;padding:24px;background:white;border-radius:16px;font:15px 'Segoe UI',sans-serif;color:#241338}.econ h1,.econ h2,.econ h3{margin:12px 0}.econ h1{font-size:1.5em}.econ p{margin:10px 0;line-height:1.5}.econ label{display:block;margin:10px 0}.econ input,.econ select,.econ textarea{padding:9px;border:1px solid #bcb1c7;border-radius:6px;max-width:100%;box-sizing:border-box}.econ input:not([type=checkbox]),.econ textarea{width:100%}.econ button{padding:10px 15px;margin:6px;background:#4b2563;color:white;border:0;border-radius:7px;cursor:pointer}.econ fieldset{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:10px}.econ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.econ .note{background:#fff8df;padding:12px}.econ table{width:100%;border-collapse:collapse}.econ td,.econ th{padding:10px;text-align:left;border-bottom:1px solid #ddd}.econ .scroll{overflow:auto}.econ .scroll:focus-visible{outline:3px solid #4b2563;outline-offset:2px}.econ .amt{white-space:nowrap}.econ .hs-f{display:flex;flex-direction:column;gap:5px}.econ .hs-f select{width:100%}.econ .hs-sub{display:block;margin-top:3px;font-size:.85em;line-height:1.35}@media print{.econ button,.topbar,.tabs{display:none}}</style>`;
 const FUELS=['infinia_diesel','super','infinia','diesel500'];
-function blankEconomic(cr='3611'){return {schema:1,cr,vigencia:'',responsable:'',email:'',observaciones:'',full:{enabled:true,pct:null,excludeCigarettes:true},yer:Object.fromEntries(FUELS.map(f=>[f,{mode:"porcentaje",value:null}])),concepts:[['energia','Energía eléctrica','us'],['aguas','Agua','us'],['telefono','Teléfono','us'],['canon','Canon servicios','us'],['hotel','Hotel','hotel']].map(([id,name,area])=>({id,name,area,enabled:true,mode:id==='canon'?'litros':id==='hotel'?'factura':'porcentaje',pct:null,litros:null,vat:0,deductIVA:false,deductPercepciones:false,deductIntereses:false,base:'',medidor:'',notes:''}))};}
+function blankEconomic(cr='3611'){return {schema:1,cr,vigencia:'',responsable:'',email:'',observaciones:'',full:{enabled:true,pct:null,excludeCigarettes:true},yer:Object.fromEntries(FUELS.map(f=>[f,{mode:"porcentaje",value:null}])),concepts:[['energia','Energía eléctrica','us'],['aguas','Agua','us'],['telefono','Teléfono','us'],['canon','Canon servicios','us'],['hotel','Hotel','hotel']].map(([id,name,area])=>({id,name,area,enabled:true,mode:id==='canon'?'litros':id==='hotel'?'factura':'porcentaje',pct:null,litros:null,vat:0,deductIVA:false,deductPercepciones:false,deductIntereses:false,base:'',medidor:'',notes:'',tipos:[],fechaAviso:false,grupo:''}))};}
+// Campos opcionales de cada concepto (v4.3.13). Las configuraciones anteriores
+// no los tienen: se completan con sus valores por defecto sin cambiar lo demás.
+function checkConceptExtras(x){
+ const name=String(x.name||x.id||'');
+ if(x.tipos===undefined||x.tipos===null)x.tipos=[];
+ if(!Array.isArray(x.tipos)||x.tipos.length>30)throw Error('Tipos de movimiento inválidos en '+name+': como máximo 30.');
+ const seen=new Set();
+ x.tipos=x.tipos.map(t=>{if(typeof t!=='string'||!t.trim()||t.trim().length>60)throw Error('Tipo de movimiento inválido en '+name+': cada uno debe tener entre 1 y 60 caracteres.');const v=t.trim(),k=v.toLocaleUpperCase('es-AR');if(seen.has(k))throw Error('Tipo de movimiento repetido en '+name+': '+v);seen.add(k);return v;});
+ if(x.fechaAviso===undefined||x.fechaAviso===null)x.fechaAviso=false;
+ if(typeof x.fechaAviso!=='boolean')throw Error('Valor inválido: fecha del aviso de '+name);
+ if(x.grupo===undefined||x.grupo===null)x.grupo='';
+ if(typeof x.grupo!=='string'||x.grupo.trim().length>80)throw Error('Factura de recupero (grupo) inválida en '+name+': hasta 80 caracteres.');
+ x.grupo=x.grupo.trim();
+}
+function isoDateOk(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00Z');return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===s;}
+function fmtFechaIso(s){return isoDateOk(s||'')?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):String(s||'');}
 function checkEconomic(c){
  if(!c||c.schema!==1||!/^\d{4}$/.test(c.cr)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(c.vigencia))throw Error('Completá CR y mes de vigencia.');
  if(!c.responsable?.trim()||!/^\S+@\S+\.\S+$/.test(c.email))throw Error('Completá responsable y correo de Google.');
@@ -7228,7 +7245,7 @@ function checkEconomic(c){
  if(c.full?.enabled)num(c.full.pct,'porcentaje Full',100);
  FUELS.forEach(f=>{const r=c.yer?.[f];if(!r||!['porcentaje','pesos_litro'].includes(r.mode))throw Error('Elegí modalidad YER '+f);num(r.value,'YER '+f,r.mode==='porcentaje'?100:Infinity);});c.full.excludeCigarettes=true;
  if(!Array.isArray(c.concepts)||c.concepts.length>100)throw Error('Conceptos inválidos.');
- const ids=new Set();c.concepts.forEach(x=>{if(!/^[a-zA-Z0-9_-]{1,80}$/.test(x.id)||ids.has(x.id))throw Error('Identificador de concepto inválido o repetido.');ids.add(x.id);if(!x.name?.trim()||!['us','hotel'].includes(x.area))throw Error('Nombre o área inválida.');if(!['porcentaje','factura','mixto','litros','total_menos_iva_percepciones'].includes(x.mode))throw Error('Modalidad inválida.');if(!x.enabled)return;if(['porcentaje','mixto'].includes(x.mode))num(x.pct,x.name+' porcentaje',100);if(x.mode==='litros')num(x.litros,x.name+' litros');num(x.vat,x.name+' IVA agregado',100);if(!x.base?.trim())throw Error('Detallá la base de cálculo de '+x.name);});return c;
+ const ids=new Set();c.concepts.forEach(x=>{if(!/^[a-zA-Z0-9_-]{1,80}$/.test(x.id)||ids.has(x.id))throw Error('Identificador de concepto inválido o repetido.');ids.add(x.id);if(!x.name?.trim()||!['us','hotel'].includes(x.area))throw Error('Nombre o área inválida.');if(!['porcentaje','factura','mixto','litros','total_menos_iva_percepciones'].includes(x.mode))throw Error('Modalidad inválida.');checkConceptExtras(x);if(!x.enabled)return;if(['porcentaje','mixto'].includes(x.mode))num(x.pct,x.name+' porcentaje',100);if(x.mode==='litros')num(x.litros,x.name+' litros');num(x.vat,x.name+' IVA agregado',100);if(!x.base?.trim())throw Error('Detallá la base de cálculo de '+x.name);});return c;
 }
 function economicFor(period){return ECON.filter(c=>c.cr===CURRENT_CR&&c.vigencia<=period).sort((a,b)=>b.vigencia.localeCompare(a.vigencia))[0]||null;}
 function fullRate(){const c=economicFor(prevMonth(CP));if(c){if(!c.full.enabled)throw Error('Full no aplica a esta estación.');return c.full.pct/100;}if(CURRENT_CR==='3531')return .12;throw Error('Cargá las condiciones económicas antes de calcular Full.');}
@@ -7239,22 +7256,23 @@ function field(label,key,value,type='text'){return `<label>${esc(label)}<input d
 function checkbox(label,key,value){return `<label><input type="checkbox" data-k="${key}" ${value?'checked':''}> ${esc(label)}</label>`;}
 function selectField(label,key,value,opts){return `<label>${label}<select data-k="${key}">${opts.map(([v,n])=>`<option value="${v}" ${v===value?'selected':''}>${n}</option>`).join('')}</select></label>`;}
 function getFields(el){const out={};el.querySelectorAll('[data-k]').forEach(x=>out[x.dataset.k]=x.type==='checkbox'?x.checked:x.type==='number'?(x.value===''?null:Number(x.value)):x.value.trim());return out;}
-function mountEconomic(el,initial,onSave){
+function mountEconomic(el,initial,onSave,onHistorial){
  let draft=structuredClone(initial);
- function collect(){const head=getFields(el.querySelector('#ec-head'));return {...draft,...head,full:getFields(el.querySelector('#ec-full')),yer:Object.fromEntries(FUELS.map(f=>[f,getFields(el.querySelector('[data-rate="'+f+'"]'))])),concepts:[...el.querySelectorAll('[data-concept]')].map((x,i)=>({...draft.concepts[i],...getFields(x)}))};}
- function paint(){el.innerHTML=econStyle+`<section class="econ"><h2>Condiciones económicas por estación</h2><p>Completá los valores del acuerdo vigente. El correo informado no habilita acceso: cada persona debe ingresar con Google y esperar aprobación. Para dos medidores, agregá un concepto por medidor. Podés agregar tasas municipales u otros recuperos propios.</p><p class="note">Los campos vacíos no se interpretan como cero. Indicá 0 cuando corresponda y desmarcá los conceptos que no aplican. En modalidad mixta, factura y porcentaje se suman sobre bases distintas que debés describir para evitar duplicaciones.</p><form id="ec-form"><fieldset id="ec-head"><legend>Estación y vigencia</legend><div class="econ-grid">${field('CR','cr',draft.cr)}${field('Vigente desde','vigencia',draft.vigencia,'month')}${field('Responsable','responsable',draft.responsable)}${field('Cuenta de Google a autorizar','email',draft.email,'email')}</div></fieldset><fieldset id="ec-full"><legend>Full · porcentaje de facturación</legend>${checkbox('Aplica Full','enabled',draft.full.enabled)}${field('Porcentaje','pct',draft.full.pct,'number')}<p>Base: facturación menos cigarrillos. Se aplica a todas las estaciones.</p></fieldset><fieldset id="ec-yer"><legend>YER · mismo proceso y dos Excel para todas las estaciones</legend><div class="econ-grid">${FUELS.map(f=>`<div data-rate="${f}"><h3>${f.replaceAll('_',' ')}</h3>${selectField('Modalidad','mode',draft.yer[f].mode,[['porcentaje','Porcentaje de venta'],['pesos_litro','Pesos por litro']])}${field('Valor de la comisión','value',draft.yer[f].value,'number')}</div>`).join('')}</div><p>Porcentaje: importe de la venta × porcentaje, sin deducciones. Pesos por litro: litros vendidos × comisión. La modalidad se define por producto.</p></fieldset><div id="ec-concepts">${draft.concepts.map((c,i)=>`<fieldset data-concept="${i}"><legend>Recupero ${i+1}</legend>${checkbox('Aplica','enabled',c.enabled)}<div class="econ-grid">${field('Nombre','name',c.name)}${selectField('Área','area',c.area,[['us','Unidad Servicial'],['hotel','Hotel']])}${field('Medidor / cuenta / proveedor','medidor',c.medidor)}${selectField('Modalidad','mode',c.mode,[['porcentaje','Porcentaje de base'],['factura','Importe de factura'],['mixto','Factura + porcentaje'],['litros','Litros × precio combustible']])}${field('Porcentaje','pct',c.pct,'number')}${field('Litros pactados','litros',c.litros,'number')}${field('IVA a agregar al recupero (%)','vat',c.vat,'number')}</div>${checkbox('Deducir IVA de la base','deductIVA',c.deductIVA)}${checkbox('Deducir percepciones de la base','deductPercepciones',c.deductPercepciones)}${checkbox('Deducir intereses de la base','deductIntereses',c.deductIntereses)}${field('Base de cálculo / componentes de la modalidad mixta / combustible','base',c.base)}${field('Observaciones del acuerdo','notes',c.notes)}</fieldset>`).join('')}</div><button type="button" id="ec-add">+ Agregar medidor o recupero propio</button><p>Cancelaciones y Checks mantienen el mismo funcionamiento en todas las estaciones.</p><button type="submit">Descargar formulario completo (JSON)</button>${onSave?'<button type="button" id="ec-save">Aplicar condiciones a esta estación</button>':''}<button type="button" id="ec-import">Importar formulario JSON</button><input type="file" id="ec-file" accept=".json,application/json" hidden><button type="button" onclick="window.print()">Imprimir / guardar PDF</button><p id="ec-status" role="status"></p></form></section>`;
+ function collect(){const head=getFields(el.querySelector('#ec-head'));return {...draft,...head,full:getFields(el.querySelector('#ec-full')),yer:Object.fromEntries(FUELS.map(f=>[f,getFields(el.querySelector('[data-rate="'+f+'"]'))])),concepts:[...el.querySelectorAll('[data-concept]')].map((x,i)=>{const f=getFields(x);if(typeof f.tipos==='string')f.tipos=f.tipos.split(/\r?\n/).map(t=>t.trim()).filter(Boolean);return {...draft.concepts[i],...f};})};}
+ function paint(){el.innerHTML=econStyle+`<section class="econ"><h2>Condiciones económicas por estación</h2><p>Completá los valores del acuerdo vigente. El correo informado no habilita acceso: cada persona debe ingresar con Google y esperar aprobación. Para dos medidores, agregá un concepto por medidor. Podés agregar tasas municipales u otros recuperos propios.</p><p class="note">Los campos vacíos no se interpretan como cero. Indicá 0 cuando corresponda y desmarcá los conceptos que no aplican. En modalidad mixta, factura y porcentaje se suman sobre bases distintas que debés describir para evitar duplicaciones.</p><form id="ec-form"><fieldset id="ec-head"><legend>Estación y vigencia</legend><div class="econ-grid">${field('CR','cr',draft.cr)}${field('Vigente desde','vigencia',draft.vigencia,'month')}${field('Responsable','responsable',draft.responsable)}${field('Cuenta de Google a autorizar','email',draft.email,'email')}</div></fieldset><fieldset id="ec-full"><legend>Full · porcentaje de facturación</legend>${checkbox('Aplica Full','enabled',draft.full.enabled)}${field('Porcentaje','pct',draft.full.pct,'number')}<p>Base: facturación menos cigarrillos. Se aplica a todas las estaciones.</p></fieldset><fieldset id="ec-yer"><legend>YER · mismo proceso y dos Excel para todas las estaciones</legend><div class="econ-grid">${FUELS.map(f=>`<div data-rate="${f}"><h3>${f.replaceAll('_',' ')}</h3>${selectField('Modalidad','mode',draft.yer[f].mode,[['porcentaje','Porcentaje de venta'],['pesos_litro','Pesos por litro']])}${field('Valor de la comisión','value',draft.yer[f].value,'number')}</div>`).join('')}</div><p>Porcentaje: importe de la venta × porcentaje, sin deducciones. Pesos por litro: litros vendidos × comisión. La modalidad se define por producto.</p></fieldset><div id="ec-concepts">${draft.concepts.map((c,i)=>`<fieldset data-concept="${i}"><legend>Recupero ${i+1}</legend>${checkbox('Aplica','enabled',c.enabled)}<div class="econ-grid">${field('Nombre','name',c.name)}${selectField('Área','area',c.area,[['us','Unidad Servicial'],['hotel','Hotel']])}${field('Medidor / cuenta / proveedor','medidor',c.medidor)}${selectField('Modalidad','mode',c.mode,[['porcentaje','Porcentaje de base'],['factura','Importe de factura'],['mixto','Factura + porcentaje'],['litros','Litros × precio combustible']])}${field('Porcentaje','pct',c.pct,'number')}${field('Litros pactados','litros',c.litros,'number')}${field('IVA a agregar al recupero (%)','vat',c.vat,'number')}</div>${checkbox('Deducir IVA de la base','deductIVA',c.deductIVA)}${checkbox('Deducir percepciones de la base','deductPercepciones',c.deductPercepciones)}${checkbox('Deducir intereses de la base','deductIntereses',c.deductIntereses)}${field('Base de cálculo / componentes de la modalidad mixta / combustible','base',c.base)}${field('Observaciones del acuerdo','notes',c.notes)}<label>Tipos de movimiento (uno por línea)<textarea data-k="tipos" rows="3">${esc((c.tipos||[]).join('\n'))}</textarea></label>${checkbox('Pedir fecha del aviso (mail)','fechaAviso',c.fechaAviso)}${field('Factura de recupero (grupo)','grupo',c.grupo||'')}</fieldset>`).join('')}</div><button type="button" id="ec-add">+ Agregar medidor o recupero propio</button><p>Cancelaciones y Checks mantienen el mismo funcionamiento en todas las estaciones.</p><button type="submit">Descargar formulario completo (JSON)</button>${onSave?'<button type="button" id="ec-save">Aplicar condiciones a esta estación</button>':''}<button type="button" id="ec-import">Importar formulario JSON</button><input type="file" id="ec-file" accept=".json,application/json" hidden><button type="button" onclick="window.print()">Imprimir / guardar PDF</button><p id="ec-status" role="status"></p></form></section>`;
  el.querySelector('#ec-head .econ-grid').insertAdjacentHTML('beforeend',field('Observaciones generales','observaciones',draft.observaciones||''));
  el.querySelectorAll('[data-concept]').forEach((box,i)=>{const select=box.querySelector('[data-k="mode"]');const selected=draft.concepts[i].mode==='total_menos_iva_percepciones';select.add(new Option('Importe total menos IVA menos percepciones','total_menos_iva_percepciones',selected,selected));});
- el.querySelector('#ec-add').onclick=()=>{draft=collect();draft.concepts.push({id:'extra_'+crypto.randomUUID().replaceAll('-',''),name:'',area:'us',enabled:true,mode:'porcentaje',pct:null,litros:null,vat:0,base:'',medidor:'',notes:''});paint();};
+ el.querySelector('#ec-add').onclick=()=>{draft=collect();draft.concepts.push({id:'extra_'+crypto.randomUUID().replaceAll('-',''),name:'',area:'us',enabled:true,mode:'porcentaje',pct:null,litros:null,vat:0,base:'',medidor:'',notes:'',tipos:[],fechaAviso:false,grupo:''});paint();};
  const status=msg=>el.querySelector('#ec-status').textContent=msg;
  el.querySelector('#ec-form').onsubmit=e=>{e.preventDefault();try{draft=checkEconomic(collect());econDownload('condiciones-'+draft.cr+'.json',draft);status('Formulario descargado. Enviáselo al administrador.');}catch(e){status(e.message);}};
+ if(onHistorial){el.querySelector('#ec-import').insertAdjacentHTML('afterend','<button type="button" id="ec-hist">Importar historial del Excel (JSON)</button><input type="file" id="ec-hist-file" accept=".json,application/json" hidden>');el.querySelector('#ec-hist').onclick=()=>el.querySelector('#ec-hist-file').click();el.querySelector('#ec-hist-file').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{status(await onHistorial(file)||'');}catch(err){status(err.message);}};}
  el.querySelector('#ec-import').onclick=()=>el.querySelector('#ec-file').click();
  el.querySelector('#ec-file').onchange=async e=>{try{if(e.target.files[0].size>250000)throw Error('Archivo demasiado grande.');draft=checkEconomic(JSON.parse(await e.target.files[0].text()));paint();status('Formulario leído. Revisalo antes de aplicarlo.');}catch(e){status(e.message);}};
  if(onSave)el.querySelector('#ec-save').onclick=async()=>{try{draft=checkEconomic(collect());await onSave(draft);status('Condiciones guardadas. Las liquidaciones existentes conservan su cálculo.');}catch(e){status(e.message);}};
  }
  paint();
 }
-function renderEconomic(){if(!IS_ACCESS_ADMIN){document.getElementById('tab-content').textContent='Las condiciones las carga el administrador.';return;}mountEconomic(document.getElementById('tab-content'),economicFor(CP)||blankEconomic(CURRENT_CR),saveEconomicConfiguration);}
+function renderEconomic(){if(!IS_ACCESS_ADMIN){document.getElementById('tab-content').textContent='Las condiciones las carga el administrador.';return;}mountEconomic(document.getElementById('tab-content'),economicFor(CP)||blankEconomic(CURRENT_CR),saveEconomicConfiguration,importHistorialFile);}
 function calculateEconomic(c,v){
  const number=(key)=>{const n=v[key];if(typeof n!=='number'||!Number.isFinite(n)||n<0)throw Error('Completá '+key+' con un importe válido.');return n;};
  let base=0,total=0;
@@ -7268,11 +7286,14 @@ function calculateEconomic(c,v){
 }
 async function renderEconomicEntry(area){
  const el=document.getElementById('tab-content');const c=economicFor(CP);
- if(!c){el.innerHTML=econStyle+'<div class="econ"><h2>Faltan condiciones económicas</h2><p>Completá o importá el formulario en Condiciones económicas.</p></div>';return;}
+ const histCR=CURRENT_CR,histPeriod=CP,years=await historialYears(histPeriod);if(CURRENT_CR!==histCR||CP!==histPeriod)return;
+ const histButtons=historialButtons(years);
+ if(!c){el.innerHTML=econStyle+'<div class="econ"><h2>Faltan condiciones económicas</h2><p>'+(IS_ACCESS_ADMIN?'Completá o importá el formulario en Condiciones económicas.':'Este período no tiene condiciones económicas cargadas. Si corresponde, consultá con el administrador.')+'</p>'+histButtons+'</div>';attachHistorialButtons(el,area);return;}
  const cr=CURRENT_CR,period=CP;let entries;try{const raw=await sGet('economic:entries:'+period);entries=raw?JSON.parse(raw):[];}catch(e){el.textContent=e.message;return;}
  if(CURRENT_CR!==cr)return;
- el.innerHTML=econStyle+`<div class="econ"><h2>Recuperos · ${esc(period)} · CR ${esc(cr)}</h2><p>Acuerdo vigente desde ${esc(c.vigencia)}. Cada registro conserva su condición e importe. Los archivos históricos permanecen en las pantallas originales.</p><label>Período <input type="month" id="ee-period" value="${period}"></label><button id="ee-legacy">Consultar pantalla histórica original</button>${c.concepts.filter(x=>x.enabled&&(!area||x.area===area)).map(x=>`<form data-entry="${x.id}"><fieldset><legend>${esc(x.name)} ${esc(x.medidor)}</legend><p>${esc(x.base)} · ${esc(x.mode)}${['porcentaje','mixto'].includes(x.mode)?' · '+x.pct+'%':''}${x.mode==='litros'?' · '+x.litros+' litros':''}</p><div class="econ-grid">${(['porcentaje','mixto'].includes(x.mode)?field('Facturación / base','base',null,'number'):'')}${x.deductIVA?field('IVA a deducir','iva',0,'number'):''}${x.deductPercepciones?field('Percepciones a deducir','percepciones',0,'number'):''}${x.deductIntereses?field('Intereses a deducir','intereses',0,'number'):''}${['factura','mixto'].includes(x.mode)?field('Importe de factura (confirmar lectura)','factura',null,'number'):''}${x.mode==='litros'?field('Precio por litro','precio',null,'number'):''}${field('Número de comprobante','nro','')}${field('Fecha','fecha','','date')}${x.area==='hotel'?field('Nota de crédito a descontar (0 si no hay)','notaCredito',0,'number')+field('Número de nota de crédito','ncNro','')+field('Fecha de nota de crédito','ncFecha','','date'):''}</div>${x.area==='hotel'?'<p>La nota de crédito se descuenta del recupero antes del IVA adicional, si lo hubiera. Cargá el importe sobre esa misma base.</p><label>Adjuntar nota de crédito <input type="file" class="ee-nc-file" accept=".pdf,.png,.jpg,.jpeg"></label>':''}<label>Adjuntar factura / respaldo <input type="file" class="ee-file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"></label><button type="submit">Calcular y guardar</button><output class="ee-result"></output></fieldset></form>`).join('')}<h3>Registros guardados del período</h3><table><thead><tr><th>Concepto</th><th>Comprobante</th><th>Importe</th><th>Respaldo</th></tr></thead><tbody>${entries.map((r,i)=>`<tr><td>${esc(r.condition.name)}</td><td>${esc(r.values.nro)}</td><td>${fmtM(r.total)}</td><td>${r.fileKey?`<button data-ee-view="${i}">Ver archivo</button>`:'Sin archivo'}${r.ncFileKey?` <button data-ee-nc-view="${i}">Ver NC</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+ el.innerHTML=econStyle+`<div class="econ"><h2>Recuperos · ${esc(period)} · CR ${esc(cr)}</h2><p>Acuerdo vigente desde ${esc(c.vigencia)}. Cada registro conserva su condición e importe. Los archivos históricos permanecen en las pantallas originales.</p><label>Período <input type="month" id="ee-period" value="${period}"></label><button id="ee-legacy">Consultar pantalla histórica original</button>${histButtons}${c.concepts.filter(x=>x.enabled&&(!area||x.area===area)).map(x=>`<form data-entry="${x.id}"><fieldset><legend>${esc(x.name)} ${esc(x.medidor)}</legend><p>${esc(x.base)} · ${esc(x.mode)}${['porcentaje','mixto'].includes(x.mode)?' · '+x.pct+'%':''}${x.mode==='litros'?' · '+x.litros+' litros':''}</p><div class="econ-grid">${(['porcentaje','mixto'].includes(x.mode)?field('Facturación / base','base',null,'number'):'')}${x.deductIVA?field('IVA a deducir','iva',0,'number'):''}${x.deductPercepciones?field('Percepciones a deducir','percepciones',0,'number'):''}${x.deductIntereses?field('Intereses a deducir','intereses',0,'number'):''}${['factura','mixto'].includes(x.mode)?field('Importe de factura (confirmar lectura)','factura',null,'number'):''}${x.mode==='litros'?field('Precio por litro','precio',null,'number'):''}${field('Número de comprobante','nro','')}${field('Fecha','fecha','','date')}${(x.tipos||[]).length?`<label>Tipo <select data-k="tipo" required><option value="">— Elegí —</option>${x.tipos.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>`:''}${x.fechaAviso?field('Fecha del aviso (mail)','fechaAviso','','date'):''}<label>Detalle <input data-k="detalle" type="text" maxlength="300" value=""></label>${x.area==='hotel'?field('Nota de crédito a descontar (0 si no hay)','notaCredito',0,'number')+field('Número de nota de crédito','ncNro','')+field('Fecha de nota de crédito','ncFecha','','date'):''}</div>${x.area==='hotel'?'<p>La nota de crédito se descuenta del recupero antes del IVA adicional, si lo hubiera. Cargá el importe sobre esa misma base.</p><label>Adjuntar nota de crédito <input type="file" class="ee-nc-file" accept=".pdf,.png,.jpg,.jpeg"></label>':''}<label>Adjuntar factura / respaldo <input type="file" class="ee-file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"></label><button type="submit">Calcular y guardar</button><output class="ee-result"></output></fieldset></form>`).join('')}<h3>Registros guardados del período</h3><div class="scroll" role="region" tabindex="0" aria-label="Registros guardados del período ${esc(period)}"><table><thead><tr><th>Concepto</th><th>Comprobante</th><th>Detalle</th><th>Importe</th><th>Respaldo</th></tr></thead><tbody>${economicEntryRows(entries)}</tbody></table></div></div>`;
  el.querySelector('#ee-period').onchange=async e=>{if(!e.target.value)return;try{await loadPeriod(e.target.value);renderEconomicEntry(area);}catch(e){alert(e.message);}};
+ attachHistorialButtons(el,area);
  el.querySelector('#ee-legacy').onclick=()=>{if(area==='hotel'){el.innerHTML=renderHotel();attachHotel();attachGenericFiles();}else renderUSGrid();};
  el.querySelectorAll('[data-entry]').forEach(form=>{const condition=c.concepts.find(x=>x.id===form.dataset.entry);if(condition?.mode==='total_menos_iva_percepciones'){form.querySelector('.econ-grid').insertAdjacentHTML('afterbegin',field('Importe total','base',null,'number')+field('IVA a descontar','iva',0,'number')+field('Percepciones a descontar','percepciones',0,'number'));}});
  el.querySelectorAll('[data-ee-view]').forEach(b=>b.onclick=async()=>{try{const raw=await sGet(entries[+b.dataset.eeView].fileKey);if(raw)openFileViewer(JSON.parse(raw));else alert('Archivo no encontrado.');}catch(e){alert(e.message);}});
@@ -7281,8 +7302,132 @@ async function renderEconomicEntry(area){
  const condition=c.concepts.find(x=>x.id===form.dataset.entry);let file=null,ncFile=null;
  const ncInput=form.querySelector('.ee-nc-file');if(ncInput)ncInput.onchange=e=>{ncFile=e.target.files[0]||null;if(ncFile&&ncFile.size>MAX_FILE){alert('Máximo 3,5 MB');ncFile=null;e.target.value='';}};
  form.querySelector('.ee-file').onchange=async e=>{file=e.target.files[0];if(!file)return;if(file.size>MAX_FILE){alert('Máximo 3,5 MB');file=null;e.target.value='';return;}if(file.type==='application/pdf'&&form.querySelector('[data-k="factura"]')){try{const pdf=await openPdf(await file.arrayBuffer());let text='';for(let i=1;i<=pdf.numPages;i++)text+=(await (await pdf.getPage(i)).getTextContent()).items.map(x=>x.str).join(' ')+'\n';const candidates=[...text.matchAll(/(?:importe\s+total|total\s+a\s+pagar|total\s+factura)\s*[:$]?\s*([\d.,]+)/gi)];if(candidates.length===1){form.querySelector('[data-k="factura"]').value=parseNum(candidates[0][1]);form.querySelector('output').textContent='Importe detectado. Comparalo con la factura antes de guardar.';}else form.querySelector('output').textContent='No hay un total inequívoco. Ingresá el importe manualmente.';}catch(e){form.querySelector('output').textContent='No se pudo leer el PDF. Ingresá el importe manualmente.';}}};
- form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{if(CURRENT_CR!==cr||CP!==period)throw Error('Cambió la estación o el período. Recargá la pantalla.');const values=getFields(form);const total=calculateEconomic(condition,values);if(condition.area==='hotel'){if(values.notaCredito>0&&(!values.ncNro||!/^\d{4}-\d{2}-\d{2}$/.test(values.ncFecha)))throw Error('Completá número y fecha de la nota de crédito.');if((ncFile||values.ncNro||values.ncFecha)&&!(values.notaCredito>0))throw Error('Ingresá el importe de la nota de crédito.');}if(!values.nro||!values.fecha)throw Error('Completá número de comprobante y fecha.');if(entries.some(r=>r.condition.id===condition.id&&r.values.nro===values.nro))throw Error('Este comprobante ya está cargado para el concepto.');const id=crypto.randomUUID();let fileKey=null;if(file){fileKey='file:economic:'+period+':'+id;if(!await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:await readDU(file)})))throw Error('Archivo pendiente de sincronización. Reintentá cuando esté guardado.');}let ncFileKey=null;if(ncFile){ncFileKey='file:economic:'+period+':'+id+':nc';if(!await sSet(ncFileKey,JSON.stringify({fileName:ncFile.name,type:ncFile.type,dataUrl:await readDU(ncFile)})))throw Error('Nota de crédito pendiente de sincronización.');}const entry={id,period,cr,ncFileKey,condition:structuredClone(condition),vigencia:c.vigencia,values,total,fileKey,createdAt:new Date().toISOString(),user:CU.username};const next=[...entries,entry];if(!await sSet('economic:entries:'+period,JSON.stringify(next)))throw Error('Registro pendiente de sincronización.');entries=next;await renderEconomicEntry(area);}catch(e){form.querySelector('output').textContent=e.message;}finally{button.disabled=false;}};
+ form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{if(CURRENT_CR!==cr||CP!==period)throw Error('Cambió la estación o el período. Recargá la pantalla.');const values=normalizeEntryExtras(condition,getFields(form));const total=calculateEconomic(condition,values);if(condition.area==='hotel'){if(values.notaCredito>0&&(!values.ncNro||!/^\d{4}-\d{2}-\d{2}$/.test(values.ncFecha)))throw Error('Completá número y fecha de la nota de crédito.');if((ncFile||values.ncNro||values.ncFecha)&&!(values.notaCredito>0))throw Error('Ingresá el importe de la nota de crédito.');}if(!values.nro||!values.fecha)throw Error('Completá número de comprobante y fecha.');if(entries.some(r=>r.condition.id===condition.id&&r.values.nro===values.nro&&(r.values.tipo||'')===(values.tipo||'')))throw Error('Este comprobante ya está cargado para el concepto.');const id=crypto.randomUUID();let fileKey=null;if(file){fileKey='file:economic:'+period+':'+id;if(!await sSet(fileKey,JSON.stringify({fileName:file.name,type:file.type,dataUrl:await readDU(file)})))throw Error('Archivo pendiente de sincronización. Reintentá cuando esté guardado.');}let ncFileKey=null;if(ncFile){ncFileKey='file:economic:'+period+':'+id+':nc';if(!await sSet(ncFileKey,JSON.stringify({fileName:ncFile.name,type:ncFile.type,dataUrl:await readDU(ncFile)})))throw Error('Nota de crédito pendiente de sincronización.');}const entry={id,period,cr,ncFileKey,condition:structuredClone(condition),vigencia:c.vigencia,values,total,fileKey,createdAt:new Date().toISOString(),user:CU.username};const next=[...entries,entry];if(!await sSet('economic:entries:'+period,JSON.stringify(next)))throw Error('Registro pendiente de sincronización.');entries=next;await renderEconomicEntry(area);}catch(e){form.querySelector('output').textContent=e.message;}finally{button.disabled=false;}};
  });
+}
+// Tipo, fecha del aviso y detalle de cada registro (v4.3.13). Se guardan solo
+// si corresponden; los registros anteriores no los tienen y se muestran igual.
+function normalizeEntryExtras(condition,values){
+ const tipos=condition.tipos||[];
+ if(tipos.length){if(!values.tipo)throw Error('Elegí el tipo de movimiento.');if(!tipos.includes(values.tipo))throw Error('El tipo elegido no corresponde a este concepto.');}else delete values.tipo;
+ if(condition.fechaAviso&&values.fechaAviso){if(!isoDateOk(values.fechaAviso))throw Error('La fecha del aviso no es válida.');}else delete values.fechaAviso;
+ const detalle=String(values.detalle??'').trim();if(detalle.length>300)throw Error('El detalle admite hasta 300 caracteres.');
+ if(detalle)values.detalle=detalle;else delete values.detalle;
+ return values;
+}
+function economicEntryDetail(v){
+ const parts=[v.tipo,v.detalle].filter(Boolean).map(esc).join(' — ');
+ return parts+(v.fechaAviso?(parts?'<br>':'')+'<small>Aviso: '+esc(fmtFechaIso(v.fechaAviso))+'</small>':'');
+}
+// Los conceptos con el mismo grupo (factura de recupero) van juntos, seguidos
+// de su subtotal. Sin total general: cada factura se liquida por separado.
+function economicEntryRows(entries){
+ const row=(r,i)=>`<tr><td>${esc(r.condition.name)}</td><td>${esc(r.values.nro)}</td><td>${economicEntryDetail(r.values||{})}</td><td class="amt">${fmtM(r.total)}</td><td>${r.fileKey?`<button data-ee-view="${i}">Ver archivo</button>`:'Sin archivo'}${r.ncFileKey?` <button data-ee-nc-view="${i}">Ver NC</button>`:''}</td></tr>`;
+ const grupo=r=>String(r.condition?.grupo||'').trim(),done=new Set();let html='';
+ entries.forEach((r,i)=>{
+  const g=grupo(r);if(!g){html+=row(r,i);return;}if(done.has(g))return;done.add(g);
+  let cents=0;entries.forEach((o,j)=>{if(grupo(o)===g){html+=row(o,j);cents+=Math.round(Number(o.total||0)*100);}});
+  html+=`<tr class="ee-subtotal"><th scope="row" colspan="3">Subtotal ${esc(g)}</th><td class="amt"><strong>${fmtM(cents/100)}</strong></td><td></td></tr>`;
+ });
+ return html;
+}
+
+// Historial importado del Excel de una estación (v4.3.13): copia de consulta,
+// de solo lectura. Se guarda en economic:versions:historial:<año>, dentro del
+// espacio de condiciones: solo el administrador lo escribe y la estación lo lee.
+// No se recalcula ni se suma a las cargas.
+const HISTORIAL_MAX_BYTES=2000000;
+const HISTORIAL_AVISO='Copia de consulta del Excel de la estación. No se recalcula ni se suma a las cargas.';
+function historialKey(anio){return 'economic:versions:historial:'+anio;}
+function checkHistorial(h,cr){
+ const fail=msg=>{throw Error('Historial inválido: '+msg);};
+ const str=(v,max,name,min=0)=>{if(v===undefined||v===null)v='';if(typeof v!=='string'||v.length<min||v.length>max)fail(name+(min?' debe tener entre '+min+' y ':' admite hasta ')+max+' caracteres.');return v;};
+ const num=(v,name)=>{if(v===undefined||v===null)return null;if(typeof v!=='number'||!Number.isFinite(v))fail(name+' debe ser un número o vacío.');return v;};
+ if(!h||typeof h!=='object'||Array.isArray(h))fail('el archivo no es un objeto JSON.');
+ if(h.schema!==1||h.tipo!=='historial-importado')fail('falta schema 1 o tipo «historial-importado».');
+ if(typeof h.cr!=='string'||!/^\d{4}$/.test(h.cr))fail('CR inválido.');
+ if(h.cr!==String(cr))fail('corresponde al CR '+h.cr+' y no a la estación seleccionada (CR '+cr+').');
+ if(!Number.isInteger(h.anio)||h.anio<2000||h.anio>2100)fail('año inválido.');
+ const o=h.origen;if(!o||typeof o!=='object')fail('falta el origen.');
+ const archivo=str(o.archivo,200,'El nombre del archivo de origen',1);
+ if(typeof o.sha256!=='string'||!/^[0-9a-f]{64}$/.test(o.sha256))fail('la huella SHA-256 del origen debe tener 64 caracteres hexadecimales.');
+ if(typeof o.importado!=='string'||!isoDateOk(o.importado))fail('la fecha de importación debe ser AAAA-MM-DD.');
+ const nota=str(h.nota,500,'La nota');
+ if(!Array.isArray(h.filas)||!h.filas.length||h.filas.length>3000)fail('debe tener entre 1 y 3000 filas.');
+ const ids=new Set();
+ const filas=h.filas.map((r,i)=>{
+  const at='fila '+(i+1)+': ';
+  if(!r||typeof r!=='object'||Array.isArray(r))fail(at+'no es un objeto.');
+  const id=str(r.id,20,at+'el id',1);if(ids.has(id))fail(at+'id repetido ('+id+').');ids.add(id);
+  if(typeof r.periodo!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.periodo)||Number(r.periodo.slice(0,4))!==h.anio)fail(at+'el período debe ser AAAA-MM del año '+h.anio+'.');
+  const fecha=r.fecha===undefined||r.fecha===null?'':r.fecha;if(fecha!==''&&(typeof fecha!=='string'||!isoDateOk(fecha)))fail(at+'la fecha debe ser AAAA-MM-DD o vacía.');
+  const marcas=r.marcas===undefined||r.marcas===null?[]:r.marcas;
+  if(!Array.isArray(marcas)||marcas.length>10)fail(at+'las marcas deben ser una lista de hasta 10.');
+  if(r.noRecupera!==undefined&&typeof r.noRecupera!=='boolean')fail(at+'noRecupera debe ser verdadero o falso.');
+  const out={id,concepto:str(r.concepto,120,at+'el concepto',1),hoja:str(r.hoja,60,at+'la hoja'),periodo:r.periodo,nro:str(r.nro,120,at+'el comprobante'),fecha,
+   total:num(r.total,at+'total'),iva:num(r.iva,at+'IVA'),percepciones:num(r.percepciones,at+'percepciones'),recupero:num(r.recupero,at+'recupero'),
+   detalle:str(r.detalle,500,at+'el detalle'),marcas:marcas.map(m=>str(m,300,at+'cada marca'))};
+  if(r.fechaTexto!==undefined&&r.fechaTexto!==null)out.fechaTexto=str(r.fechaTexto,60,at+'el texto de la fecha');
+  if(r.noRecupera)out.noRecupera=true;
+  return out;
+ });
+ return {schema:1,tipo:'historial-importado',cr:h.cr,anio:h.anio,origen:{archivo,sha256:o.sha256,importado:o.importado},nota,filas};
+}
+function historialSummary(h){
+ const conceptos=new Set(h.filas.map(r=>r.concepto)),periodos=new Set(h.filas.map(r=>r.periodo));
+ return {anio:h.anio,filas:h.filas.length,conceptos:conceptos.size,periodos:periodos.size,conMarcas:h.filas.filter(r=>r.marcas.length).length};
+}
+// Años a consultar: el del período, el anterior y el actual (cada lectura queda en caché).
+async function historialYears(period){
+ const y=Number(String(period).slice(0,4)),now=new Date().getFullYear();
+ const years=[...new Set([y,y-1,now].filter(n=>n>=2000&&n<=2100))].sort((a,b)=>b-a),found=[];
+ for(const anio of years){try{if(await sGet(historialKey(anio)))found.push(anio);}catch(e){console.warn('No se pudo consultar el historial',anio,e.message);}}
+ return found;
+}
+function historialButtons(years){return years.length?'<p>'+years.map(y=>`<button type="button" data-historial="${y}">Historial ${y} (Excel)</button>`).join('')+'</p>':'';}
+function attachHistorialButtons(el,area){el.querySelectorAll('[data-historial]').forEach(b=>b.onclick=()=>renderHistorial(Number(b.dataset.historial),area));}
+async function loadHistorial(anio){
+ const raw=await sGet(historialKey(anio));if(!raw)return null;
+ try{return checkHistorial(JSON.parse(raw),CURRENT_CR);}catch(e){throw Error('El historial '+anio+' guardado no se puede mostrar. '+e.message);}
+}
+function historialFiltrar(h,f){
+ const q=String(f.q||'').trim().toLocaleLowerCase('es-AR');
+ return h.filas.filter(r=>(!f.concepto||r.concepto===f.concepto)&&(!f.periodo||r.periodo===f.periodo)&&(!q||[r.concepto,r.hoja,r.nro,r.detalle,r.fechaTexto||'',...r.marcas].join(' ').toLocaleLowerCase('es-AR').includes(q)))
+  .map((r,i)=>[r,i]).sort((a,b)=>a[0].periodo.localeCompare(b[0].periodo)||a[1]-b[1]).map(x=>x[0]);
+}
+function historialRecupero(rows){return Math.round(rows.reduce((n,r)=>n+(r.noRecupera||r.recupero===null?0:Math.round(r.recupero*100)),0))/100;}
+function historialRow(r){
+ const marcas=r.marcas.map(m=>'⚠ '+esc(m));if(r.noRecupera)marcas.unshift('<strong>No se recupera</strong>');const extra=marcas.map(m=>`<small class="hs-sub">${m}</small>`).join('');
+ return `<tr${r.noRecupera?' class="hs-no"':''}><td>${esc(periodLabel(r.periodo))}</td><td>${esc(r.concepto)}${r.hoja?`<br><small>${esc(r.hoja)}</small>`:''}</td><td>${esc(r.nro)}</td><td>${esc(r.fecha?fmtFechaIso(r.fecha):(r.fechaTexto||''))}</td><td class="amt">${fmtM(r.total)}</td><td class="amt">${fmtM(r.iva)}</td><td class="amt">${fmtM(r.recupero)}</td><td>${esc(r.detalle)}${extra}</td></tr>`;
+}
+async function renderHistorial(anio,area){
+ const el=document.getElementById('tab-content'),cr=CURRENT_CR;let h;
+ try{h=await loadHistorial(anio);}catch(e){el.textContent=e.message;return;}
+ if(CURRENT_CR!==cr)return;
+ if(!h){el.textContent='No hay historial '+anio+' para esta estación.';return;}
+ const conceptos=[...new Set(h.filas.map(r=>r.concepto))].sort((a,b)=>a.localeCompare(b,'es')),periodos=[...new Set(h.filas.map(r=>r.periodo))].sort();
+ el.innerHTML=econStyle+`<div class="econ"><h2>Historial ${esc(anio)} (Excel) · CR ${esc(cr)}</h2><p class="note">${HISTORIAL_AVISO}</p><p>Archivo de origen: ${esc(h.origen.archivo)} · importado el ${esc(fmtFechaIso(h.origen.importado))}</p>${h.nota&&h.nota.trim().toLowerCase()!==HISTORIAL_AVISO.toLowerCase()?`<p>${esc(h.nota.trim())}</p>`:''}<button type="button" id="hs-back">Volver a Recuperos</button><button type="button" id="hs-xlsx">Descargar Excel</button><div class="econ-grid"><label class="hs-f">Concepto<select id="hs-concepto"><option value="">Todos</option>${conceptos.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label><label class="hs-f">Período<select id="hs-periodo"><option value="">Todos</option>${periodos.map(p=>`<option value="${esc(p)}">${esc(periodLabel(p))}</option>`).join('')}</select></label><label class="hs-f">Buscar<input type="search" id="hs-q" placeholder="Comprobante, detalle o marca"></label></div><p id="hs-resumen" role="status" aria-live="polite"></p><div class="scroll" role="region" tabindex="0" aria-label="Tabla del historial ${esc(anio)}"><table><caption class="sr-only">Historial ${esc(anio)} importado del Excel</caption><thead><tr><th scope="col">Período</th><th scope="col">Concepto</th><th scope="col">Comprobante</th><th scope="col">Fecha</th><th scope="col">Total</th><th scope="col">IVA</th><th scope="col">Recupero</th><th scope="col">Detalle y marcas</th></tr></thead><tbody id="hs-body"></tbody><tfoot><tr><th scope="row" colspan="6" id="hs-filas"></th><td id="hs-total" class="amt"></td><td></td></tr></tfoot></table></div><p id="hs-status" role="status"></p></div>`;
+ let visible=[];
+ const paint=()=>{
+  visible=historialFiltrar(h,{concepto:el.querySelector('#hs-concepto').value,periodo:el.querySelector('#hs-periodo').value,q:el.querySelector('#hs-q').value});
+  const sum=historialRecupero(visible);
+  el.querySelector('#hs-body').innerHTML=visible.map(historialRow).join('')||'<tr><td colspan="8">No hay filas con esos filtros.</td></tr>';
+  el.querySelector('#hs-filas').textContent=visible.length+(visible.length===1?' fila':' filas');
+  el.querySelector('#hs-total').textContent=fmtM(sum);
+  el.querySelector('#hs-resumen').textContent=visible.length+(visible.length===1?' fila':' filas')+' · Recupero: '+fmtM(sum)+' (sin las filas que no se recuperan)';
+ };
+ ['#hs-concepto','#hs-periodo'].forEach(s=>el.querySelector(s).onchange=paint);el.querySelector('#hs-q').oninput=paint;
+ el.querySelector('#hs-back').onclick=()=>renderEconomicEntry(area);
+ el.querySelector('#hs-xlsx').onclick=async()=>{
+  try{
+   const X=await loadXLSX();
+   const rows=[['Período','Hoja','Concepto','Comprobante','Fecha','Total','IVA','Percepciones','Recupero','Se recupera','Detalle','Marcas']];
+   visible.forEach(r=>rows.push([r.periodo,r.hoja,r.concepto,r.nro,r.fecha?fmtFechaIso(r.fecha):(r.fechaTexto||''),r.total,r.iva,r.percepciones,r.recupero,r.noRecupera?'No':'Sí',r.detalle,r.marcas.join(' | ')]));
+   const ws=X.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:9},{wch:16},{wch:28},{wch:18},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:11},{wch:40},{wch:40}];
+   const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Historial '+anio);X.writeFile(wb,'Historial_CR'+cr+'_'+anio+'.xlsx');
+  }catch(e){el.querySelector('#hs-status').textContent=e.message;}
+ };
+ paint();
 }
 
 function yerRate(key){
@@ -7371,7 +7516,7 @@ async function renderAccessAdmin(){
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
- root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration,importHistorialFile);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
  }catch(e){root.innerHTML=econStyle+`<section class="econ"><h1>No se pudo cargar la administración</h1><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){
@@ -7381,6 +7526,23 @@ async function saveEconomicConfiguration(c){
  const next=[...ECON,structuredClone(c)];if(!await sSet('economic:versions',JSON.stringify(next)))throw Error('Condiciones pendientes de sincronización. No están confirmadas en la nube.');ECON=next;
 }
 
+// Historial del Excel de la estación (solo lectura para ella). Se guarda como las
+// condiciones, en la estación que se está administrando.
+async function importHistorialFile(file){
+ if(!IS_ACCESS_ADMIN)throw Error('Solo el administrador puede importar historiales.');
+ if(file.size>HISTORIAL_MAX_BYTES)throw Error('Archivo demasiado grande: máximo 2 MB.');
+ let parsed;try{parsed=JSON.parse(await file.text());}catch{throw Error('El archivo no es un JSON válido.');}
+ const cr=CURRENT_CR,h=checkHistorial(parsed,cr),s=historialSummary(h),key=historialKey(h.anio);
+ const existing=await sGet(key);
+ const resumen=['Historial del Excel · CR '+cr,'Año: '+s.anio,'Filas: '+s.filas,'Conceptos: '+s.conceptos,'Períodos: '+s.periodos,'Filas con marcas: '+s.conMarcas];
+ if(existing)resumen.push('','Ya existe un historial '+s.anio+' para esta estación.');
+ resumen.push('','¿Importarlo?');
+ if(!confirm(resumen.join('\n')))return 'Importación cancelada.';
+ if(existing&&!confirm('Vas a reemplazar el historial '+s.anio+' existente de CR '+cr+'. Se conserva su copia previa. ¿Confirmás el reemplazo?'))return 'Importación cancelada: el historial existente no se modificó.';
+ if(CURRENT_CR!==cr)throw Error('Cambió la estación seleccionada. Volvé a importar.');
+ if(!await sSet(key,JSON.stringify(h)))throw Error('Historial pendiente de sincronización. No está confirmado en la nube.');
+ return 'Historial '+s.anio+' guardado: '+s.filas+' filas, '+s.conceptos+' conceptos y '+s.periodos+' períodos.';
+}
 async function openAdminPanel(){if(!IS_ACCESS_ADMIN)return;if(syncPend()&&!await sincronizar(true))return;CU={uid:AUTH_PERSON.uid,username:AUTH_PERSON.email,role:"access-admin",name:"Administración de accesos"};render();}
 
 render();

@@ -89,6 +89,11 @@ Los cigarrillos siempre se descuentan.
 - Importe total menos IVA menos percepciones.
 - Deducciones opcionales de IVA, percepciones e intereses en modalidades compatibles.
 - IVA adicional configurable cuando corresponda.
+- Opciones por concepto (desde v4.3.13), que no cambian el cálculo:
+  - `tipos`: lista de tipos de movimiento; cada carga elige uno (por ejemplo, Reintegros);
+  - `fechaAviso`: pide la fecha del aviso (mail) además de la fecha del comprobante;
+  - `grupo`: factura de recupero; los conceptos del mismo grupo se listan juntos con su subtotal.
+- Cada carga admite un «Detalle» opcional (qué reconocimiento, objetivo cumplido, estación, etc.).
 
 ### Hotel
 
@@ -118,7 +123,8 @@ Los cigarrillos siempre se descuentan.
   - los valores de 64 KB o más se guardan comprimidos con gzip como `Bytes` dentro del mismo documento (`enc`, `z`, `bytes`, `sha256`);
   - el contenido de los adjuntos (`dataUrl`) va a un blob por estación (`crXXXX--blob--<sha256>` y sus `--part--N`), comprimido cuando conviene. El documento del adjunto guarda nombre, tipo y la huella (`blob`). El mismo archivo se guarda una sola vez, y una subida cortada se completa con el mismo nombre al reintentar;
   - todas las escrituras llevan `fmt: 2`. Las reglas no dejan que una versión anterior sobrescriba un documento comprimido, porque lo leería como vacío.
-- Copia previa: una por documento y por día. La primera modificación del día conserva cómo había quedado antes; los cambios del mismo día no generan copias nuevas. Las referencias a archivos y a fragmentos siempre conservan copia.
+- Copia previa: una por documento y por día. La primera modificación del día conserva cómo había quedado antes; los cambios del mismo día no generan copias nuevas. Las referencias a archivos y a fragmentos, las condiciones y el historial importado (`economic:versions*`, desde v4.3.13) siempre conservan copia.
+- Historial importado del Excel (desde v4.3.13): `economic:versions:historial:<año>` (documento `crXXXX--economic--versions--historial--<año>`). Entra en `config()` de las reglas: solo el administrador lo escribe y la estación solo lo lee. Es una copia de consulta: no se recalcula ni se suma a las cargas.
 - Las colas antiguas de sincronización no deben reproducirse automáticamente en Colonia.
 
 ## Archivos y estructura de trabajo
@@ -128,6 +134,7 @@ Los cigarrillos siempre se descuentan.
 - `revision/index.html`: candidata ensamblada. Después de validar, copiarla a la raíz para publicar.
 - `revision/storage.js`: persistencia, fragmentación, integridad, conflictos y respaldo previo.
 - `revision/economic.js`: condiciones, fórmulas, formulario e historial económico.
+- `revision/historial.js` (desde v4.3.13): historial de consulta importado del Excel de una estación (`checkHistorial`, importación del administrador y vista de solo lectura).
 - `revision/yer-rates.js`: lógica de comisiones YER.
 - `revision/access.js`: Google, solicitudes, aprobación y panel administrador.
 - `revision/firestore.rules`: reglas propuestas/probadas.
@@ -178,7 +185,7 @@ La regresión con datos reales se ejecuta solamente cuando el respaldo privado e
 
 ## Estado de pruebas conocido
 
-- 52 pruebas funcionales aprobadas en v4.3.12.
+- 62 pruebas funcionales aprobadas en v4.3.13.
 - 27 pruebas de reglas aprobadas en Firestore Emulator.
 - Regresión de v4.3.9 contra el mismo respaldo: 19/19 pantallas iguales a las de v4.3.8, adjuntos abiertos sin fallas y ninguna escritura al recorrerla.
 - Regresión de v4.3.8 contra el respaldo del 27/10/2026, cargado solo en el emulador local:
@@ -501,3 +508,47 @@ Actualizar estos números cuando se agreguen pruebas. No conservar cifras obsole
   - todas las cabeceras están presentes y la consola no muestra errores ni violaciones de CSP;
   - `cancelTexto` y `cancelEsNegativo` responden como en las pruebas.
 - Pendiente de las estaciones: recargar con Ctrl+F5.
+
+### 2026-10-28 — v4.3.13 (cambios pedidos por Colonia e historial del Excel)
+
+- Pedido de Colonia (28/10), con las decisiones del titular:
+  - energía en 4 facturas: la de la estación es una factura de recupero aparte; Motel 1, Motel 2 y Casa de Familia van en otra factura con tres ítems. A cada factura se le resta solo el IVA;
+  - Tasas municipales: solo las de la oficina, bimestrales. Las obligaciones impositivas de la estación van al Programa de Control Impositivo, fuera de esta app;
+  - Reintegros agrupados, pero con el tipo de cada movimiento identificado. Programa Más YPF sale de las cargas nuevas desde agosto;
+  - Transferencias APP: historial con fecha del mail, fecha de transferencia, importe, período y comprobante;
+  - Somos Equipo: concepto propio, con estación y objetivo en el Detalle;
+  - Full: sigue al 6 % sobre ventas menos cigarrillos (decisión del titular; el texto de Colonia decía «ventas totales», pero su Excel resta cigarrillos).
+- Código (módulos fuente; `revision/index.html` regenerado):
+  - `economic.js`:
+    - conceptos con `tipos`, `fechaAviso` y `grupo` opcionales, validados en `checkEconomic` (las configuraciones anteriores quedan iguales, con valores por defecto) y editables en el formulario de condiciones;
+    - cada carga suma Tipo (obligatorio si el concepto tiene tipos), fecha del aviso y Detalle;
+    - la tabla de registros muestra «Detalle» y un subtotal por factura de recupero (`grupo`), sin total general;
+    - un comprobante se considera repetido si coinciden concepto, N° y tipo;
+    - en un período sin condiciones, la estación ve un mensaje para consultar al administrador.
+  - `historial.js` (nuevo): `checkHistorial`, la importación del administrador (con resumen y doble confirmación si ya existe) y la vista de solo lectura para la estación. La vista tiene filtros, pie con el recupero sin las filas que no se recuperan y descarga a Excel. Está disponible aunque el período no tenga condiciones.
+  - `access.js`: botón «Importar historial del Excel (JSON)» en el panel de condiciones.
+  - `storage.js`: `economic:versions*` siempre conserva copia previa, también el mismo día.
+  - `assemble.py` incluye `historial.js`.
+  - Reglas sin cambios: el historial entra en `config()`.
+- Accesibilidad: las tablas que pueden desbordar quedan en una región con nombre que se alcanza con el teclado; los importes no se parten; «Marcas» va dentro de «Detalle y marcas» para que la tabla entre en 1366 px.
+- Datos de Colonia (privados, fuera del repositorio, en `ACA-RECUPEROS/estaciones/3611 Colonia 25 de Mayo/`):
+  - `condiciones-colonia-2026-08.json`: versión nueva con vigencia 2026-08; la de 2026-07 queda igual;
+  - `historial-colonia-2026.json` y su informe: solo 2026, tal cual el Excel, con marcas donde falta o no cierra un dato y Objetivo Plus como referencia («no se recupera»).
+- Validaciones:
+  - ensamblado, sintaxis, formulario y 62/62 pruebas funcionales; 27/27 de reglas en el emulador (en Windows, `npm run test:rules` sale con código 1 por las comillas; se corrió con `firebase emulators:exec` directo);
+  - `checkEconomic` y `checkHistorial` aceptan los dos archivos de Colonia;
+  - ensayo en el emulador local con el respaldo del 28/10 (238 documentos), con cuentas ficticias:
+    - el administrador guarda la vigencia 2026-08 (la 2026-07 sigue) e importa el historial. La reimportación pide doble confirmación y deja copia previa;
+    - Colonia ve los conceptos viejos en julio y los nuevos en agosto. Las 4 facturas de agosto que mandó Colonia dan exacto, y el subtotal de Motel 1 + Motel 2 + Casa de Familia también;
+    - la estación no puede escribir el historial ni las condiciones (permission-denied);
+    - Cipolletti: 13 pantallas iguales a v4.3.12, sin escrituras;
+    - axe-core: 0 violaciones en las pantallas nuevas; sin violaciones de CSP.
+- Hecho por subagentes (Sonnet) y por una sesión vinculada, con revisión y prueba de esta sesión.
+- Archivos modificados: `assemble.py`, `revision/storage.js`, `revision/economic.js`, `revision/historial.js` (nuevo), `revision/access.js`, `revision/index.html`, `index.html`, `revision/formulario-condiciones.html`, `revision/pruebas.cjs`, `revision/pruebas.json`, `revision/package.json`, `revision/package-lock.json` y este `AGENTS.md`. Reglas sin cambios.
+- Publicación aprobada por el titular el 28/10/2026:
+  1. respaldo previo con dos lecturas coincidentes (238 documentos, sin cambios desde el de la tarde), fuera del repositorio. Las reglas publicadas eran idénticas a `firestore.rules`;
+  2. `revision/index.html` copiada a `index.html` y publicada en `aca-admin.web.app`;
+  3. commit y push a `main`.
+- Verificado en línea: la página publicada es idéntica a `index.html` (v4.3.13), las 7 cabeceras están presentes, la consola no muestra errores, y `checkHistorial` y `calculateEconomic` responden con el mismo resultado que en el ensayo.
+- Las pruebas del repositorio usan importes de prueba; la validación con las facturas reales de Colonia queda en su carpeta privada.
+- Pendiente del titular: desde el panel de condiciones de 3611, importar `condiciones-colonia-2026-08.json` y después `historial-colonia-2026.json`. Pendiente de las estaciones: recargar con Ctrl+F5.

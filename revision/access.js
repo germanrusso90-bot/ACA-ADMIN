@@ -65,7 +65,7 @@ async function renderAccessAdmin(){
  root.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.approve);if(!confirm('¿Autorizar '+r.email+' para CR '+r.cr+'?'))return;const batch=db.writeBatch(db.fs);batch.set(db.doc(db.fs,'access',r.id),{email:r.email,cr:r.cr,enabled:true,approvedBy:CU.uid,updatedAt:Date.now()});batch.update(db.doc(db.fs,'accessRequests',r.id),{status:'approved',reviewedBy:CU.uid,reviewedAt:Date.now()});await batch.commit();}));
  root.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>action(async()=>{const r=reqs.find(x=>x.id===b.dataset.reject);if(!confirm('¿Rechazar la solicitud de '+r.email+'?'))return;const {id,...data}=r;await db.setDoc(db.doc(db.fs,'accessRequests',id),{...data,status:'rejected',reviewedBy:CU.uid,reviewedAt:Date.now()});}));
  root.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>action(async()=>{const u=accounts.find(x=>x.id===b.dataset.toggle);if(!confirm((u.enabled?'¿Revocar':'¿Habilitar')+' acceso de '+u.email+'?'))return;const {id,...data}=u;await db.setDoc(db.doc(db.fs,'access',id),{...data,enabled:!u.enabled,updatedAt:Date.now(),approvedBy:CU.uid});}));
- root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
+ root.querySelector('#adm-conditions').onclick=async()=>{try{if(syncPend()&&!await sincronizar(true))return;CURRENT_CR=root.querySelector('#adm-cr').value;_cache={};_syncQueue={};_syncErrors={};_syncWriting={};_syncLocalOk=true;await loadEconomic();const original=economicFor(CP)||blankEconomic(CURRENT_CR);mountEconomic(root.querySelector('#adm-economic'),original,saveEconomicConfiguration,importHistorialFile);}catch(e){root.querySelector('#adm-status').textContent=e.message;}};
  }catch(e){root.innerHTML=econStyle+`<section class="econ"><h1>No se pudo cargar la administración</h1><p>${esc(authError(e))}</p><button onclick="renderAccessAdmin()">Reintentar</button><button onclick="logoutSafe()">Salir</button></section>`;}
 }
 async function saveEconomicConfiguration(c){
@@ -75,4 +75,21 @@ async function saveEconomicConfiguration(c){
  const next=[...ECON,structuredClone(c)];if(!await sSet('economic:versions',JSON.stringify(next)))throw Error('Condiciones pendientes de sincronización. No están confirmadas en la nube.');ECON=next;
 }
 
+// Historial del Excel de la estación (solo lectura para ella). Se guarda como las
+// condiciones, en la estación que se está administrando.
+async function importHistorialFile(file){
+ if(!IS_ACCESS_ADMIN)throw Error('Solo el administrador puede importar historiales.');
+ if(file.size>HISTORIAL_MAX_BYTES)throw Error('Archivo demasiado grande: máximo 2 MB.');
+ let parsed;try{parsed=JSON.parse(await file.text());}catch{throw Error('El archivo no es un JSON válido.');}
+ const cr=CURRENT_CR,h=checkHistorial(parsed,cr),s=historialSummary(h),key=historialKey(h.anio);
+ const existing=await sGet(key);
+ const resumen=['Historial del Excel · CR '+cr,'Año: '+s.anio,'Filas: '+s.filas,'Conceptos: '+s.conceptos,'Períodos: '+s.periodos,'Filas con marcas: '+s.conMarcas];
+ if(existing)resumen.push('','Ya existe un historial '+s.anio+' para esta estación.');
+ resumen.push('','¿Importarlo?');
+ if(!confirm(resumen.join('\n')))return 'Importación cancelada.';
+ if(existing&&!confirm('Vas a reemplazar el historial '+s.anio+' existente de CR '+cr+'. Se conserva su copia previa. ¿Confirmás el reemplazo?'))return 'Importación cancelada: el historial existente no se modificó.';
+ if(CURRENT_CR!==cr)throw Error('Cambió la estación seleccionada. Volvé a importar.');
+ if(!await sSet(key,JSON.stringify(h)))throw Error('Historial pendiente de sincronización. No está confirmado en la nube.');
+ return 'Historial '+s.anio+' guardado: '+s.filas+' filas, '+s.conceptos+' conceptos y '+s.periodos+' períodos.';
+}
 async function openAdminPanel(){if(!IS_ACCESS_ADMIN)return;if(syncPend()&&!await sincronizar(true))return;CU={uid:AUTH_PERSON.uid,username:AUTH_PERSON.email,role:"access-admin",name:"Administración de accesos"};render();}

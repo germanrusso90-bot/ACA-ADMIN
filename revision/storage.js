@@ -166,7 +166,8 @@ function wrapDB(native){
  return wrapped;
 }
 function keepPreviousCopy(previous,now=Date.now()){
- if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
+ // Las condiciones y el historial importado (del administrador) siempre conservan copia.
+ if(previous.blob||previous.chunked||/(^|:)file:/.test(previous.k||'')||/^cr\d{4}:economic:versions(:|$)/.test(previous.k||'')||!Number.isFinite(previous.updatedAt))return true;
  return new Date(previous.updatedAt).toDateString()!==new Date(now).toDateString();
 }
 async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');}
